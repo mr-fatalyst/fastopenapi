@@ -1,0 +1,9 @@
+[flake8]
+exclude=
+    .git
+
+max-complexity=10
+max-line-length=88
+
+inline-quotes = "
+import-order-style=pep8

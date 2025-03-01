@@ -1,0 +1,30 @@
+repos:
+- repo: https://github.com/asottile/pyupgrade
+  rev: v3.19.1
+  hooks:
+    - id: pyupgrade
+      args: [ --py310-plus ]
+
+- repo: https://github.com/pycqa/autoflake
+  rev: v2.3.1
+  hooks:
+    - id: autoflake
+      args: [ '--in-place', '--remove-all-unused-imports', '--remove-unused-variable','--exclude=__init__.py' ]
+
+- repo: https://github.com/pycqa/isort
+  rev: 6.0.1
+  hooks:
+    - id: isort
+      args: ["--profile", "black", "--filter-files"]
+
+- repo: https://github.com/psf/black
+  rev: 25.1.0
+  hooks:
+  - id: black
+    args: [--target-version, py310, --line-length=88]
+    language_version: python3.10
+
+- repo: https://github.com/pycqa/flake8
+  rev: 7.1.2
+  hooks:
+  - id: flake8
