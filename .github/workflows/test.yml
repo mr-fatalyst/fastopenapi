@@ -34,7 +34,14 @@ jobs:
         run: |
           poetry run coverage run -m pytest
           poetry run coverage report
+          poetry run coverage xml
 
       - name: Run linters and formatters
         run: |
           poetry run pre-commit run --all-files
+
+      - name: Upload coverage to Codecov
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+        run: |
+          bash <(curl -s https://codecov.io/bash) -t $CODECOV_TOKEN -f coverage.xml -r mr-fatalyst/fastopenapi -v
