@@ -1,13 +1,24 @@
 [project]
 name = "fastopenapi"
 version = "0.1.0"
-description = "FastOpenAPI is a library for generating and integrating OpenAPI schemas using Pydantic v2 and various frameworks (Falcon, Flask, Sanic, Starlette)."
+description = "A library for generating and integrating OpenAPI schemas using Pydantic v2."
 authors = [
     {name = "Nikita Ryzhenkov", email = "nikita.ryzhenkoff@gmail.com"}
 ]
 license = {text = "MIT License"}
 readme = "README.md"
 requires-python = ">=3.10"
+keywords = ["FastOpenAPI", "OpenAPI", "Pydantic", "API", "Python", "Flask", "Falcon", "Sanic", "Starlette"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Software Development :: Libraries",
+    "Topic :: Software Development :: Code Generators",
+]
 
 dependencies = [
     "pydantic (>=2.10.6,<3.0.0)"
