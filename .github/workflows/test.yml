@@ -44,4 +44,4 @@ jobs:
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
         run: |
-          bash <(curl -s https://codecov.io/bash) -t $CODECOV_TOKEN -f coverage.xml -r mr-fatalyst/fastopenapi -v -F untracked
+          bash <(curl -s https://codecov.io/bash) -t $CODECOV_TOKEN -f coverage.xml -r mr-fatalyst/fastopenapi -v -F untracked -B main -p
