@@ -1,14 +1,12 @@
-name: Test
+name: Test CI
 
 on:
-  workflow_run:
-    workflows: ["Lint"]
-    types:
-      - completed
+  pull_request:
+    branches:
+      - test
 
 jobs:
-  test:
-    if: ${{ github.event.workflow_run && github.event.workflow_run.conclusion == 'success' }}
+  lint:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -16,34 +14,29 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Setup Python
-        uses: actions/setup-python@v4
+      - name: Setup environment (lint)
+        uses: ./.github/actions/setup-env
         with:
-          python-version: '3.10'
+          python-version: "3.10"
+          install-flags: "--all-extras"
 
-      - name: Cache pip dependencies
-        uses: actions/cache@v3
+      - name: Run linters
+        run: poetry run pre-commit run --all-files
+
+  test:
+    needs: lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
         with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('**/poetry.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-pip-
+          fetch-depth: 0
 
-      - name: Cache Poetry dependencies
-        uses: actions/cache@v3
+      - name: Setup environment (test)
+        uses: ./.github/actions/setup-env
         with:
-          path: ~/.cache/pypoetry
-          key: ${{ runner.os }}-poetry-${{ hashFiles('**/poetry.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-poetry-
-
-      - name: Install Poetry
-        run: |
-          curl -sSL https://install.python-poetry.org | python3 -
-          export PATH="$HOME/.local/bin:$PATH"
-
-      - name: Install dependencies
-        run: poetry install --all-extras
+          python-version: "3.10"
+          install-flags: "--all-extras"
 
       - name: Run tests
         run: poetry run pytest
