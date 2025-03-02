@@ -1,0 +1,33 @@
+name: Test Deploy
+
+on:
+  push:
+    branches:
+      - test
+
+jobs:
+  deploy-test:
+    runs-on: ubuntu-latest
+    env:
+      POETRY_PYPI_TOKEN_TEST_PYPI: ${{ secrets.TEST_PYPI_API_TOKEN }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Setup environment (deploy)
+        uses: ./.github/actions/setup-env
+        with:
+          python-version: "3.10"
+          install-flags: "--all-extras"
+
+      - name: Configure Test PyPI
+        run: |
+          poetry config repositories.test-pypi https://test.pypi.org/legacy/
+          poetry config pypi-token.test-pypi $POETRY_PYPI_TOKEN_TEST_PYPI
+
+      - name: Publish to Test PyPI
+        run: |
+          poetry build
+          poetry publish -r test-pypi
