@@ -1,0 +1,34 @@
+name: Deploy to Test PyPI
+
+on:
+  workflow_run:
+    workflows: ["Test"]
+    types:
+      - completed
+
+jobs:
+  deploy-test:
+    if: ${{ github.event.workflow_run && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'test' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install Poetry
+        run: |
+          curl -sSL https://install.python-poetry.org | python3 -
+          export PATH="$HOME/.local/bin:$PATH"
+
+      - name: Publish to Test PyPI
+        run: |
+          poetry build
+          poetry publish -r test-pypi
+        env:
+          POETRY_PYPI_TOKEN_TEST_PYPI: ${{ secrets.TEST_PYPI_API_TOKEN }}

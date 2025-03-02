@@ -1,14 +1,19 @@
-name: Test
+name: Lint
 
 on:
-  workflow_run:
-    workflows: ["Lint"]
-    types:
-      - completed
+  push:
+    branches:
+      - main
+      - test
+    tags:
+      - 'v*'
+  pull_request:
+    branches:
+      - main
+      - test
 
 jobs:
-  test:
-    if: ${{ github.event.workflow_run && github.event.workflow_run.conclusion == 'success' }}
+  lint:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -45,5 +50,5 @@ jobs:
       - name: Install dependencies
         run: poetry install --all-extras
 
-      - name: Run tests
-        run: poetry run pytest
+      - name: Run linters
+        run: poetry run pre-commit run --all-files
