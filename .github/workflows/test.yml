@@ -1,63 +1,42 @@
-name: CI
+name: Test CI
 
 on:
-  push:
-    branches:
-      - main
   pull_request:
     branches:
-      - main
+      - test
 
 jobs:
-  test:
+  lint:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
-
-      - name: Setup Python
-        uses: actions/setup-python@v4
         with:
-          python-version: '3.10'
+          fetch-depth: 0
 
-      - name: Cache pip dependencies
-        uses: actions/cache@v3
+      - name: Setup environment (lint)
+        uses: ./.github/actions/setup-env
         with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('**/poetry.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-pip-
+          python-version: "3.10"
+          install-flags: "--all-extras"
 
-      - name: Cache Poetry dependencies
-        uses: actions/cache@v3
+      - name: Run linters
+        run: poetry run pre-commit run --all-files
+
+  test:
+    needs: lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
         with:
-          path: ~/.cache/pypoetry
-          key: ${{ runner.os }}-poetry-${{ hashFiles('**/poetry.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-poetry-
+          fetch-depth: 0
 
-      - name: Install Poetry
-        run: |
-          curl -sSL https://install.python-poetry.org | python3 -
-          export PATH="$HOME/.local/bin:$PATH"
+      - name: Setup environment (test)
+        uses: ./.github/actions/setup-env
+        with:
+          python-version: "3.10"
+          install-flags: "--all-extras"
 
-      - name: Install dependencies
-        run: |
-          poetry install --all-extras
-
-      - name: Run linters and formatters
-        run: |
-          poetry run pre-commit run --all-files
-
-      - name: Run tests with coverage
-        run: |
-          poetry run coverage run -m pytest
-          poetry run coverage report
-          poetry run coverage xml
-
-      - name: Upload coverage to Codecov
-        env:
-          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
-        run: |
-          bash <(curl -s https://codecov.io/bash) -t $CODECOV_TOKEN -f coverage.xml -r mr-fatalyst/fastopenapi -v -F untracked -B main -p
+      - name: Run tests
+        run: poetry run pytest
