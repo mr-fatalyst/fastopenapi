@@ -1,49 +1,64 @@
-from flask import Flask, Response, jsonify, request
+import re
+
+from flask import Response, jsonify, request
 from pydantic import BaseModel
+from werkzeug.exceptions import HTTPException
 
 from fastopenapi.base_router import BaseRouter
 
 
 class FlaskRouter(BaseRouter):
-    def __init__(
-        self,
-        app: Flask = None,
-        docs_url: str = "/docs/",
-        openapi_version: str = "3.0.0",
-        title: str = "My Flask App",
-        version: str = "0.1.0",
-    ):
-        super().__init__(app, docs_url, openapi_version, title, version)
-        if self.app is not None:
-            self._register_docs_endpoints()
+    @staticmethod
+    def handle_http_exception(e):
+        response = e.get_response()
+        response.data = jsonify(
+            {"code": e.code, "name": e.name, "description": e.description}
+        ).get_data(as_text=True)
+        response.content_type = "application/json"
+        return response
 
     def add_route(self, path: str, method: str, endpoint):
         super().add_route(path, method, endpoint)
-        if self.app is not None:
 
-            def view_func(**kwargs):
+        if self.app is not None:
+            flask_path = re.sub(r"{(\w+)}", r"<\1>", path)
+
+            def view_func(**path_params):
                 json_data = request.get_json(silent=True) or {}
-                params = {**request.args.to_dict(), **json_data}
+                query_params = request.args.to_dict()
+                all_params = {**query_params, **path_params}
+                body = json_data
                 try:
-                    result = endpoint(**params)
-                except TypeError as exc:
-                    return jsonify({"detail": str(exc)}), 422
+                    kwargs = self.resolve_endpoint_params(endpoint, all_params, body)
+                except Exception as e:
+                    return jsonify({"detail": str(e)}), 422
+                try:
+                    result = endpoint(**kwargs)
+                except Exception as e:
+                    if isinstance(e, HTTPException):
+                        return self.handle_http_exception(e)
+                    return jsonify({"detail": str(e)}), 422
+
+                meta = getattr(endpoint, "__route_meta__", {})
+                status_code = meta.get("status_code", 200)
+
                 if isinstance(result, BaseModel):
                     result = result.model_dump()
-                return jsonify(result)
+                elif isinstance(result, list):
+                    result = [
+                        item.model_dump() if isinstance(item, BaseModel) else item
+                        for item in result
+                    ]
+                return jsonify(result), status_code
 
             self.app.add_url_rule(
-                path, endpoint.__name__, view_func, methods=[method.upper()]
+                flask_path, endpoint.__name__, view_func, methods=[method.upper()]
             )
-
-    def include_router(self, other: BaseRouter):
-        for path, method, endpoint in other.get_routes():
-            self.add_route(path, method, endpoint)
 
     def _register_docs_endpoints(self):
         @self.app.route("/openapi.json", methods=["GET"])
         def openapi_view():
-            return jsonify(self.generate_openapi())
+            return jsonify(self.openapi)
 
         @self.app.route(self.docs_url, methods=["GET"])
         def docs_view():

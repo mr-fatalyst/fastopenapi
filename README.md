@@ -11,8 +11,22 @@
 ---
 
 ## 📦 Installation
+#### Install only FastOpenAPI:
 ```bash
 pip install fastopenapi
+```
+#### Install FastOpenAPI with a specific framework:
+```bash
+pip install fastopenapi[falcon]
+```
+```bash
+pip install fastopenapi[flask]
+```
+```bash
+pip install fastopenapi[sanic]
+```
+```bash
+pip install fastopenapi[starlette]
 ```
 
 ---
@@ -132,9 +146,6 @@ class HelloResponse(BaseModel):
 async def hello(name: str):
     """Say hello from Starlette"""
     return HelloResponse(message=f"Hello, {name}! It's Starlette!")
-
-
-router.register_routes()
 
 if __name__ == "__main__":
     uvicorn.run(app, host="127.0.0.1", port=8000)

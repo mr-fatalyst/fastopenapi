@@ -1,243 +1,170 @@
 import pytest
-from pydantic import BaseModel
 
-from fastopenapi.base_router import SWAGGER_URL, BaseRouter
+from fastopenapi.base_router import BaseRouter
 
-
-class DummyModel(BaseModel):
-    x: int
+from .conftest import Item, echo_int, return_item_model
 
 
-class ResponseModel(BaseModel):
-    y: int
+def test_resolve_endpoint_params_success_and_failure():
+    router = BaseRouter()
+
+    def func_required(a: int):
+        return a
+
+    def func_optional(b: int = 5):
+        return b
+
+    def func_model(m: Item):
+        return m
+
+    def func_no_anno(param):
+        return param
+
+    kwargs = router.resolve_endpoint_params(func_required, {"a": "10"}, {})
+    assert kwargs == {"a": 10}
+
+    with pytest.raises(ValueError) as excinfo:
+        router.resolve_endpoint_params(func_required, {}, {})
+    assert "Missing required parameter" in str(excinfo.value)
+
+    kwargs = router.resolve_endpoint_params(func_optional, {}, {})
+    assert kwargs == {"b": 5}
+
+    with pytest.raises(ValueError) as excinfo:
+        router.resolve_endpoint_params(func_required, {"a": "not_an_int"}, {})
+    assert "Error casting parameter 'a' to <class 'int'>" in str(excinfo.value)
+
+    body = {"name": "Test", "value": 123}
+    kwargs = router.resolve_endpoint_params(func_model, {}, body)
+    assert isinstance(kwargs["m"], Item)
+    assert kwargs["m"].name == "Test" and kwargs["m"].value == 123
+
+    bad_body = {"name": "x"}
+    with pytest.raises(ValueError) as excinfo:
+        router.resolve_endpoint_params(func_model, {}, bad_body)
+    assert "Validation error for parameter 'm'" in str(excinfo.value)
+
+    with pytest.raises(ValueError) as excinfo:
+        router.resolve_endpoint_params(func_no_anno, {"param": "foo"}, {})
+    assert "Error casting parameter 'param'" in str(excinfo.value)
+
+    with pytest.raises(ValueError):
+        router.resolve_endpoint_params(func_no_anno, {}, {})
 
 
-class NestedModel(BaseModel):
-    value: int
+def test_route_decorators_attach_meta_and_add_route():
+    router = BaseRouter()
 
+    @router.get("/test_get", tags=["Test"], status_code=201, response_model=Item)
+    def get_endpoint():
+        """Docstring for get."""
+        return {}
 
-class ParentModel(BaseModel):
-    nested: NestedModel
+    @router.post("/test_post", tags=["Test"], status_code=200)
+    def post_endpoint(item: Item):
+        return item
 
+    routes = router.get_routes()
+    paths_methods = {(path, method) for (path, method, fn) in routes}
+    assert ("/test_get", "GET") in paths_methods
+    assert ("/test_post", "POST") in paths_methods
 
-def dummy_endpoint_with_annotations(a: str, b: str):
-    """Dummy endpoint with query parameters."""
-    return {"a": a, "b": b}
-
-
-def dummy_endpoint_no_annotation(a, b: str):
-    """Endpoint where 'a' has no annotation and 'b' is a query parameter."""
-    return {"b": b}
-
-
-def endpoint_with_body(data: DummyModel):
-    """Endpoint with request body."""
-    return {"data": data.x}
-
-
-def endpoint_with_meta(a: str):
-    """Endpoint with additional meta information."""
-    return {"a": a}
-
-
-@pytest.fixture
-def router():
-    """Returns an instance of BaseRouter for testing."""
-    return BaseRouter(
-        docs_url="/docs/",
-        openapi_version="3.0.0",
-        title="Test App",
-        version="0.1.0",
+    assert hasattr(get_endpoint, "__route_meta__")
+    meta = get_endpoint.__route_meta__
+    assert (
+        meta["tags"] == ["Test"]
+        and meta["status_code"] == 201
+        and meta["response_model"] == Item
     )
 
-
-def test_add_and_get_routes(router):
-    """Test adding a route and retrieving it."""
-    assert router.get_routes() == []
-
-    def ep(a: str):
-        return {"a": a}
-
-    router.add_route("/test", "GET", ep)
-    routes = router.get_routes()
-    assert len(routes) == 1
-    path, method, func = routes[0]
-    assert path == "/test"
-    assert method == "GET"
-    assert func is ep
+    assert get_endpoint.__doc__ == "Docstring for get."
 
 
-def test_include_router(router):
-    """Test including routes from another router."""
-    router2 = BaseRouter()
-
-    def ep(a: str):
-        return {"a": a}
-
-    router2.add_route("/included", "POST", ep)
-    router.include_router(router2)
-    routes = router.get_routes()
-    assert len(routes) == 1
-    assert routes[0][0] == "/included"
+def test_include_router_combines_routes_with_prefix():
+    main_router = BaseRouter()
+    sub_router = BaseRouter()
+    sub_router.add_route("/subpath", "GET", echo_int)
+    sub_router.add_route("subno_slash", "POST", return_item_model)
+    main_router.include_router(sub_router, prefix="/api")
+    routes = main_router.get_routes()
+    paths = {path for (path, _, _) in routes}
+    assert "/api/subpath" in paths
+    assert "/api/subno_slash" in paths
 
 
-def test_decorators(router):
-    """Test registration of routes via decorators and meta data assignment."""
+def test_generate_openapi_schema():
+    router = BaseRouter()
 
-    @router.get("/get")
-    def get_ep(a: str):
-        """GET endpoint."""
-        return {"a": a}
+    @router.get("/items/{item_id}", tags=["Items"], status_code=200)
+    def get_item(item_id: int):
+        """Get item by ID."""
+        return {"item_id": item_id}
 
-    @router.post("/post", tags=["tag1"], status_code=201, response_model=ResponseModel)
-    def post_ep(a: str):
-        """POST endpoint."""
-        return {"a": a}
+    @router.get("/filter", tags=["Items"])
+    def filter_items(filter: Item):
+        """Filter items by query parameters."""
+        return []
 
-    routes = router.get_routes()
-    assert len(routes) == 2
-    meta = getattr(post_ep, "__route_meta__", {})
-    assert meta.get("tags") == ["tag1"]
-    assert meta.get("status_code") == 201
-    assert meta.get("response_model") is ResponseModel
+    @router.post("/items", tags=["Items"], status_code=201, response_model=Item)
+    def create_item(item: Item):
+        """Create a new item."""
+        return item
 
+    @router.get("/items", tags=["Items"], response_model=list[Item])
+    def list_items():
+        """List items."""
+        return []
 
-def test_generate_openapi_with_query_parameters(router):
-    """Test OpenAPI schema generation for endpoints with query parameters."""
+    schema = router.openapi
 
-    @router.get("/query")
-    def ep(a: str, b: str = "default"):
-        """Query endpoint."""
-        return {"a": a, "b": b}
+    assert schema["openapi"] == router.openapi_version
+    assert (
+        schema["info"]["title"] == router.title
+        and schema["info"]["version"] == router.version
+    )
 
-    openapi = router.generate_openapi()
-    assert openapi["openapi"] == router.openapi_version
-    assert "info" in openapi
-    assert "/query" in openapi["paths"]
-    op = openapi["paths"]["/query"]["get"]
-    # If the docstring ends with a period, the generated summary may include it.
-    assert op["summary"].startswith("Query endpoint")
-    assert "parameters" in op
-    params = op["parameters"]
-    a_param = next((p for p in params if p["name"] == "a"), None)
-    b_param = next((p for p in params if p["name"] == "b"), None)
-    assert a_param is not None
-    assert a_param["required"] is True
-    assert b_param is not None
-    assert b_param["required"] is False
+    assert "Item" in schema["components"]["schemas"]
 
+    params = schema["paths"]["/items/{item_id}"]["get"]["parameters"]
+    param = next((p for p in params if p["name"] == "item_id"), None)
+    assert (
+        param
+        and param["in"] == "path"
+        and param["required"] is True
+        and param["schema"]["type"] == "integer"
+    )
 
-def test_generate_openapi_with_request_body(router):
-    """
-    Test OpenAPI schema generation for endpoints with request body using BaseModel.
-    """
+    filter_params = schema["paths"]["/filter"]["get"]["parameters"]
+    names = {p["name"] for p in filter_params}
+    assert "name" in names and "value" in names
 
-    @router.post("/body")
-    def ep(data: DummyModel):
-        """Body endpoint."""
-        return {"data": data.x}
+    post_op = schema["paths"]["/items"]["post"]
+    assert "requestBody" in post_op
+    schema_ref = post_op["requestBody"]["content"]["application/json"]["schema"]["$ref"]
+    assert schema_ref.endswith("/Item")
 
-    openapi = router.generate_openapi()
-    assert "/body" in openapi["paths"]
-    op = openapi["paths"]["/body"]["post"]
-    assert ("parameters" not in op) or (op["parameters"] == [])
-    assert "requestBody" in op
-    req_body = op["requestBody"]
-    assert "application/json" in req_body["content"]
-    schema = req_body["content"]["application/json"]["schema"]
-    assert "properties" in schema
-    assert "x" in schema["properties"]
+    responses_post = post_op["responses"]
+    responses_get = schema["paths"]["/items"]["get"]["responses"]
+    assert responses_post["201"]["content"]["application/json"]["schema"][
+        "$ref"
+    ].endswith("/Item")
+    schema_200 = responses_get["200"]["content"]["application/json"]["schema"]
+    assert schema_200["type"] == "array" and schema_200["items"]["$ref"].endswith(
+        "/Item"
+    )
 
+    op_get_item = schema["paths"]["/items/{item_id}"]["get"]
+    assert op_get_item["tags"] == ["Items"]
+    assert op_get_item["summary"] == "Get item by ID."
+    op_list_items = schema["paths"]["/items"]["get"]
+    assert op_list_items["responses"]["200"]["description"]
 
-def test_build_operation_with_meta(router):
-    """Test _build_operation to verify meta data is applied correctly."""
-
-    def ep(a: str):
-        """Test endpoint with meta."""
-        return {"a": a}
-
-    ep.__route_meta__ = {
-        "tags": ["tagA"],
-        "status_code": 202,
-        "response_model": ResponseModel,
-    }
-    definitions = {}
-    op = router._build_operation(ep, definitions)
-    assert op.get("tags") == ["tagA"]
-    assert "202" in op["responses"]
-    resp = op["responses"]["202"]
-    if "content" in resp:
-        assert "application/json" in resp["content"]
+    schema2 = router.openapi
+    assert schema2 is schema
 
 
-def test_render_swagger_ui(router):
-    """Test that render_swagger_ui returns HTML with key Swagger UI elements."""
-    url = "/openapi.json"
-    html = router.render_swagger_ui(url)
-    assert "<!DOCTYPE html>" in html
-    assert "SwaggerUIBundle" in html
-    assert url in html
-    assert SWAGGER_URL in html
-
-
-def test_skip_no_annotation(router):
-    """Test that parameters without annotations are skipped in operation building."""
-    op = router._build_operation(dummy_endpoint_no_annotation, definitions={})
-    params = op.get("parameters", [])
-    assert len(params) == 1
-    assert params[0]["name"] == "b"
-
-
-def test_model_schema_definitions(router):
-    """
-    Test that _get_model_schema removes 'definitions' or
-    '$defs' keys and updates definitions dict.
-    """
-    definitions = {}
-    schema = router._get_model_schema(ParentModel, definitions)
-    assert "definitions" not in schema and "$defs" not in schema
-    assert isinstance(definitions, dict)
-    assert len(definitions) > 0
-
-
-def test_build_operation_without_docstring(router):
-    """Test that if an endpoint has no docstring, the generated summary is empty."""
-
-    def ep(a: str):
-        return {"a": a}
-
-    ep.__doc__ = None
-    op = router._build_operation(ep, definitions={})
-    assert op["summary"] == ""
-
-
-def test_build_operation_with_response_model(router):
-    """
-    Test that _build_operation applies response_model
-    meta correctly in the OpenAPI schema.
-    """
-
-    class RespModel(BaseModel):
-        y: int
-
-    def ep(a: str):
-        return {"a": a}
-
-    ep.__doc__ = "Test endpoint with response model."
-    ep.__route_meta__ = {"status_code": 201, "response_model": RespModel}
-    definitions = {}
-    op = router._build_operation(ep, definitions)
-    assert "201" in op["responses"]
-    resp = op["responses"]["201"]
-    if "content" in resp:
-        assert "application/json" in resp["content"]
-
-
-def test_render_swagger_ui_contains_elements(router):
-    """Test that render_swagger_ui returns HTML containing key Swagger UI elements."""
-    url = "/openapi.json"
-    html = router.render_swagger_ui(url)
-    assert "<!DOCTYPE html>" in html
-    assert "SwaggerUIBundle" in html
-    assert url in html
-    assert SWAGGER_URL in html
+def test_render_swagger_ui_html():
+    html = BaseRouter.render_swagger_ui("/test/openapi.json")
+    assert (
+        "<html" in html and "SwaggerUIBundle" in html and "/test/openapi.json" in html
+    )

@@ -18,7 +18,5 @@ async def hello(name: str):
     return HelloResponse(message=f"Hello, {name}! It's Starlette!")
 
 
-router.register_routes()
-
 if __name__ == "__main__":
     uvicorn.run(app, host="127.0.0.1", port=8000)

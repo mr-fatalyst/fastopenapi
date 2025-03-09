@@ -1,164 +1,87 @@
-import falcon.asgi
+import falcon
 import pytest
-from falcon.testing import TestClient
-from pydantic import BaseModel, ValidationError
+from falcon import testing
 
 from fastopenapi.routers.falcon import FalconRouter
 
-
-class SumModel(BaseModel):
-    a: int
-    b: int
-
-
-class DummyResponse(BaseModel):
-    msg: str
-
-
-def get_endpoint(x: str):
-    return {"method": "GET", "x": x}
-
-
-def post_endpoint(x: str):
-    return {"method": "POST", "x": x}
-
-
-def put_endpoint(x: str):
-    return {"method": "PUT", "x": x}
-
-
-def patch_endpoint(x: str):
-    return {"method": "PATCH", "x": x}
-
-
-def delete_endpoint(x: str):
-    return {"method": "DELETE", "x": x}
-
-
-def sum_post_endpoint(a: int, b: int):
-    try:
-        model = SumModel(a=a, b=b)
-        return {"sum": model.a + model.b}
-    except ValidationError:
-        return {"error": "Invalid input"}
-
-
-def model_endpoint(x: str):
-    # Returns a pydantic model to test conversion to dict.
-    return DummyResponse(msg=x)
+from .conftest import echo_int, raise_value_error, return_item_model, use_default_param
 
 
 @pytest.fixture
 def falcon_app():
     app = falcon.asgi.App()
-    router = FalconRouter(app=app)
-    router.get("/test/get")(get_endpoint)
-    router.post("/test/post")(post_endpoint)
-    router.put("/test/put")(put_endpoint)
-    router.patch("/test/patch")(patch_endpoint)
-    router.delete("/test/delete")(delete_endpoint)
-    router.post("/test/sum")(sum_post_endpoint)
-    router.get("/test/model")(model_endpoint)
-    return app
+    router = FalconRouter(app=app, docs_url="/docs/")
+    return app, router
 
 
-def test_falcon_endpoints_availability(falcon_app):
-    client = TestClient(falcon_app)
-    for url in ["/openapi.json", "/docs/"]:
-        response = client.simulate_get(url)
-        assert response.status_code == 200
+def test_falcon_success_and_validation(falcon_app):
+    app, router = falcon_app
+    router.add_route("/echo", "GET", echo_int)
+    router.add_route("/path/{x}", "GET", echo_int)
+    router.add_route("/default", "GET", use_default_param)
+    router.add_route("/item", "POST", return_item_model)
 
+    async def async_echo(name: str):
+        return {"name": name}
 
-def test_falcon_methods(falcon_app):
-    client = TestClient(falcon_app)
-    response = client.simulate_get("/test/get", params={"x": "hello"})
-    assert response.status_code == 200
-    assert response.json == {"method": "GET", "x": "hello"}
-    response = client.simulate_post("/test/post", json={"x": "world"})
-    assert response.status_code == 200
-    assert response.json == {"method": "POST", "x": "world"}
-    response = client.simulate_put("/test/put", json={"x": "put"})
-    assert response.status_code == 200
-    assert response.json == {"method": "PUT", "x": "put"}
-    response = client.simulate_patch("/test/patch", json={"x": "patch"})
-    assert response.status_code == 200
-    assert response.json == {"method": "PATCH", "x": "patch"}
-    response = client.simulate_delete("/test/delete", params={"x": "delete"})
-    assert response.status_code == 200
-    assert response.json == {"method": "DELETE", "x": "delete"}
+    def sync_echo(name: str):
+        return {"name": name}
 
+    router.add_route("/async", "GET", async_echo)
+    router.add_route("/sync", "GET", sync_echo)
 
-def test_falcon_valid_schema(falcon_app):
-    client = TestClient(falcon_app)
-    response = client.simulate_post("/test/sum", json={"a": 5, "b": 7})
-    assert response.status_code == 200
-    assert response.json == {"sum": 12}
-
-
-def test_falcon_invalid_schema(falcon_app):
-    client = TestClient(falcon_app)
-    # Missing 'b' leads to TypeError caught by router and returns 422.
-    response = client.simulate_post("/test/sum", json={"a": 5})
-    assert response.status_code == 422
-    assert "detail" in response.json
-
-
-def test_falcon_invalid_type_schema(falcon_app):
-    client = TestClient(falcon_app)
-    # Passing invalid types so that pydantic raises ValidationError.
-    response = client.simulate_post("/test/sum", json={"a": "foo", "b": "bar"})
-    # Endpoint catches ValidationError and returns error dict.
-    assert response.status_code == 200
-    assert response.json == {"error": "Invalid input"}
-
-
-def test_falcon_model_response(falcon_app):
-    client = TestClient(falcon_app)
-    # Test endpoint returning a pydantic model.
-    response = client.simulate_get("/test/model", params={"x": "model"})
-    assert response.status_code == 200
-    assert response.json == {"msg": "model"}
-
-
-def test_falcon_body_exception(monkeypatch, falcon_app):
-    from falcon.asgi import Request
-
-    class FakeBoundedStream:
-        async def read(self):
-            raise Exception("Forced exception")
-
-    monkeypatch.setattr(
-        Request, "bounded_stream", property(lambda self: FakeBoundedStream())
+    client = testing.TestClient(app)
+    result = client.simulate_get("/echo", params={"x": "5"})
+    assert result.status_code == 200 and result.json == {"x": 5}
+    result = client.simulate_get("/echo")
+    assert (
+        result.status_code == 422
+        and "Missing required parameter" in result.json["detail"]
     )
-    client = TestClient(falcon_app)
-    response = client.simulate_get("/test/get", params={"x": "hello"})
-    assert response.status_code == 200
-
-
-def test_falcon_body_merging(falcon_app):
-    def merge_endpoint(z: str):
-        return {"z": z}
-
-    router = FalconRouter(app=falcon_app)
-    router.add_route("/merge", "POST", merge_endpoint)
-    client = TestClient(falcon_app)
-    response = client.simulate_post("/merge?z=query", json={"z": "body"})
-    assert response.status_code == 200
-    assert response.json == {"z": "body"}
-
-
-def test_falcon_empty_body(monkeypatch, falcon_app):
-    # Test branch where the body is empty; no update to parameters.
-    from falcon.asgi import Request
-
-    class FakeBoundedStream:
-        async def read(self):
-            return b""
-
-    monkeypatch.setattr(
-        Request, "bounded_stream", property(lambda self: FakeBoundedStream())
+    result = client.simulate_get("/echo", params={"x": "bad"})
+    assert result.status_code == 422
+    result = client.simulate_get("/path/9")
+    assert result.status_code == 200 and result.json == {"x": 9}
+    result = client.simulate_get("/path/notanum")
+    assert result.status_code == 422
+    result = client.simulate_get("/default")
+    assert result.status_code == 200 and result.json == {"x": 42}
+    item = {"name": "X", "value": 1}
+    result = client.simulate_post("/item", json=item)
+    assert result.status_code == 200 and result.json == item
+    result = client.simulate_post("/item", json={"name": "X"})
+    assert (
+        result.status_code == 422
+        and "Validation error for parameter 'item'" in result.json["detail"]
     )
-    client = TestClient(falcon_app)
-    response = client.simulate_get("/test/get", params={"x": "empty"})
-    assert response.status_code == 200
-    assert response.json == {"method": "GET", "x": "empty"}
+    result = client.simulate_get("/async", params={"name": "foo"})
+    assert result.status_code == 200 and result.json == {"name": "foo"}
+    result = client.simulate_get("/sync", params={"name": "bar"})
+    assert result.status_code == 200 and result.json == {"name": "bar"}
+
+
+def test_falcon_exception_handling(falcon_app):
+    app, router = falcon_app
+
+    def raise_falcon_http():
+        raise falcon.HTTPBadRequest(title="Bad", description="Bad request")
+
+    router.add_route("/error/http", "GET", raise_falcon_http)
+    router.add_route("/error/generic", "GET", raise_value_error)
+
+    client = testing.TestClient(app)
+    result = client.simulate_get("/error/http")
+    assert result.status_code == 400
+    assert "Bad request" in (result.text or "")
+    result = client.simulate_get("/error/generic")
+    assert result.status_code == 422 and result.json["detail"] == "Something went wrong"
+
+
+def test_falcon_docs_endpoints(falcon_app):
+    app, router = falcon_app
+    client = testing.TestClient(app)
+    result = client.simulate_get("/openapi.json")
+    assert result.status_code == 200 and "openapi" in result.json
+    result = client.simulate_get("/docs/")
+    assert result.status_code == 200
+    assert "<title>Swagger UI</title>" in result.text

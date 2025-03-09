@@ -1,139 +1,88 @@
 import pytest
-from pydantic import BaseModel, ValidationError
 from starlette.applications import Starlette
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.testclient import TestClient
 
 from fastopenapi.routers.starlette import StarletteRouter
 
-
-class SumModel(BaseModel):
-    a: int
-    b: int
-
-
-async def get_endpoint(x: str):
-    return {"method": "GET", "x": x}
-
-
-async def post_endpoint(x: str):
-    return {"method": "POST", "x": x}
-
-
-async def put_endpoint(x: str):
-    return {"method": "PUT", "x": x}
-
-
-async def patch_endpoint(x: str):
-    return {"method": "PATCH", "x": x}
-
-
-async def delete_endpoint(x: str):
-    return {"method": "DELETE", "x": x}
-
-
-async def sum_post_endpoint(a: int, b: int):
-    try:
-        model = SumModel(a=a, b=b)
-        return {"sum": model.a + model.b}
-    except ValidationError:
-        return {"error": "Invalid input"}
+from .conftest import echo_int, raise_value_error, return_item_model, use_default_param
 
 
 @pytest.fixture
 def starlette_app():
     app = Starlette()
-    router = StarletteRouter(app=app)
-    router.add_route("/test/get", "GET", get_endpoint)
-    router.add_route("/test/post", "POST", post_endpoint)
-    router.add_route("/test/put", "PUT", put_endpoint)
-    router.add_route("/test/patch", "PATCH", patch_endpoint)
-    router.add_route("/test/delete", "DELETE", delete_endpoint)
-    router.add_route("/test/sum", "POST", sum_post_endpoint)
-    router.register_routes()
-    return app
+    router = StarletteRouter(app=app, docs_url="/docs/")
+    return app, router
 
 
-def test_starlette_endpoints_availability(starlette_app):
-    client = TestClient(starlette_app)
-    for url in ["/openapi.json", "/docs/"]:
-        response = client.get(url)
-        assert response.status_code == 200
+def test_starlette_success_and_validation(starlette_app):
+    app, router = starlette_app
+    router.add_route("/echo", "GET", echo_int)
+    router.add_route("/path/{x}", "GET", echo_int)
+    router.add_route("/default", "GET", use_default_param)
+    router.add_route("/item", "POST", return_item_model)
+
+    async def async_echo(name: str):
+        return {"name": name}
+
+    def sync_echo(name: str):
+        return {"name": name}
+
+    router.add_route("/async", "GET", async_echo)
+    router.add_route("/sync", "GET", sync_echo)
+
+    client = TestClient(app)
+
+    res = client.get("/echo?x=7")
+    assert res.status_code == 200 and res.json() == {"x": 7}
+    res = client.get("/echo")
+    assert res.status_code == 422
+    res = client.get("/echo?x=bad")
+    assert res.status_code == 422
+    res = client.get("/path/11")
+    assert res.status_code == 200 and res.json() == {"x": 11}
+    res = client.get("/path/notanum")
+    assert res.status_code == 422
+    res = client.get("/default")
+    assert res.status_code == 200 and res.json() == {"x": 42}
+    item = {"name": "ItemX", "value": 99}
+    res = client.post("/item", json=item)
+    assert res.status_code == 200 and res.json() == item
+    res = client.post("/item", json={"name": "ItemX"})
+    assert (
+        res.status_code == 422
+        and "Validation error for parameter 'item'" in res.json()["detail"]
+    )
+    res = client.get("/async?name=foo")
+    assert res.status_code == 200 and res.json() == {"name": "foo"}
+    res = client.get("/sync?name=bar")
+    assert res.status_code == 200 and res.json() == {"name": "bar"}
 
 
-def test_starlette_methods(starlette_app):
-    client = TestClient(starlette_app)
-    response = client.get("/test/get?x=hello")
-    assert response.status_code == 200
-    assert response.json() == {"method": "GET", "x": "hello"}
-    response = client.post("/test/post", json={"x": "world"})
-    assert response.status_code == 200
-    assert response.json() == {"method": "POST", "x": "world"}
-    response = client.put("/test/put", json={"x": "put"})
-    assert response.status_code == 200
-    assert response.json() == {"method": "PUT", "x": "put"}
-    response = client.patch("/test/patch", json={"x": "patch"})
-    assert response.status_code == 200
-    assert response.json() == {"method": "PATCH", "x": "patch"}
-    response = client.delete("/test/delete?x=delete")
-    assert response.status_code == 200
-    assert response.json() == {"method": "DELETE", "x": "delete"}
+def test_starlette_exception_handling(starlette_app):
+    app, router = starlette_app
+
+    def raise_starlette_http():
+        raise StarletteHTTPException(status_code=400, detail="Bad request")
+
+    router.add_route("/error/http", "GET", raise_starlette_http)
+    router.add_route("/error/generic", "GET", raise_value_error)
+
+    client = TestClient(app)
+    res = client.get("/error/http")
+    assert res.status_code == 400
+    data = res.json()
+    assert data["status"] == 400 and data["description"] == "Bad request"
+    res = client.get("/error/generic")
+    assert res.status_code == 422 and res.json()["detail"] == "Something went wrong"
 
 
-def test_starlette_valid_schema(starlette_app):
-    client = TestClient(starlette_app)
-    response = client.post("/test/sum", json={"a": 5, "b": 7})
-    assert response.status_code == 200
-    assert response.json() == {"sum": 12}
-
-
-def test_starlette_invalid_schema(starlette_app):
-    client = TestClient(starlette_app)
-    response = client.post("/test/sum", json={"a": 5})
-    assert response.status_code == 422
-    assert "detail" in response.json()
-
-
-def test_starlette_body_exception(monkeypatch, starlette_app):
-    from starlette.requests import Request
-
-    async def fake_body(self):
-        raise Exception("Forced error")
-
-    monkeypatch.setattr(Request, "body", fake_body)
-    client = TestClient(starlette_app)
-    response = client.get("/test/get?x=error")
-    assert response.status_code == 200
-    assert response.json() == {"method": "GET", "x": "error"}
-    monkeypatch.undo()
-
-
-def test_starlette_empty_body(monkeypatch, starlette_app):
-    from starlette.requests import Request
-
-    async def empty_body(self):
-        return b""
-
-    monkeypatch.setattr(Request, "body", empty_body)
-    client = TestClient(starlette_app)
-    response = client.get("/test/get?x=empty")
-    assert response.status_code == 200
-    assert response.json() == {"method": "GET", "x": "empty"}
-    monkeypatch.undo()
-
-
-def test_starlette_include_router(starlette_app):
-    from fastopenapi.routers.starlette import StarletteRouter
-
-    sub_router = StarletteRouter(app=starlette_app)
-
-    async def sub_endpoint(x: str):
-        return {"sub": x}
-
-    sub_router.add_route("/sub", "GET", sub_endpoint)
-    main_router = StarletteRouter(app=starlette_app)
-    main_router.include_router(sub_router)
-    main_router.register_routes()
-    client = TestClient(starlette_app)
-    response = client.get("/sub?x=subtest")
-    assert response.status_code == 200
-    assert response.json() == {"sub": "subtest"}
+def test_starlette_docs_endpoints(starlette_app):
+    app, router = starlette_app
+    client = TestClient(app)
+    res = client.get("/openapi.json")
+    assert res.status_code == 200 and "openapi" in res.json()
+    res = client.get("/docs/")
+    assert res.status_code == 200
+    text = res.text
+    assert "<title>Swagger UI</title>" in text

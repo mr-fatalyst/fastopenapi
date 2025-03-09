@@ -1,8 +1,10 @@
+import functools
 import inspect
 import json
 
 from pydantic import BaseModel
 from starlette.applications import Starlette
+from starlette.exceptions import HTTPException
 from starlette.responses import HTMLResponse, JSONResponse
 from starlette.routing import Route
 
@@ -10,56 +12,72 @@ from fastopenapi.base_router import BaseRouter
 
 
 class StarletteRouter(BaseRouter):
-    def __init__(
-        self,
-        app: Starlette = None,
-        docs_url: str = "/docs/",
-        openapi_version: str = "3.0.0",
-        title: str = "My Starlette App",
-        version: str = "0.1.0",
-    ):
-        super().__init__(app, docs_url, openapi_version, title, version)
+    def __init__(self, app: Starlette = None, **kwargs):
         self._routes_starlette = []
-        if self.app is not None:
-            self._register_docs_endpoints()
+        super().__init__(app, **kwargs)
+
+    @staticmethod
+    async def handle_exceptions(request, exc):
+        return JSONResponse(
+            {
+                "description": exc.detail or "An error occurred",
+                "status": exc.status_code,
+                "message": str(exc),
+            },
+            status_code=exc.status_code,
+        )
+
+    @classmethod
+    async def _starlette_view(cls, request, router, endpoint):
+        query_params = dict(request.query_params)
+        body = {}
+        try:
+            body_bytes = await request.body()
+            if body_bytes:
+                body = json.loads(body_bytes.decode("utf-8"))
+        except Exception:
+            pass
+        all_params = {**query_params, **request.path_params}
+        try:
+            kwargs = router.resolve_endpoint_params(endpoint, all_params, body)
+        except Exception as e:
+            return JSONResponse({"detail": str(e)}, status_code=422)
+        try:
+            if inspect.iscoroutinefunction(endpoint):
+                result = await endpoint(**kwargs)
+            else:
+                result = endpoint(**kwargs)
+        except Exception as e:
+            if isinstance(e, HTTPException):
+                return await cls.handle_exceptions(request, e)
+            return JSONResponse({"detail": str(e)}, status_code=422)
+
+        meta = getattr(endpoint, "__route_meta__", {})
+        status_code = meta.get("status_code", 200)
+
+        if isinstance(result, BaseModel):
+            result = result.model_dump()
+        elif isinstance(result, list):
+            result = [
+                item.model_dump() if isinstance(item, BaseModel) else item
+                for item in result
+            ]
+        return JSONResponse(result, status_code=status_code)
 
     def add_route(self, path: str, method: str, endpoint):
         super().add_route(path, method, endpoint)
+        view = functools.partial(
+            StarletteRouter._starlette_view, router=self, endpoint=endpoint
+        )
+        route = Route(path, view, methods=[method.upper()])
         if self.app is not None:
-
-            async def view(request):
-                params = dict(request.query_params)
-                try:
-                    body = await request.body()
-                    if body:
-                        json_body = json.loads(body.decode("utf-8"))
-                        params.update(json_body)
-                except Exception:
-                    pass
-                try:
-                    if inspect.iscoroutinefunction(endpoint):
-                        result = await endpoint(**params)
-                    else:
-                        result = endpoint(**params)
-                except TypeError as exc:
-                    return JSONResponse({"detail": str(exc)}, status_code=422)
-                if isinstance(result, BaseModel):
-                    result = result.model_dump()
-                return JSONResponse(result)
-
-            self._routes_starlette.append(Route(path, view, methods=[method.upper()]))
-
-    def include_router(self, other: BaseRouter):
-        for path, method, endpoint in other.get_routes():
-            self.add_route(path, method, endpoint)
-
-    def register_routes(self):
-        if self.app is not None:
-            self.app.router.routes.extend(self._routes_starlette)
+            self.app.router.routes.append(route)
+        else:
+            self._routes_starlette.append(route)
 
     def _register_docs_endpoints(self):
         async def openapi_view(request):
-            return JSONResponse(self.generate_openapi())
+            return JSONResponse(self.openapi)
 
         async def docs_view(request):
             html = self.render_swagger_ui("/openapi.json")
