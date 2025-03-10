@@ -18,34 +18,70 @@ PYTHON_TYPE_MAPPING = {
 
 
 class BaseRouter:
+    """
+    Base router that collects routes and generates an OpenAPI schema.
+    This class is extended by specific framework routers to integrate with
+    web frameworks.
+
+    **Parameters**:
+    - `app`: The web framework application instance (e.g., Flask, Falcon, etc.).
+    If provided, documentation and schema routes are automatically added to the app.
+    - `docs_url`: URL path prefix where the documentation UI will be served
+    (defaults to "/docs/").
+    - `openapi_url`: URL path where the OpenAPI JSON schema will be served
+    (defaults to "/openapi.json").
+    - `openapi_version`: OpenAPI version for the schema (defaults to "3.0.0").
+    - `title`: Title of the API documentation (defaults to "My App").
+    - `version`: Version of the API (defaults to "0.1.0").
+    - `description`: Description of the API
+    (included in OpenAPI info, default "API documentation").
+    - `add_docs_route`: Whether to automatically add the documentation UI route
+    (defaults to True).
+    - `add_openapi_route`: Whether to automatically add the OpenAPI JSON schema route
+    (defaults to True).
+
+    The BaseRouter allows defining routes using decorator methods (get, post, etc.).
+    It can include sub-routers and generate an OpenAPI specification from
+    the declared routes.
+    """
+
     def __init__(
         self,
         app: Any = None,
         docs_url: str = "/docs/",
+        openapi_url: str = "/openapi.json",
         openapi_version: str = "3.0.0",
         title: str = "My App",
         version: str = "0.1.0",
+        description: str = "API documentation",
+        add_docs_route: bool = True,
+        add_openapi_route: bool = True,
     ):
         self.app = app
         self.docs_url = docs_url
+        self.openapi_url = openapi_url
         self.openapi_version = openapi_version
         self.title = title
         self.version = version
+        self.description = description
+        self.add_docs_route = add_docs_route
+        self.add_openapi_route = add_openapi_route
         self._routes: list[tuple[str, str, Callable]] = []
         self._openapi_schema = None
         if self.app is not None:
-            self._register_docs_endpoints()
+            if self.add_docs_route or self.add_openapi_route:
+                self._register_docs_endpoints()
 
     def add_route(self, path: str, method: str, endpoint: Callable):
         self._routes.append((path, method.upper(), endpoint))
-
-    def get_routes(self):
-        return self._routes
 
     def include_router(self, other: "BaseRouter", prefix: str | None = None):
         for path, method, endpoint in other.get_routes():
             _path = f"{prefix.rstrip('/')}/{path.lstrip('/')}" if prefix else path
             self.add_route(_path, method, endpoint)
+
+    def get_routes(self):
+        return self._routes
 
     def get(self, path: str, **meta):
         def decorator(func: Callable):
@@ -88,9 +124,16 @@ class BaseRouter:
         return decorator
 
     def generate_openapi(self) -> dict:
+        info = {
+            "title": self.title,
+            "version": self.version,
+        }
+        if self.description:
+            info["description"] = self.description
+
         schema = {
             "openapi": self.openapi_version,
-            "info": {"title": self.title, "version": self.version},
+            "info": info,
             "paths": {},
             "components": {"schemas": {}},
         }
@@ -123,7 +166,6 @@ class BaseRouter:
             op["requestBody"] = request_body
         if meta.get("tags"):
             op["tags"] = meta["tags"]
-
         return op
 
     def _build_parameters_and_body(
@@ -199,7 +241,19 @@ class BaseRouter:
         return responses
 
     def _register_docs_endpoints(self):
+        """
+        Register documentation and OpenAPI schema endpoints to the app
+        (to be implemented in subclasses).
+        """
         raise NotImplementedError
+
+    @staticmethod
+    def _serialize_response(result: Any) -> Any:
+        if isinstance(result, BaseModel):
+            return result.model_dump()
+        if isinstance(result, list):
+            return [BaseRouter._serialize_response(item) for item in result]
+        return result
 
     @staticmethod
     def _get_model_schema(model: type[BaseModel], definitions: dict) -> dict:

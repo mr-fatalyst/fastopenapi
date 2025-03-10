@@ -1,7 +1,7 @@
 import re
+from collections.abc import Callable
 
 from flask import Response, jsonify, request
-from pydantic import BaseModel
 from werkzeug.exceptions import HTTPException
 
 from fastopenapi.base_router import BaseRouter
@@ -17,9 +17,8 @@ class FlaskRouter(BaseRouter):
         response.content_type = "application/json"
         return response
 
-    def add_route(self, path: str, method: str, endpoint):
+    def add_route(self, path: str, method: str, endpoint: Callable):
         super().add_route(path, method, endpoint)
-
         if self.app is not None:
             flask_path = re.sub(r"{(\w+)}", r"<\1>", path)
 
@@ -41,14 +40,7 @@ class FlaskRouter(BaseRouter):
 
                 meta = getattr(endpoint, "__route_meta__", {})
                 status_code = meta.get("status_code", 200)
-
-                if isinstance(result, BaseModel):
-                    result = result.model_dump()
-                elif isinstance(result, list):
-                    result = [
-                        item.model_dump() if isinstance(item, BaseModel) else item
-                        for item in result
-                    ]
+                result = self._serialize_response(result)
                 return jsonify(result), status_code
 
             self.app.add_url_rule(
@@ -56,11 +48,11 @@ class FlaskRouter(BaseRouter):
             )
 
     def _register_docs_endpoints(self):
-        @self.app.route("/openapi.json", methods=["GET"])
+        @self.app.route(self.openapi_url, methods=["GET"])
         def openapi_view():
             return jsonify(self.openapi)
 
         @self.app.route(self.docs_url, methods=["GET"])
         def docs_view():
-            html = self.render_swagger_ui("/openapi.json")
+            html = self.render_swagger_ui(self.openapi_url)
             return Response(html, mimetype="text/html")

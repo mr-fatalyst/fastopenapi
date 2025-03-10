@@ -1,9 +1,9 @@
 import inspect
 import json
+from collections.abc import Callable
 from http import HTTPStatus
 
 import falcon.asgi
-from pydantic import BaseModel
 
 from fastopenapi.base_router import BaseRouter
 
@@ -49,7 +49,7 @@ class FalconRouter(BaseRouter):
         self._resources = {}
         super().__init__(app, **kwargs)
 
-    def add_route(self, path: str, method: str, endpoint):
+    def add_route(self, path: str, method: str, endpoint: Callable):
         super().add_route(path, method, endpoint)
         if self.app is not None:
             resource = self._create_or_update_resource(path, method.upper(), endpoint)
@@ -60,7 +60,6 @@ class FalconRouter(BaseRouter):
         if not resource:
             resource = type("DynamicResource", (), {})()
             self._resources[path] = resource
-
         method_name = METHODS_MAPPER[method]
 
         async def handle(req, resp, **path_params):
@@ -87,16 +86,8 @@ class FalconRouter(BaseRouter):
             if isinstance(e, falcon.HTTPError):
                 raise
             return self._handle_error(resp, str(e))
-
         resp.status = get_falcon_status(status_code)
-
-        if isinstance(result, BaseModel):
-            result = result.model_dump()
-        elif isinstance(result, list):
-            result = [
-                item.model_dump() if isinstance(item, BaseModel) else item
-                for item in result
-            ]
+        result = self._serialize_response(result)
         resp.media = result
 
     async def _read_body(self, req):
@@ -119,11 +110,11 @@ class FalconRouter(BaseRouter):
             async def on_get(inner_self, req, resp):
                 resp.media = outer.openapi
 
-        self.app.add_route("/openapi.json", OpenAPISchemaResource())
+        self.app.add_route(self.openapi_url, OpenAPISchemaResource())
 
         class SwaggerUIResource:
             async def on_get(inner_self, req, resp):
-                html = outer.render_swagger_ui("/openapi.json")
+                html = outer.render_swagger_ui(outer.openapi_url)
                 resp.content_type = "text/html"
                 resp.text = html
 

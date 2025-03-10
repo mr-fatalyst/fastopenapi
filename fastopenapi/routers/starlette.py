@@ -1,8 +1,8 @@
 import functools
 import inspect
 import json
+from collections.abc import Callable
 
-from pydantic import BaseModel
 from starlette.applications import Starlette
 from starlette.exceptions import HTTPException
 from starlette.responses import HTMLResponse, JSONResponse
@@ -54,17 +54,10 @@ class StarletteRouter(BaseRouter):
 
         meta = getattr(endpoint, "__route_meta__", {})
         status_code = meta.get("status_code", 200)
-
-        if isinstance(result, BaseModel):
-            result = result.model_dump()
-        elif isinstance(result, list):
-            result = [
-                item.model_dump() if isinstance(item, BaseModel) else item
-                for item in result
-            ]
+        result = router._serialize_response(result)
         return JSONResponse(result, status_code=status_code)
 
-    def add_route(self, path: str, method: str, endpoint):
+    def add_route(self, path: str, method: str, endpoint: Callable):
         super().add_route(path, method, endpoint)
         view = functools.partial(
             StarletteRouter._starlette_view, router=self, endpoint=endpoint
@@ -80,10 +73,10 @@ class StarletteRouter(BaseRouter):
             return JSONResponse(self.openapi)
 
         async def docs_view(request):
-            html = self.render_swagger_ui("/openapi.json")
+            html = self.render_swagger_ui(self.openapi_url)
             return HTMLResponse(html)
 
         self.app.router.routes.append(
-            Route("/openapi.json", openapi_view, methods=["GET"])
+            Route(self.openapi_url, openapi_view, methods=["GET"])
         )
         self.app.router.routes.append(Route(self.docs_url, docs_view, methods=["GET"]))

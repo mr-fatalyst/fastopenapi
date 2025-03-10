@@ -1,7 +1,7 @@
 import inspect
 import re
+from collections.abc import Callable
 
-from pydantic import BaseModel
 from sanic import response
 from sanic.exceptions import HTTPException
 
@@ -22,7 +22,7 @@ class SanicRouter(BaseRouter):
             status=exception.status_code if hasattr(exception, "status_code") else 500,
         )
 
-    def add_route(self, path: str, method: str, endpoint):
+    def add_route(self, path: str, method: str, endpoint: Callable):
         super().add_route(path, method, endpoint)
         if self.app is None:
             return
@@ -52,14 +52,7 @@ class SanicRouter(BaseRouter):
 
             meta = getattr(endpoint, "__route_meta__", {})
             status_code = meta.get("status_code", 200)
-
-            if isinstance(result, BaseModel):
-                result = result.model_dump()
-            elif isinstance(result, list):
-                result = [
-                    item.model_dump() if isinstance(item, BaseModel) else item
-                    for item in result
-                ]
+            result = self._serialize_response(result)
             return response.json(result, status=status_code)
 
         route_name = f"{endpoint.__name__}_{method.lower()}_{path.replace('/', '_')}"
@@ -68,11 +61,11 @@ class SanicRouter(BaseRouter):
         )
 
     def _register_docs_endpoints(self):
-        @self.app.route("/openapi.json", methods=["GET"])
+        @self.app.route(self.openapi_url, methods=["GET"])
         async def openapi_view(request):
             return response.json(self.openapi)
 
         @self.app.route(self.docs_url, methods=["GET"])
         async def docs_view(request):
-            html = self.render_swagger_ui("/openapi.json")
+            html = self.render_swagger_ui(self.openapi_url)
             return response.html(html)

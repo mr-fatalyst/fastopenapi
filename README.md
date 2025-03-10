@@ -15,6 +15,7 @@
 ```bash
 pip install fastopenapi
 ```
+
 #### Install FastOpenAPI with a specific framework:
 ```bash
 pip install fastopenapi[falcon]
@@ -41,7 +42,10 @@ pip install fastopenapi[starlette]
 
 ## 🛠️ Quick Start
 
-### ![Falcon](https://img.shields.io/badge/Falcon-45b8d8?style=flat&logo=falcon&logoColor=white)
+### ![Falcon](https://img.shields.io/badge/Falcon-45b8d8?style=flat&logo=falcon&logoColor=white) Example
+<details>
+<summary>Click to expand</summary>
+
 ```python
 import falcon.asgi
 import uvicorn
@@ -65,12 +69,15 @@ async def hello(name: str):
 
 if __name__ == "__main__":
     uvicorn.run(app, host="127.0.0.1", port=8000)
-
 ```
+</details>
 
 ---
 
-### ![Flask](https://img.shields.io/badge/-Flask-000000?style=flat-square&logo=flask&logoColor=white)
+### ![Flask](https://img.shields.io/badge/-Flask-000000?style=flat-square&logo=flask&logoColor=white) Example
+<details>
+<summary>Click to expand</summary>
+
 ```python
 from flask import Flask
 from pydantic import BaseModel
@@ -93,12 +100,15 @@ def hello(name: str):
 
 if __name__ == "__main__":
     app.run(debug=True, port=8000)
-
 ```
+</details>
 
 ---
 
-### ![Sanic](https://img.shields.io/badge/-Sanic-00bfff?style=flat-square&logo=sanic&logoColor=white)
+### ![Sanic](https://img.shields.io/badge/-Sanic-00bfff?style=flat-square&logo=sanic&logoColor=white) Example
+<details>
+<summary>Click to expand</summary>
+
 ```python
 from pydantic import BaseModel
 from sanic import Sanic
@@ -121,12 +131,15 @@ async def hello(name: str):
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8000, debug=True)
-
 ```
+</details>
 
 ---
 
-### ![Starlette](https://img.shields.io/badge/-Starlette-ff4785?style=flat-square&logo=starlette&logoColor=white)
+### ![Starlette](https://img.shields.io/badge/-Starlette-ff4785?style=flat-square&logo=starlette&logoColor=white) Example
+<details>
+<summary>Click to expand</summary>
+
 ```python
 import uvicorn
 from pydantic import BaseModel
@@ -149,8 +162,8 @@ async def hello(name: str):
 
 if __name__ == "__main__":
     uvicorn.run(app, host="127.0.0.1", port=8000)
-
 ```
+</details>
 
 ---
 

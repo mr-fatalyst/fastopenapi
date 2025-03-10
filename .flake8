@@ -2,7 +2,7 @@
 exclude=
     .git
 
-max-complexity=12
+max-complexity=10
 max-line-length=88
 
 inline-quotes = "
