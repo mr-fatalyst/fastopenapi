@@ -1,0 +1,27 @@
+name: Master Deploy
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  deploy-prod:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Setup environment (deploy)
+        uses: ./.github/actions/setup-env
+        with:
+          python-version: "3.10"
+          install-flags: "--all-extras"
+
+      - name: Publish to PyPI
+        run: |
+          poetry build
+          poetry publish
+        env:
+          POETRY_PYPI_TOKEN_PYPI: ${{ secrets.POETRY_API_TOKEN }}

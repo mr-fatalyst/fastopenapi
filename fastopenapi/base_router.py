@@ -1,36 +1,87 @@
 import inspect
+import re
+import typing
 from collections.abc import Callable
+from http import HTTPStatus
 from typing import Any
 
 from pydantic import BaseModel
 
 SWAGGER_URL = "https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.20.0/"
 
+PYTHON_TYPE_MAPPING = {
+    int: "integer",
+    float: "number",
+    bool: "boolean",
+    str: "string",
+}
+
 
 class BaseRouter:
+    """
+    Base router that collects routes and generates an OpenAPI schema.
+    This class is extended by specific framework routers to integrate with
+    web frameworks.
+
+    **Parameters**:
+    - `app`: The web framework application instance (e.g., Flask, Falcon, etc.).
+    If provided, documentation and schema routes are automatically added to the app.
+    - `docs_url`: URL path prefix where the documentation UI will be served
+    (defaults to "/docs/").
+    - `openapi_url`: URL path where the OpenAPI JSON schema will be served
+    (defaults to "/openapi.json").
+    - `openapi_version`: OpenAPI version for the schema (defaults to "3.0.0").
+    - `title`: Title of the API documentation (defaults to "My App").
+    - `version`: Version of the API (defaults to "0.1.0").
+    - `description`: Description of the API
+    (included in OpenAPI info, default "API documentation").
+    - `add_docs_route`: Whether to automatically add the documentation UI route
+    (defaults to True).
+    - `add_openapi_route`: Whether to automatically add the OpenAPI JSON schema route
+    (defaults to True).
+
+    The BaseRouter allows defining routes using decorator methods (get, post, etc.).
+    It can include sub-routers and generate an OpenAPI specification from
+    the declared routes.
+    """
+
     def __init__(
         self,
         app: Any = None,
         docs_url: str = "/docs/",
+        openapi_url: str = "/openapi.json",
         openapi_version: str = "3.0.0",
         title: str = "My App",
         version: str = "0.1.0",
+        description: str = "API documentation",
+        add_docs_route: bool = True,
+        add_openapi_route: bool = True,
     ):
         self.app = app
         self.docs_url = docs_url
+        self.openapi_url = openapi_url
         self.openapi_version = openapi_version
         self.title = title
         self.version = version
+        self.description = description
+        self.add_docs_route = add_docs_route
+        self.add_openapi_route = add_openapi_route
         self._routes: list[tuple[str, str, Callable]] = []
+        self._openapi_schema = None
+        if self.app is not None:
+            if self.add_docs_route or self.add_openapi_route:
+                self._register_docs_endpoints()
 
     def add_route(self, path: str, method: str, endpoint: Callable):
         self._routes.append((path, method.upper(), endpoint))
 
+    def include_router(self, other: "BaseRouter", prefix: str | None = None):
+        for path, method, endpoint in other.get_routes():
+            _path = f"{prefix.rstrip('/')}/{path.lstrip('/')}" if prefix else path
+            self.add_route(_path, method, endpoint)
+
     def get_routes(self):
         return self._routes
-
-    def include_router(self, other: "BaseRouter"):
-        self._routes.extend(other.get_routes())
 
     def get(self, path: str, **meta):
         def decorator(func: Callable):
@@ -73,25 +124,58 @@ class BaseRouter:
         return decorator
 
     def generate_openapi(self) -> dict:
+        info = {
+            "title": self.title,
+            "version": self.version,
+        }
+        if self.description:
+            info["description"] = self.description
+
         schema = {
             "openapi": self.openapi_version,
-            "info": {"title": self.title, "version": self.version},
+            "info": info,
             "paths": {},
             "components": {"schemas": {}},
         }
         definitions = {}
-
         for path, method, endpoint in self._routes:
-            operation = self._build_operation(endpoint, definitions)
-            schema["paths"].setdefault(path, {})[method.lower()] = operation
-
+            openapi_path = re.sub(r"<(?:w:)?(\w+)>", r"{\1}", path)
+            operation = self._build_operation(
+                endpoint, definitions, openapi_path, method
+            )
+            schema["paths"].setdefault(openapi_path, {})[method.lower()] = operation
         schema["components"]["schemas"].update(definitions)
         return schema
 
-    def _build_operation(self, endpoint, definitions: dict) -> dict:
+    def _build_operation(
+        self, endpoint, definitions: dict, route_path: str, http_method: str
+    ) -> dict:
+        parameters, request_body = self._build_parameters_and_body(
+            endpoint, definitions, route_path, http_method
+        )
+
+        meta = getattr(endpoint, "__route_meta__", {})
+        status_code = str(meta.get("status_code", 200))
+        op = {
+            "summary": endpoint.__doc__ or "",
+            "responses": self._build_responses(meta, definitions, status_code),
+        }
+        if parameters:
+            op["parameters"] = parameters
+        if request_body:
+            op["requestBody"] = request_body
+        if meta.get("tags"):
+            op["tags"] = meta["tags"]
+        return op
+
+    def _build_parameters_and_body(
+        self, endpoint, definitions: dict, route_path: str, http_method: str
+    ):
         sig = inspect.signature(endpoint)
         parameters = []
         request_body = None
+
+        path_params = {match.group(1) for match in re.finditer(r"{(\w+)}", route_path)}
 
         for param_name, param in sig.parameters.items():
             if param.annotation is inspect.Parameter.empty:
@@ -100,47 +184,76 @@ class BaseRouter:
             if isinstance(param.annotation, type) and issubclass(
                 param.annotation, BaseModel
             ):
-                model_schema = self._get_model_schema(param.annotation, definitions)
-                request_body = {
-                    "content": {"application/json": {"schema": model_schema}},
-                    "required": True,
-                }
+                if http_method.upper() == "GET":
+                    model_schema = param.annotation.model_json_schema()
+                    required_fields = model_schema.get("required", [])
+                    properties = model_schema.get("properties", {})
+                    for prop_name, prop_schema in properties.items():
+                        parameters.append(
+                            {
+                                "name": prop_name,
+                                "in": "query",
+                                "required": prop_name in required_fields,
+                                "schema": prop_schema,
+                            }
+                        )
+                else:
+                    model_schema = self._get_model_schema(param.annotation, definitions)
+                    request_body = {
+                        "content": {"application/json": {"schema": model_schema}},
+                        "required": param.default is inspect.Parameter.empty,
+                    }
             else:
+                location = "path" if param_name in path_params else "query"
+                openapi_type = PYTHON_TYPE_MAPPING.get(param.annotation, "string")
                 parameters.append(
                     {
                         "name": param_name,
-                        "in": "query",
-                        "required": param.default is inspect.Parameter.empty,
-                        "schema": {"type": "string"},
+                        "in": location,
+                        "required": (param.default is inspect.Parameter.empty)
+                        or (location == "path"),
+                        "schema": {"type": openapi_type},
                     }
                 )
 
-        op = {
-            "summary": endpoint.__doc__ or "",
-            "responses": {"200": {"description": "OK"}},
-        }
-        if parameters:
-            op["parameters"] = parameters
-        if request_body:
-            op["requestBody"] = request_body
+        return parameters, request_body
 
-        meta = getattr(endpoint, "__route_meta__", {})
-        if meta.get("tags"):
-            op["tags"] = meta["tags"]
-        if meta.get("status_code"):
-            code = str(meta["status_code"])
-            op["responses"] = {code: {"description": "OK"}}
-            response_model = meta.get("response_model")
-            if (
-                response_model
-                and isinstance(response_model, type)
-                and issubclass(response_model, BaseModel)
+    def _build_responses(self, meta: dict, definitions: dict, status_code: str) -> dict:
+        responses = {status_code: {"description": HTTPStatus(int(status_code)).phrase}}
+        response_model = meta.get("response_model")
+        if response_model:
+            origin = typing.get_origin(response_model)
+            if origin is list:
+                inner_type = typing.get_args(response_model)[0]
+                if isinstance(inner_type, type) and issubclass(inner_type, BaseModel):
+                    inner_schema = self._get_model_schema(inner_type, definitions)
+                    array_schema = {"type": "array", "items": inner_schema}
+                    responses[status_code]["content"] = {
+                        "application/json": {"schema": array_schema}
+                    }
+            elif isinstance(response_model, type) and issubclass(
+                response_model, BaseModel
             ):
                 resp_model_schema = self._get_model_schema(response_model, definitions)
-                op["responses"][code]["content"] = {
+                responses[status_code]["content"] = {
                     "application/json": {"schema": resp_model_schema}
                 }
-        return op
+        return responses
+
+    def _register_docs_endpoints(self):
+        """
+        Register documentation and OpenAPI schema endpoints to the app
+        (to be implemented in subclasses).
+        """
+        raise NotImplementedError
+
+    @staticmethod
+    def _serialize_response(result: Any) -> Any:
+        if isinstance(result, BaseModel):
+            return result.model_dump()
+        if isinstance(result, list):
+            return [BaseRouter._serialize_response(item) for item in result]
+        return result
 
     @staticmethod
     def _get_model_schema(model: type[BaseModel], definitions: dict) -> dict:
@@ -151,7 +264,9 @@ class BaseRouter:
             if key in model_schema:
                 definitions.update(model_schema[key])
                 del model_schema[key]
-        return model_schema
+        if model.__name__ not in definitions:
+            definitions[model.__name__] = model_schema
+        return {"$ref": f"#/components/schemas/{model.__name__}"}
 
     @staticmethod
     def render_swagger_ui(openapi_json_url: str) -> str:
@@ -175,3 +290,37 @@ class BaseRouter:
           </body>
         </html>
         """
+
+    @staticmethod
+    def resolve_endpoint_params(
+        endpoint: Callable, all_params: dict, body: dict
+    ) -> dict:
+        sig = inspect.signature(endpoint)
+        kwargs = {}
+        for name, param in sig.parameters.items():
+            annotation = param.annotation
+            is_required = param.default is inspect.Parameter.empty
+            if isinstance(annotation, type) and issubclass(annotation, BaseModel):
+                try:
+                    kwargs[name] = annotation(**body)
+                except Exception as e:
+                    raise ValueError(f"Validation error for parameter '{name}': {e}")
+            else:
+                if name in all_params:
+                    try:
+                        kwargs[name] = annotation(all_params[name])
+                    except Exception as e:
+                        raise ValueError(
+                            f"Error casting parameter '{name}' to {annotation}: {e}"
+                        )
+                elif not is_required:
+                    kwargs[name] = param.default
+                else:
+                    raise ValueError(f"Missing required parameter: '{name}'")
+        return kwargs
+
+    @property
+    def openapi(self) -> dict:
+        if self._openapi_schema is None:
+            self._openapi_schema = self.generate_openapi()
+        return self._openapi_schema

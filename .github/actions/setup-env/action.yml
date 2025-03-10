@@ -1,0 +1,46 @@
+name: "Setup Environment"
+description: "Composite action for setting up Python environment with caching, Poetry installation and dependency installation using --all-extras flag."
+
+inputs:
+  python-version:
+    description: "Python version to use."
+    required: false
+    default: "3.10"
+  install-flags:
+    description: "Flags for poetry install command."
+    required: false
+    default: "--all-extras"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ inputs.python-version }}
+
+    - name: Cache pip dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/poetry.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+
+    - name: Cache Poetry dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pypoetry
+        key: ${{ runner.os }}-poetry-${{ hashFiles('**/poetry.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-poetry-
+
+    - name: Install Poetry
+      run: |
+        curl -sSL https://install.python-poetry.org | python3 -
+        echo "$HOME/.local/bin" >> $GITHUB_PATH
+      shell: bash
+
+    - name: Install dependencies
+      run: poetry install ${{ inputs.install-flags }}
+      shell: bash

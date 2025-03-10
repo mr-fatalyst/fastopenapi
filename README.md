@@ -1,15 +1,33 @@
 
 # 🚀 FastOpenAPI
-![Test](https://github.com/mr-fatalyst/fastopenapi/actions/workflows/test.yml/badge.svg)
+![License](https://img.shields.io/github/license/mr-fatalyst/fastopenapi)
+![Test](https://github.com/mr-fatalyst/fastopenapi/actions/workflows/master.yml/badge.svg)
 ![codecov](https://codecov.io/gh/mr-fatalyst/fastopenapi/branch/main/graph/badge.svg?token=USHR1I0CJB)
+![PyPI](https://img.shields.io/pypi/v/fastopenapi)
+![Python](https://img.shields.io/pypi/pyversions/fastopenapi)
 
-**FastOpenAPI** is a library for generating and integrating OpenAPI schemas using Pydantic v2 and various frameworks (Falcon, Flask, Sanic, Starlette).
+**FastOpenAPI** is a library for generating and integrating OpenAPI schemas using Pydantic and various frameworks (Falcon, Flask, Sanic, Starlette).
 
 ---
 
 ## 📦 Installation
+#### Install only FastOpenAPI:
 ```bash
 pip install fastopenapi
+```
+
+#### Install FastOpenAPI with a specific framework:
+```bash
+pip install fastopenapi[falcon]
+```
+```bash
+pip install fastopenapi[flask]
+```
+```bash
+pip install fastopenapi[sanic]
+```
+```bash
+pip install fastopenapi[starlette]
 ```
 
 ---
@@ -24,7 +42,10 @@ pip install fastopenapi
 
 ## 🛠️ Quick Start
 
-### ![Falcon](https://img.shields.io/badge/Falcon-45b8d8?style=flat&logo=falcon&logoColor=white)
+### ![Falcon](https://img.shields.io/badge/Falcon-45b8d8?style=flat&logo=falcon&logoColor=white) Example
+<details>
+<summary>Click to expand</summary>
+
 ```python
 import falcon.asgi
 import uvicorn
@@ -48,12 +69,15 @@ async def hello(name: str):
 
 if __name__ == "__main__":
     uvicorn.run(app, host="127.0.0.1", port=8000)
-
 ```
+</details>
 
 ---
 
-### ![Flask](https://img.shields.io/badge/-Flask-000000?style=flat-square&logo=flask&logoColor=white)
+### ![Flask](https://img.shields.io/badge/-Flask-000000?style=flat-square&logo=flask&logoColor=white) Example
+<details>
+<summary>Click to expand</summary>
+
 ```python
 from flask import Flask
 from pydantic import BaseModel
@@ -76,12 +100,15 @@ def hello(name: str):
 
 if __name__ == "__main__":
     app.run(debug=True, port=8000)
-
 ```
+</details>
 
 ---
 
-### ![Sanic](https://img.shields.io/badge/-Sanic-00bfff?style=flat-square&logo=sanic&logoColor=white)
+### ![Sanic](https://img.shields.io/badge/-Sanic-00bfff?style=flat-square&logo=sanic&logoColor=white) Example
+<details>
+<summary>Click to expand</summary>
+
 ```python
 from pydantic import BaseModel
 from sanic import Sanic
@@ -104,12 +131,15 @@ async def hello(name: str):
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8000, debug=True)
-
 ```
+</details>
 
 ---
 
-### ![Starlette](https://img.shields.io/badge/-Starlette-ff4785?style=flat-square&logo=starlette&logoColor=white)
+### ![Starlette](https://img.shields.io/badge/-Starlette-ff4785?style=flat-square&logo=starlette&logoColor=white) Example
+<details>
+<summary>Click to expand</summary>
+
 ```python
 import uvicorn
 from pydantic import BaseModel
@@ -130,13 +160,10 @@ async def hello(name: str):
     """Say hello from Starlette"""
     return HelloResponse(message=f"Hello, {name}! It's Starlette!")
 
-
-router.register_routes()
-
 if __name__ == "__main__":
     uvicorn.run(app, host="127.0.0.1", port=8000)
-
 ```
+</details>
 
 ---
 
@@ -151,13 +178,6 @@ class User(BaseModel):
 @router.post("/api/v1/users/")
 def create_user(user: User) -> User:
     return user
-```
-
----
-
-## 🧪 **Running Tests**
-```bash
-poetry run pytest
 ```
 
 ---

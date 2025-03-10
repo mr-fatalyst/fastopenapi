@@ -1,141 +1,105 @@
 import pytest
-from flask import Flask
-from pydantic import BaseModel, ValidationError
+from flask import Flask, abort
 
 from fastopenapi.routers.flask import FlaskRouter
 
-
-class SumModel(BaseModel):
-    a: int
-    b: int
-
-
-def get_endpoint(x: str):
-    return {"method": "GET", "x": x}
-
-
-def post_endpoint(x: str):
-    return {"method": "POST", "x": x}
-
-
-def put_endpoint(x: str):
-    return {"method": "PUT", "x": x}
-
-
-def patch_endpoint(x: str):
-    return {"method": "PATCH", "x": x}
-
-
-def delete_endpoint(x: str):
-    return {"method": "DELETE", "x": x}
-
-
-def sum_post_endpoint(a: int, b: int):
-    try:
-        model = SumModel(a=a, b=b)
-        return {"sum": model.a + model.b}
-    except ValidationError:
-        return {"error": "Invalid input"}
+from .conftest import (
+    echo_int,
+    echo_int_duplicate,
+    raise_value_error,
+    return_item_model,
+    use_default_param,
+)
 
 
 @pytest.fixture
 def flask_app():
     app = Flask(__name__)
-    router = FlaskRouter(app=app)
-    router.get("/test/get")(get_endpoint)
-    router.post("/test/post")(post_endpoint)
-    router.put("/test/put")(put_endpoint)
-    router.patch("/test/patch")(patch_endpoint)
-    router.delete("/test/delete")(delete_endpoint)
-    router.post("/test/sum")(sum_post_endpoint)
-    return app
+    app.testing = True
+    router = FlaskRouter(app=app, docs_url="/docs/")
+    return app, router
 
 
-def test_flask_endpoints_availability(flask_app):
-    client = flask_app.test_client()
-    for url in ["/openapi.json", "/docs/"]:
-        response = client.get(url)
-        assert response.status_code == 200
+def test_flask_success_and_validation(flask_app):
+    app, router = flask_app
+    router.add_route("/echo", "GET", echo_int)
+    router.add_route("/path/{x}", "GET", echo_int_duplicate)
+    router.add_route("/default", "GET", use_default_param)
+    router.add_route("/item", "POST", return_item_model)
 
-
-def test_flask_methods(flask_app):
-    client = flask_app.test_client()
-    response = client.get("/test/get", query_string={"x": "hello"})
-    assert response.status_code == 200
-    assert response.get_json() == {"method": "GET", "x": "hello"}
-
-    response = client.post("/test/post", json={"x": "world"})
-    assert response.status_code == 200
-    assert response.get_json() == {"method": "POST", "x": "world"}
-
-    response = client.put("/test/put", json={"x": "put"})
-    assert response.status_code == 200
-    assert response.get_json() == {"method": "PUT", "x": "put"}
-
-    response = client.patch("/test/patch", json={"x": "patch"})
-    assert response.status_code == 200
-    assert response.get_json() == {"method": "PATCH", "x": "patch"}
-
-    response = client.delete("/test/delete", query_string={"x": "delete"})
-    assert response.status_code == 200
-    assert response.get_json() == {"method": "DELETE", "x": "delete"}
-
-
-def test_flask_valid_schema(flask_app):
-    client = flask_app.test_client()
-    response = client.post("/test/sum", json={"a": 5, "b": 7})
-    assert response.status_code == 200
-    assert response.get_json() == {"sum": 12}
-
-
-def test_flask_invalid_schema(flask_app):
-    client = flask_app.test_client()
-    response = client.post("/test/sum", json={"a": 5})
-    assert response.status_code == 422
-    assert "detail" in response.get_json()
-
-
-def test_flask_no_json_body(flask_app):
-    client = flask_app.test_client()
-    response = client.post(
-        "/test/sum?a=2&b=3", data="", content_type="application/json"
-    )
-    # sum=5
-    assert response.status_code == 200
-    assert response.get_json() == {"sum": 5}
-
-
-def test_flask_broken_json(flask_app):
-    client = flask_app.test_client()
-    bad_json = '{"a": 5,,}'
-    response = client.post("/test/sum", data=bad_json, content_type="application/json")
-    assert response.status_code == 422
-    assert "detail" in response.get_json()
-
-
-def test_flask_include_router():
-    app = Flask(__name__)
-    main_router = FlaskRouter(app=app)
-
-    sub_router = FlaskRouter(app=None)  # no app yet
-
-    def sub_endpoint(z: str):
-        return {"sub": z}
-
-    sub_router.get("/sub")(sub_endpoint)
-
-    main_router.include_router(sub_router)  # include routes
     client = app.test_client()
-    resp = client.get("/sub", query_string={"z": "hello"})
-    assert resp.status_code == 200
-    assert resp.get_json() == {"sub": "hello"}
+
+    res = client.get("/echo?x=123")
+    assert res.status_code == 200
+    assert res.get_json() == {"x": 123}
+
+    res = client.get("/echo")
+    assert res.status_code == 422
+    data = res.get_json()
+    assert data["detail"].startswith("Missing required parameter")
+
+    res = client.get("/echo?x=abc")
+    assert res.status_code == 422
+    data = res.get_json()
+    assert "Error casting parameter 'x' to <class 'int'>" in data["detail"]
+
+    res = client.get("/path/45")
+    assert res.status_code == 200
+    assert res.get_json() == {"x": 45}
+
+    res = client.get("/path/notanum")
+    assert res.status_code == 422
+
+    res = client.get("/default")
+    assert res.status_code == 200
+    assert res.get_json() == {"x": 42}
+
+    item_data = {"name": "Item1", "value": 10}
+    res = client.post("/item", json=item_data)
+    assert res.status_code == 200
+    assert res.get_json() == item_data
+
+    res = client.post("/item", json={"name": "Item1"})
+    assert res.status_code == 422
+    data = res.get_json()
+    assert "Validation error for parameter 'item'" in data["detail"]
 
 
-def test_flask_no_app():
-    router = FlaskRouter(app=None)
-    router.get("/no_app")(lambda: {"msg": "no app"})
-    routes = router.get_routes()
-    assert len(routes) == 1
-    path, method, func = routes[0]
-    assert path == "/no_app"
-    assert method == "GET"
+def test_flask_exception_handling(flask_app):
+    app, router = flask_app
+
+    def raise_flask_http():
+        abort(404, description="Not found")
+
+    router.add_route("/error/http", "GET", raise_flask_http)
+    router.add_route("/error/generic", "GET", raise_value_error)
+
+    client = app.test_client()
+
+    res = client.get("/error/http")
+    assert res.status_code == 404
+    data = res.get_json()
+    assert (
+        data["code"] == 404
+        and data["name"] == "Not Found"
+        and "Not found" in data["description"]
+    )
+
+    res = client.get("/error/generic")
+    assert res.status_code == 422
+    data = res.get_json()
+    assert data["detail"] == "Something went wrong"
+
+
+def test_flask_docs_endpoints(flask_app):
+    app, router = flask_app
+    client = app.test_client()
+    res = client.get("/openapi.json")
+    assert res.status_code == 200
+    schema = res.get_json()
+    assert "openapi" in schema and "paths" in schema and "components" in schema
+
+    res = client.get("/docs/")
+    assert res.status_code == 200
+    html_text = res.data.decode()
+    assert "<title>Swagger UI</title>" in html_text

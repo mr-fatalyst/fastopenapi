@@ -1,0 +1,65 @@
+name: Tests
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Setup environment (lint)
+        uses: ./.github/actions/setup-env
+        with:
+          python-version: "3.10"
+          install-flags: "--all-extras"
+
+      - name: Run linters
+        run: poetry run pre-commit run --all-files
+
+  test:
+    needs: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Setup environment (test)
+        uses: ./.github/actions/setup-env
+        with:
+          python-version: "3.10"
+          install-flags: "--all-extras"
+
+      - name: Run tests
+        run: poetry run pytest
+
+  coverage:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Setup environment (coverage)
+        uses: ./.github/actions/setup-env
+        with:
+          python-version: "3.10"
+          install-flags: "--all-extras"
+
+      - name: Run tests with coverage
+        run: |
+          poetry run coverage run -m pytest
+          poetry run coverage report
+          poetry run coverage xml
+
+      - name: Upload coverage to Codecov
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+        run: bash <(curl -s https://codecov.io/bash) -t $CODECOV_TOKEN -f coverage.xml
