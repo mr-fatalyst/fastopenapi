@@ -8,6 +8,8 @@ on:
 jobs:
   deploy-prod:
     runs-on: ubuntu-latest
+    env:
+      POETRY_PYPI_TOKEN_PYPI: ${{ secrets.PYPI_API_TOKEN }}
     steps:
       - uses: actions/checkout@v3
         with:
@@ -19,9 +21,12 @@ jobs:
           python-version: "3.10"
           install-flags: "--all-extras"
 
+      - name: Configure PyPI
+        run: |
+          poetry config repositories.pypi https://upload.pypi.org/legacy/
+          poetry config pypi-token.pypi $POETRY_PYPI_TOKEN_PYPI
+
       - name: Publish to PyPI
         run: |
           poetry build
           poetry publish
-        env:
-          POETRY_PYPI_TOKEN_PYPI: ${{ secrets.POETRY_API_TOKEN }}
