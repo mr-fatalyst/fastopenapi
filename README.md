@@ -1,14 +1,21 @@
+<p align="center">
+  <img src="logo.png" alt="Logo">
+</p>
 
-# 🚀 FastOpenAPI
-![License](https://img.shields.io/github/license/mr-fatalyst/fastopenapi)
-![Test](https://github.com/mr-fatalyst/fastopenapi/actions/workflows/master.yml/badge.svg)
-![codecov](https://codecov.io/gh/mr-fatalyst/fastopenapi/branch/main/graph/badge.svg?token=USHR1I0CJB)
-![PyPI](https://img.shields.io/pypi/v/fastopenapi)
-![Python](https://img.shields.io/pypi/pyversions/fastopenapi)
+<p align="center">
+  <b>FastOpenAPI</b> is a library for generating and integrating OpenAPI schemas using Pydantic and various frameworks.
+</p>
 
-**FastOpenAPI** is a library for generating and integrating OpenAPI schemas using Pydantic and various frameworks (Falcon, Flask, Sanic, Starlette).
+<p align="center">
+  <img src="https://img.shields.io/github/license/mr-fatalyst/fastopenapi">
+  <img src="https://github.com/mr-fatalyst/fastopenapi/actions/workflows/master.yml/badge.svg">
+  <img src="https://codecov.io/gh/mr-fatalyst/fastopenapi/branch/main/graph/badge.svg?token=USHR1I0CJB">
+  <img src="https://img.shields.io/pypi/v/fastopenapi">
+  <img src="https://img.shields.io/pypi/pyversions/fastopenapi">
+</p>
 
 ---
+
 
 ## 📦 Installation
 #### Install only FastOpenAPI:
