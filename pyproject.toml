@@ -1,6 +1,6 @@
 [project]
 name = "fastopenapi"
-version = "0.2.0"
+version = "0.2.1"
 description = "FastOpenAPI is a library for generating and integrating OpenAPI schemas using Pydantic."
 authors = [
     {name = "Nikita Ryzhenkov", email = "nikita.ryzhenkoff@gmail.com"}
