@@ -103,3 +103,17 @@ def test_flask_docs_endpoints(flask_app):
     assert res.status_code == 200
     html_text = res.data.decode()
     assert "<title>Swagger UI</title>" in html_text
+
+
+def test_flask_add_route_no_app():
+    router = FlaskRouter(app=None, docs_url="/docs/", openapi_url="/openapi.json")
+
+    def dummy_endpoint(x: int):
+        return {"x": x}
+
+    router.add_route("/dummy/{x}", "GET", dummy_endpoint)
+
+    routes = router.get_routes()
+    assert any(
+        path == "/dummy/{x}" and method == "GET" for (path, method, fn) in routes
+    )

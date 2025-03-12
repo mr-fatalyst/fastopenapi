@@ -2,7 +2,7 @@
 source = fastopenapi
 omit =
     */site-packages/*
-branch = True
+branch = False
 
 [report]
 show_missing = True

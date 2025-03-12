@@ -1,6 +1,6 @@
 import pytest
 from sanic import Sanic
-from sanic.exceptions import InvalidUsage
+from sanic.exceptions import HTTPException, InvalidUsage
 
 from fastopenapi.routers.sanic import SanicRouter
 
@@ -101,3 +101,29 @@ def test_sanic_docs_endpoints(sanic_app):
     assert response_obj.status == 200
     text = response_obj.text
     assert "<title>Swagger UI</title>" in text
+
+
+def test_add_route_with_no_app():
+    router = SanicRouter(app=None)
+
+    def dummy(x: int):
+        return {"x": x}
+
+    router.add_route("/no_app", "GET", dummy)
+    routes = router.get_routes()
+    assert any(r[0] == "/no_app" for r in routes)
+
+
+def test_http_exception_in_endpoint(sanic_app):
+    app, router = sanic_app
+
+    def endpoint_http(x: int):
+        raise HTTPException("HTTP Error")
+
+    router.add_route("/http_error", "GET", endpoint_http)
+    client = app.test_client
+    request, response_obj = client.get("/http_error?x=5")
+    data = response_obj.json
+    assert data["description"] == "HTTP Error"
+    assert data["status"] == 500
+    assert "HTTP Error" in data["message"]

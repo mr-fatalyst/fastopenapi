@@ -249,10 +249,14 @@ class BaseRouter:
 
     @staticmethod
     def _serialize_response(result: Any) -> Any:
+        from pydantic import BaseModel
+
         if isinstance(result, BaseModel):
             return result.model_dump()
         if isinstance(result, list):
             return [BaseRouter._serialize_response(item) for item in result]
+        if isinstance(result, dict):
+            return {k: BaseRouter._serialize_response(v) for k, v in result.items()}
         return result
 
     @staticmethod

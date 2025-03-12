@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="logo.png" alt="Logo">
+  <img src="https://raw.githubusercontent.com/mr-fatalyst/fastopenapi/master/logo.png" alt="Logo">
 </p>
 
 <p align="center">

@@ -1,3 +1,5 @@
+from typing import Any
+
 from pydantic import BaseModel
 
 
@@ -24,3 +26,11 @@ def use_default_param(x: int = 42):
 
 def raise_value_error():
     raise ValueError("Something went wrong")
+
+
+def echo_both(x: int, item: Item):
+    return {"x": x, "item": item}
+
+
+def echo(x: Any):
+    return x
