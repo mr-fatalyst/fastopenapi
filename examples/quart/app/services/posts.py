@@ -1,6 +1,6 @@
 from http import HTTPStatus
 
-from flask import abort
+from quart import abort
 
 from ..schemas.posts import (
     CreatePostSchema,

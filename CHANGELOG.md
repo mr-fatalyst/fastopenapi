@@ -4,6 +4,14 @@ All notable changes to FastOpenAPI are documented in this file.
 
 FastOpenAPI follows the [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) format.
 
+## [0.3.0] - Unreleased
+
+### Added
+- `QuartRouter` for integration with the `Quart` framework.
+
+### Fixed
+- Fixed retrieving parameters for BaseModel as arguments in GET routes.
+
 ## [0.2.1] - 2025-03-12
 
 ### Fixed

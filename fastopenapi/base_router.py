@@ -306,7 +306,8 @@ class BaseRouter:
             is_required = param.default is inspect.Parameter.empty
             if isinstance(annotation, type) and issubclass(annotation, BaseModel):
                 try:
-                    kwargs[name] = annotation(**body)
+                    params = body if body else all_params
+                    kwargs[name] = annotation(**params)
                 except Exception as e:
                     raise ValueError(f"Validation error for parameter '{name}': {e}")
             else:

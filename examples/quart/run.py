@@ -1,13 +1,13 @@
 from app.api.routes import api_router
-from flask import Flask
+from quart import Quart
 
-from fastopenapi.routers.flask import FlaskRouter
+from fastopenapi.routers.quart import QuartRouter
 
-app = Flask(__name__)
+app = Quart(__name__)
 
-router = FlaskRouter(
+router = QuartRouter(
     app=app,
-    title="MyFlaskApp",
+    title="MyQuartApp",
     version="0.0.1",
     docs_url="/docs/",
     openapi_version="3.0.0",
