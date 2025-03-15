@@ -4,6 +4,11 @@ All notable changes to FastOpenAPI are documented in this file.
 
 FastOpenAPI follows the [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) format.
 
+## [0.4.0] - Unreleased
+
+### Added
+- `ReDoc UI` and default URL (`host:port/redoc`)
+
 ## [0.3.1] - 2025-03-15
 
 ### Fixed

@@ -76,7 +76,14 @@ class StarletteRouter(BaseRouter):
             html = self.render_swagger_ui(self.openapi_url)
             return HTMLResponse(html)
 
+        async def redoc_view(request):
+            html = self.render_redoc_ui(self.openapi_url)
+            return HTMLResponse(html)
+
         self.app.router.routes.append(
             Route(self.openapi_url, openapi_view, methods=["GET"])
         )
         self.app.router.routes.append(Route(self.docs_url, docs_view, methods=["GET"]))
+        self.app.router.routes.append(
+            Route(self.redoc_url, redoc_view, methods=["GET"])
+        )

@@ -60,3 +60,8 @@ class QuartRouter(BaseRouter):
         async def docs_view():
             html = self.render_swagger_ui(self.openapi_url)
             return Response(html, mimetype="text/html")
+
+        @self.app.route(self.redoc_url, methods=["GET"])
+        async def redoc_view():
+            html = self.render_redoc_ui(self.openapi_url)
+            return Response(html, mimetype="text/html")

@@ -17,7 +17,7 @@ from .conftest import (
 def quart_app():
     app = Quart(__name__)
     app.testing = True
-    router = QuartRouter(app=app, docs_url="/docs/")
+    router = QuartRouter(app=app)
     return app, router
 
 
@@ -108,15 +108,20 @@ async def test_quart_docs_endpoints(quart_app):
     schema = await res.get_json()
     assert "openapi" in schema and "paths" in schema and "components" in schema
 
-    res = await client.get("/docs/")
+    res = await client.get("/docs")
     assert res.status_code == 200
     data = await res.data
     html_text = data.decode()
     assert "<title>Swagger UI</title>" in html_text
+    res = await client.get("/redoc")
+    assert res.status_code == 200
+    data = await res.data
+    html_text = data.decode()
+    assert "<title>ReDoc</title>" in html_text
 
 
 def test_quart_add_route_no_app():
-    router = QuartRouter(app=None, docs_url="/docs/", openapi_url="/openapi.json")
+    router = QuartRouter(app=None)
 
     def dummy_endpoint(x: int):
         return {"x": x}

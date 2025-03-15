@@ -38,3 +38,7 @@ def echo_both(x: int, item: Item):
 
 def echo(x: Any):
     return x
+
+
+def async_echo(x: Any):
+    return x

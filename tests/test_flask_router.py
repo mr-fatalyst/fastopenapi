@@ -16,7 +16,7 @@ from .conftest import (
 def flask_app():
     app = Flask(__name__)
     app.testing = True
-    router = FlaskRouter(app=app, docs_url="/docs/")
+    router = FlaskRouter(app=app)
     return app, router
 
 
@@ -99,14 +99,19 @@ def test_flask_docs_endpoints(flask_app):
     schema = res.get_json()
     assert "openapi" in schema and "paths" in schema and "components" in schema
 
-    res = client.get("/docs/")
+    res = client.get("/docs")
     assert res.status_code == 200
     html_text = res.data.decode()
     assert "<title>Swagger UI</title>" in html_text
 
+    res = client.get("/redoc")
+    assert res.status_code == 200
+    html_text = res.data.decode()
+    assert "<title>ReDoc</title>" in html_text
+
 
 def test_flask_add_route_no_app():
-    router = FlaskRouter(app=None, docs_url="/docs/", openapi_url="/openapi.json")
+    router = FlaskRouter(app=None)
 
     def dummy_endpoint(x: int):
         return {"x": x}

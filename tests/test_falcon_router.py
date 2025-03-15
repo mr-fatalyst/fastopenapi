@@ -84,7 +84,7 @@ class DummyRespDirect:
 @pytest.fixture
 def falcon_app():
     app = falcon.asgi.App()
-    router = FalconRouter(app=app, docs_url="/docs/")
+    router = FalconRouter(app=app)
     return app, router
 
 
@@ -156,9 +156,12 @@ def test_falcon_docs_endpoints(falcon_app):
     client = testing.TestClient(app)
     result = client.simulate_get("/openapi.json")
     assert result.status_code == 200 and "openapi" in result.json
-    result = client.simulate_get("/docs/")
+    result = client.simulate_get("/docs")
     assert result.status_code == 200
     assert "<title>Swagger UI</title>" in result.text
+    result = client.simulate_get("/redoc")
+    assert result.status_code == 200
+    assert "<title>ReDoc</title>" in result.text
 
 
 def test_get_falcon_status_unknown():
@@ -212,12 +215,12 @@ def test_create_or_update_resource_reuse():
 
 def test_register_docs_endpoints():
     app = DummyApp()
-    router = FalconRouter(app=app, docs_url="/docs/", openapi_url="/openapi.json")
+    router = FalconRouter(app=app)
     router._openapi_schema = {"openapi": "3.0.0"}
     router.render_swagger_ui = lambda url: "<html>Swagger UI</html>"
     router._register_docs_endpoints()
     assert "/openapi.json" in app.routes
-    assert "/docs/" in app.routes
+    assert "/docs" in app.routes
 
 
 @pytest.mark.asyncio

@@ -1,7 +1,7 @@
 import pytest
 from pydantic import BaseModel
 
-from fastopenapi.base_router import SWAGGER_URL, BaseRouter
+from fastopenapi.base_router import REDOC_URL, SWAGGER_URL, BaseRouter
 
 from .conftest import Item, echo_int, return_item_model
 
@@ -335,6 +335,15 @@ def test_render_swagger_ui_html():
     assert "SwaggerUIBundle" in html
     assert url in html
     assert SWAGGER_URL.strip("/") in html
+
+
+def test_render_redoc_ui_html():
+    url = "/test/openapi.json"
+    html = BaseRouter.render_redoc_ui(url)
+    assert "<html" in html
+    assert "ReDoc" in html
+    assert url in html
+    assert REDOC_URL.strip("/") in html
 
 
 def test_register_docs_endpoints_not_implemented():

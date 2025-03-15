@@ -10,7 +10,8 @@ router = SanicRouter(
     app=app,
     title="MySanicApp",
     version="0.0.1",
-    docs_url="/docs/",
+    docs_url="/docs",
+    redoc_url="/redoc",
     openapi_version="3.0.0",
 )
 router.include_router(api_router, prefix="/api")

@@ -4,7 +4,7 @@ from quart import Quart
 from fastopenapi.routers import QuartRouter
 
 app = Quart(__name__)
-router = QuartRouter(app=app, docs_url="/docs/", openapi_version="3.0.0")
+router = QuartRouter(app=app, docs_url="/docs", openapi_version="3.0.0")
 
 
 class HelloResponse(BaseModel):

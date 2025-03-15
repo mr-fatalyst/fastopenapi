@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from fastopenapi.routers import FalconRouter
 
 app = falcon.asgi.App()
-router = FalconRouter(app=app, docs_url="/docs/", openapi_version="3.0.0")
+router = FalconRouter(app=app, docs_url="/docs", openapi_version="3.0.0")
 
 
 class HelloResponse(BaseModel):

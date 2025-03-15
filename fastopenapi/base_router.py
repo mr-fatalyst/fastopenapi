@@ -8,6 +8,7 @@ from typing import Any
 from pydantic import BaseModel
 
 SWAGGER_URL = "https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.20.0/"
+REDOC_URL = "https://cdn.jsdelivr.net/npm/redoc@next/bundles/redoc.standalone.js"
 
 PYTHON_TYPE_MAPPING = {
     int: "integer",
@@ -26,8 +27,10 @@ class BaseRouter:
     **Parameters**:
     - `app`: The web framework application instance (e.g., Flask, Falcon, etc.).
     If provided, documentation and schema routes are automatically added to the app.
-    - `docs_url`: URL path prefix where the documentation UI will be served
-    (defaults to "/docs/").
+    - `docs_url`: URL path prefix where the Swagger documentation UI will be served
+    (defaults to "/docs").
+    - `redoc_url`: URL path prefix where the Redoc documentation UI will be served
+    (defaults to "/docs").
     - `openapi_url`: URL path where the OpenAPI JSON schema will be served
     (defaults to "/openapi.json").
     - `openapi_version`: OpenAPI version for the schema (defaults to "3.0.0").
@@ -48,7 +51,8 @@ class BaseRouter:
     def __init__(
         self,
         app: Any = None,
-        docs_url: str = "/docs/",
+        docs_url: str = "/docs",
+        redoc_url: str = "/redoc",
         openapi_url: str = "/openapi.json",
         openapi_version: str = "3.0.0",
         title: str = "My App",
@@ -59,6 +63,7 @@ class BaseRouter:
     ):
         self.app = app
         self.docs_url = docs_url
+        self.redoc_url = redoc_url
         self.openapi_url = openapi_url
         self.openapi_version = openapi_version
         self.title = title
@@ -291,6 +296,29 @@ class BaseRouter:
                 dom_id: '#swagger-ui'
               }});
             </script>
+          </body>
+        </html>
+        """
+
+    @staticmethod
+    def render_redoc_ui(openapi_json_url: str) -> str:
+        return f"""
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <title>ReDoc</title>
+            <meta charset="utf-8"/>
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            <style>
+              body {{
+                margin: 0;
+                padding: 0;
+              }}
+            </style>
+          </head>
+          <body>
+            <redoc spec-url='{openapi_json_url}'></redoc>
+            <script src="{REDOC_URL}"></script>
           </body>
         </html>
         """

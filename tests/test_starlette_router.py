@@ -10,6 +10,9 @@ from starlette.testclient import TestClient
 from fastopenapi.routers import StarletteRouter
 
 from .conftest import (
+    async_echo,
+    async_echo_int,
+    echo,
     echo_both,
     echo_int,
     raise_value_error,
@@ -34,33 +37,30 @@ class DummyRequestFailBody:
 @pytest.fixture
 def starlette_app():
     app = Starlette()
-    router = StarletteRouter(app=app, docs_url="/docs/")
+    router = StarletteRouter(app=app)
     return app, router
 
 
 def test_starlette_success_and_validation(starlette_app):
     app, router = starlette_app
-    router.add_route("/echo", "GET", echo_int)
+    router.add_route("/echo", "GET", echo)
+    router.add_route("/async-echo", "GET", async_echo)
+    router.add_route("/echo-int", "GET", echo_int)
+    router.add_route("/async-echo-int", "GET", async_echo_int)
     router.add_route("/path/{x}", "GET", echo_int)
+    router.add_route("/path/{x}", "GET", async_echo_int)
     router.add_route("/default", "GET", use_default_param)
     router.add_route("/item", "POST", return_item_model)
 
-    async def async_echo(name: str):
-        return {"name": name}
-
-    def sync_echo(name: str):
-        return {"name": name}
-
-    router.add_route("/async", "GET", async_echo)
-    router.add_route("/sync", "GET", sync_echo)
-
     client = TestClient(app)
 
-    res = client.get("/echo?x=7")
+    res = client.get("/echo-int?x=7")
     assert res.status_code == 200 and res.json() == {"x": 7}
-    res = client.get("/echo")
+    res = client.get("/async-echo-int?x=7")
+    assert res.status_code == 200 and res.json() == {"x": 7}
+    res = client.get("/echo-int")
     assert res.status_code == 422
-    res = client.get("/echo?x=bad")
+    res = client.get("/echo-int?x=bad")
     assert res.status_code == 422
     res = client.get("/path/11")
     assert res.status_code == 200 and res.json() == {"x": 11}
@@ -76,10 +76,6 @@ def test_starlette_success_and_validation(starlette_app):
         res.status_code == 422
         and "Validation error for parameter 'item'" in res.json()["detail"]
     )
-    res = client.get("/async?name=foo")
-    assert res.status_code == 200 and res.json() == {"name": "foo"}
-    res = client.get("/sync?name=bar")
-    assert res.status_code == 200 and res.json() == {"name": "bar"}
 
 
 def test_starlette_exception_handling(starlette_app):
@@ -105,10 +101,14 @@ def test_starlette_docs_endpoints(starlette_app):
     client = TestClient(app)
     res = client.get("/openapi.json")
     assert res.status_code == 200 and "openapi" in res.json()
-    res = client.get("/docs/")
+    res = client.get("/docs")
     assert res.status_code == 200
     text = res.text
     assert "<title>Swagger UI</title>" in text
+    res = client.get("/redoc")
+    assert res.status_code == 200
+    text = res.text
+    assert "<title>ReDoc</title>" in text
 
 
 def test_starlette_echo_both(starlette_app):
@@ -121,14 +121,14 @@ def test_starlette_echo_both(starlette_app):
 
 
 def test_starlette_add_route_no_app():
-    router = StarletteRouter(app=None, docs_url="/docs/", openapi_url="/openapi.json")
+    router = StarletteRouter(app=None)
     router.add_route("/no_app", "GET", echo_int)
     assert any(route.path == "/no_app" for route in router._routes_starlette)
 
 
 @pytest.mark.asyncio
 async def test_starlette_view_body_exception_direct():
-    router = StarletteRouter(app=None, docs_url="/docs/", openapi_url="/openapi.json")
+    router = StarletteRouter(app=None)
     router.resolve_endpoint_params = lambda endpoint, all_params, body: {
         "x": int(all_params.get("x", 0))
     }

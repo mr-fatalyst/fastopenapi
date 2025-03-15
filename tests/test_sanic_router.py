@@ -10,7 +10,7 @@ from .conftest import echo_int, raise_value_error, return_item_model, use_defaul
 @pytest.fixture
 def sanic_app():
     app = Sanic("test_app")
-    router = SanicRouter(app=app, docs_url="/docs/")
+    router = SanicRouter(app=app)
     try:
         from sanic_testing import TestManager
 
@@ -97,10 +97,14 @@ def test_sanic_docs_endpoints(sanic_app):
     assert response_obj.status == 200
     schema = response_obj.json
     assert "openapi" in schema and "paths" in schema
-    request, response_obj = client.get("/docs/")
+    request, response_obj = client.get("/docs")
     assert response_obj.status == 200
     text = response_obj.text
     assert "<title>Swagger UI</title>" in text
+    request, response_obj = client.get("/redoc")
+    assert response_obj.status == 200
+    text = response_obj.text
+    assert "<title>ReDoc</title>" in text
 
 
 def test_add_route_with_no_app():

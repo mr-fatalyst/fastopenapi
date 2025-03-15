@@ -5,7 +5,7 @@ from starlette.applications import Starlette
 from fastopenapi.routers import StarletteRouter
 
 app = Starlette()
-router = StarletteRouter(app=app, docs_url="/docs/", openapi_version="3.0.0")
+router = StarletteRouter(app=app, docs_url="/docs", openapi_version="3.0.0")
 
 
 class HelloResponse(BaseModel):

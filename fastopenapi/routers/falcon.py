@@ -118,4 +118,11 @@ class FalconRouter(BaseRouter):
                 resp.content_type = "text/html"
                 resp.text = html
 
+        class RedocUIResource:
+            async def on_get(inner_self, req, resp):
+                html = outer.render_redoc_ui(outer.openapi_url)
+                resp.content_type = "text/html"
+                resp.text = html
+
         self.app.add_route(self.docs_url, SwaggerUIResource())
+        self.app.add_route(self.redoc_url, RedocUIResource())
