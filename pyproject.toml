@@ -1,6 +1,6 @@
 [project]
 name = "fastopenapi"
-version = "0.2.1"
+version = "0.3.0"
 description = "FastOpenAPI is a library for generating and integrating OpenAPI schemas using Pydantic."
 authors = [
     {name = "Nikita Ryzhenkov", email = "nikita.ryzhenkoff@gmail.com"}
@@ -44,7 +44,7 @@ quart = ["quart (>=0.20.0, <0.21.0)"]
 [project.urls]
 Homepage = "https://github.com/mr-fatalyst/fastopenapi"
 Repository = "https://github.com/mr-fatalyst/fastopenapi"
-Documentation = "https://github.com/mr-fatalyst/fastopenapi#readme"
+Documentation = "https://github.com/mr-fatalyst/fastopenapi/blob/master/docs/en/index.md"
 Issues = "https://github.com/mr-fatalyst/fastopenapi/issues"
 
 [build-system]

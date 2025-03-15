@@ -4,10 +4,14 @@ All notable changes to FastOpenAPI are documented in this file.
 
 FastOpenAPI follows the [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) format.
 
-## [0.3.0] - Unreleased
+## [0.3.0] - 2025-03-15
 
 ### Added
 - `QuartRouter` for integration with the `Quart` framework.
+- Initial Documentation
+
+### Changed
+- Import of routers. You can use `from fastopenapi.routers import YourRouter`
 
 ### Fixed
 - Fixed retrieving parameters for BaseModel as arguments in GET routes.
@@ -36,6 +40,6 @@ FastOpenAPI follows the [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 ## [0.1.0] - 2025-03-01
 
 ### Added
-- Initial release of the library.
+- Initial release of FastOpenAPI.
 - Implemented core modules: `base`, `falcon`, `flask`, `sanic`, `starlette`.
 - Added basic documentation and tests.

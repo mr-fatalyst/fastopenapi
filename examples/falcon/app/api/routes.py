@@ -1,4 +1,4 @@
-from fastopenapi.routers.falcon import FalconRouter
+from fastopenapi.routers import FalconRouter
 
 from .v1 import v1_router
 

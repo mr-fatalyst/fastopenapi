@@ -2,7 +2,7 @@ from http import HTTPStatus
 
 from quart import abort
 
-from fastopenapi.routers.quart import QuartRouter
+from fastopenapi.routers import QuartRouter
 
 from ...schemas.posts import (
     CreatePostSchema,

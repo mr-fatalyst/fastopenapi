@@ -1,4 +1,4 @@
-from fastopenapi.routers.starlette import StarletteRouter
+from fastopenapi.routers import StarletteRouter
 
 from .authors import router as authors_router
 from .posts import router as posts_router

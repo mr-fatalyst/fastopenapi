@@ -1,7 +1,7 @@
 from app.api.routes import api_router
 from flask import Flask
 
-from fastopenapi.routers.flask import FlaskRouter
+from fastopenapi.routers import FlaskRouter
 
 app = Flask(__name__)
 

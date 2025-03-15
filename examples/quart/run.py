@@ -1,7 +1,7 @@
 from app.api.routes import api_router
 from quart import Quart
 
-from fastopenapi.routers.quart import QuartRouter
+from fastopenapi.routers import QuartRouter
 
 app = Quart(__name__)
 

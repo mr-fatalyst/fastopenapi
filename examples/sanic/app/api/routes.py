@@ -1,4 +1,4 @@
-from fastopenapi.routers.sanic import SanicRouter
+from fastopenapi.routers import SanicRouter
 
 from .v1 import v1_router
 

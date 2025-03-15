@@ -2,7 +2,7 @@ import falcon
 import uvicorn
 from app.api.routes import api_router
 
-from fastopenapi.routers.falcon import FalconRouter
+from fastopenapi.routers import FalconRouter
 
 app = falcon.asgi.App()
 

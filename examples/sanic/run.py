@@ -2,7 +2,7 @@ import uvicorn
 from app.api.routes import api_router
 from sanic import Sanic
 
-from fastopenapi.routers.sanic import SanicRouter
+from fastopenapi.routers import SanicRouter
 
 app = Sanic("MySanicApp")
 

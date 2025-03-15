@@ -2,7 +2,7 @@ import pytest
 from sanic import Sanic
 from sanic.exceptions import HTTPException, InvalidUsage
 
-from fastopenapi.routers.sanic import SanicRouter
+from fastopenapi.routers import SanicRouter
 
 from .conftest import echo_int, raise_value_error, return_item_model, use_default_param
 

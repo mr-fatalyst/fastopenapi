@@ -1,4 +1,4 @@
-from fastopenapi.routers.starlette import StarletteRouter
+from fastopenapi.routers import StarletteRouter
 
 from .v1 import v1_router
 

@@ -1,4 +1,4 @@
-from fastopenapi.routers.flask import FlaskRouter
+from fastopenapi.routers import FlaskRouter
 
 from .v1 import v1_router
 

@@ -2,7 +2,7 @@ from http import HTTPStatus
 
 from flask import abort
 
-from fastopenapi.routers.flask import FlaskRouter
+from fastopenapi.routers import FlaskRouter
 
 from ...schemas.authors import (
     AuthorSchema,

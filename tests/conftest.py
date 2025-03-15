@@ -12,6 +12,10 @@ def echo_int(x: int):
     return {"x": x}
 
 
+async def async_echo_int(x: int):
+    return {"x": x}
+
+
 def echo_int_duplicate(x: int):
     return {"x": x}
 

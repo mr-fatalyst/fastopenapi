@@ -1,4 +1,4 @@
-from fastopenapi.routers.quart import QuartRouter
+from fastopenapi.routers import QuartRouter
 
 from .authors import router as authors_router
 from .posts import router as posts_router

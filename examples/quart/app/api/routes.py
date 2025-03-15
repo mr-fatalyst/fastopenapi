@@ -1,4 +1,4 @@
-from fastopenapi.routers.quart import QuartRouter
+from fastopenapi.routers import QuartRouter
 
 from .v1 import v1_router
 

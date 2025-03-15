@@ -1,4 +1,4 @@
-from fastopenapi.routers.sanic import SanicRouter
+from fastopenapi.routers import SanicRouter
 
 from .authors import router as authors_router
 from .posts import router as posts_router

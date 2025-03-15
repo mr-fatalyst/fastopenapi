@@ -1,6 +1,6 @@
 import falcon
 
-from fastopenapi.routers.falcon import FalconRouter
+from fastopenapi.routers import FalconRouter
 
 from ...schemas.authors import (
     AuthorSchema,

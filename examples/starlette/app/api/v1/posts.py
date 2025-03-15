@@ -1,6 +1,6 @@
 from starlette.exceptions import HTTPException
 
-from fastopenapi.routers.starlette import StarletteRouter
+from fastopenapi.routers import StarletteRouter
 
 from ...schemas.posts import (
     CreatePostSchema,

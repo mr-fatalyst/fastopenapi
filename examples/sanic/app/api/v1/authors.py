@@ -1,6 +1,6 @@
 from sanic import NotFound
 
-from fastopenapi.routers.sanic import SanicRouter
+from fastopenapi.routers import SanicRouter
 
 from ...schemas.authors import (
     AuthorSchema,

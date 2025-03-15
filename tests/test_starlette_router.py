@@ -7,7 +7,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.responses import JSONResponse
 from starlette.testclient import TestClient
 
-from fastopenapi.routers.starlette import StarletteRouter
+from fastopenapi.routers import StarletteRouter
 
 from .conftest import (
     echo_both,

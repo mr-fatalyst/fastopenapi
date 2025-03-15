@@ -2,7 +2,7 @@ import uvicorn
 from app.api.routes import api_router
 from starlette.applications import Starlette
 
-from fastopenapi.routers.starlette import StarletteRouter
+from fastopenapi.routers import StarletteRouter
 
 app = Starlette()
 

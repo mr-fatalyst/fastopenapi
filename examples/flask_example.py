@@ -1,7 +1,7 @@
 from flask import Flask
 from pydantic import BaseModel
 
-from fastopenapi.routers.flask import FlaskRouter
+from fastopenapi.routers import FlaskRouter
 
 app = Flask(__name__)
 router = FlaskRouter(app=app, docs_url="/docs/", openapi_version="3.0.0")
@@ -18,4 +18,4 @@ def hello(name: str):
 
 
 if __name__ == "__main__":
-    app.run(debug=True, port=8000)
+    app.run(port=8000)

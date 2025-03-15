@@ -1,7 +1,7 @@
 from pydantic import BaseModel
 from sanic import Sanic
 
-from fastopenapi.routers.sanic import SanicRouter
+from fastopenapi.routers import SanicRouter
 
 app = Sanic("MySanicApp")
 router = SanicRouter(app=app, docs_url="/docs/", openapi_version="3.0.0")
@@ -18,4 +18,4 @@ async def hello(name: str):
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=8000, debug=True)
+    app.run(host="0.0.0.0", port=8000)
