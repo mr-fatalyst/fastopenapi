@@ -1,8 +1,32 @@
-from fastopenapi.routers.falcon import FalconRouter
-from fastopenapi.routers.flask import FlaskRouter
-from fastopenapi.routers.quart import QuartRouter
-from fastopenapi.routers.sanic import SanicRouter
-from fastopenapi.routers.starlette import StarletteRouter
+class MissingRouter:
+    def __init__(self, *args, **kwargs):
+        raise ImportError("This framework is not installed.")
+
+
+try:
+    from fastopenapi.routers.falcon import FalconRouter
+except ModuleNotFoundError:
+    FalconRouter = MissingRouter
+
+try:
+    from fastopenapi.routers.flask import FlaskRouter
+except ModuleNotFoundError:
+    FlaskRouter = MissingRouter
+
+try:
+    from fastopenapi.routers.quart import QuartRouter
+except ModuleNotFoundError:
+    QuartRouter = MissingRouter
+
+try:
+    from fastopenapi.routers.sanic import SanicRouter
+except ModuleNotFoundError:
+    SanicRouter = MissingRouter
+
+try:
+    from fastopenapi.routers.starlette import StarletteRouter
+except ModuleNotFoundError:
+    StarletteRouter = MissingRouter
 
 __all__ = [
     "FalconRouter",
