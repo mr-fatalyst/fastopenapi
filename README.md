@@ -232,6 +232,12 @@ Examples of integration and detailed usage for each framework are available in t
 
 ---
 
+## 📊 Quick & Dirty Benchmarks
+
+Fast but not perfect benchmarks. Check the [`benchmarks`](https://github.com/mr-fatalyst/fastopenapi/tree/master/benchmarks) directory for details.
+
+---
+
 ## ✅ Development Recommendations
 
 - Use Pydantic models for strict typing and data validation.
