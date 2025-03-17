@@ -40,6 +40,7 @@ flask = ["flask (>=3.1.0,<4.0.0)"]
 sanic = ["sanic (>=24.12.0,<25.0.0)"]
 starlette = ["starlette (>=0.46.0,<0.47.0)"]
 quart = ["quart (>=0.20.0, <0.21.0)"]
+tornado = ["tornado (>=6.4.0, <6.5.0)"]
 
 [project.urls]
 Homepage = "https://github.com/mr-fatalyst/fastopenapi"
@@ -63,6 +64,5 @@ pytest = "^8.3.4"
 anyio = "^4.8.0"
 sanic-testing = "^24.6.0"
 trio = "^0.29.0"
-pytest-anyio = "^0.0.0"
 pytest-asyncio = "^0.25.3"
 coverage = "^7.6.12"

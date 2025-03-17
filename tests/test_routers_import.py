@@ -18,6 +18,7 @@ def test_all_missing(monkeypatch):
         "fastopenapi.routers.quart",
         "fastopenapi.routers.sanic",
         "fastopenapi.routers.starlette",
+        "fastopenapi.routers.tornado",
     }
     orig_import = builtins.__import__
 
@@ -37,6 +38,7 @@ def test_all_missing(monkeypatch):
     assert routers.QuartRouter is MissingRouter
     assert routers.SanicRouter is MissingRouter
     assert routers.StarletteRouter is MissingRouter
+    assert routers.TornadoRouter is MissingRouter
 
     with pytest.raises(ImportError, match="This framework is not installed."):
         routers.FalconRouter()
@@ -51,5 +53,6 @@ def test_all_variable():
         "QuartRouter",
         "SanicRouter",
         "StarletteRouter",
+        "TornadoRouter",
     ]
     assert routers.__all__ == expected

@@ -8,6 +8,7 @@ FastOpenAPI follows the [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ### Added
 - `ReDoc UI` and default URL (`host:port/redoc`)
+- `TornadoRouter` for integration with the `Tornado` framework
 
 ## [0.3.1] - 2025-03-15
 

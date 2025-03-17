@@ -7,6 +7,10 @@
 </p>
 
 <p align="center">
+  This project was inspired by <a href="https://fastapi.tiangolo.com/">FastAPI</a> and aims to provide a similar developer-friendly experience.
+</p>
+
+<p align="center">
   <img src="https://img.shields.io/github/license/mr-fatalyst/fastopenapi">
   <img src="https://github.com/mr-fatalyst/fastopenapi/actions/workflows/master.yml/badge.svg">
   <img src="https://codecov.io/gh/mr-fatalyst/fastopenapi/branch/master/graph/badge.svg?token=USHR1I0CJB">
@@ -36,6 +40,9 @@ pip install fastopenapi[sanic]
 ```
 ```bash
 pip install fastopenapi[starlette]
+```
+```bash
+pip install fastopenapi[tornado]
 ```
 
 ---
@@ -80,7 +87,7 @@ pip install fastopenapi[starlette]
     ```
   </details>
 
-- ![Flask](https://img.shields.io/badge/-Flask-000000?style=flat&logo=flask&logoColor=white)
+- ![Flask](https://img.shields.io/badge/-Flask-EEEEEE?style=flat&logo=flask&logoColor=black)
   <details>
     <summary>Click to expand the Flask Example</summary>
     
@@ -167,7 +174,7 @@ pip install fastopenapi[starlette]
     ```
   </details>
 
-- ![Starlette](https://img.shields.io/badge/-Starlette-4B0082?style=flat&logo=fastapi&logoColor=white)
+- ![Starlette](https://img.shields.io/badge/-Starlette-4B0082?style=flat&logo=python&logoColor=white)
   <details>
     <summary>Click to expand the Starlette Example</summary>
     
@@ -196,6 +203,45 @@ pip install fastopenapi[starlette]
     ```
   </details>
 
+- ![Tornado](https://img.shields.io/badge/-Tornado-2980B9?style=flat&logo=python&logoColor=white)
+  <details>
+    <summary>Click to expand the Tornado Example</summary>
+    
+    ```python
+    import asyncio
+  
+    from pydantic import BaseModel
+    from tornado.web import Application
+  
+    from fastopenapi.routers.tornado import TornadoRouter
+  
+    app = Application()
+  
+    router = TornadoRouter(
+        app=app, docs_url="/docs", openapi_url="/openapi.json", openapi_version="3.0.0"
+    )
+  
+  
+    class HelloResponse(BaseModel):
+        message: str
+  
+  
+    @router.get("/hello", tags=["Hello"], status_code=200, response_model=HelloResponse)
+    def hello(name: str):
+        """Say hello from Tornado"""
+        return HelloResponse(message=f"Hello, {name}! It's Tornado!")
+  
+  
+    async def main():
+        app.listen(8000)
+        await asyncio.Event().wait()
+  
+  
+    if __name__ == "__main__":
+        asyncio.run(main())
+    ```
+  </details>
+
 ### Step 2. Run the server
 
 Launch the application:
@@ -206,8 +252,13 @@ python main.py
 
 Once launched, the documentation will be available at:
 
+Swagger UI:
 ```
-http://127.0.0.1:8000/docs/
+http://127.0.0.1:8000/docs
+```
+ReDoc UI:
+```
+http://127.0.0.1:8000/redoc
 ```
 
 ---
@@ -215,7 +266,7 @@ http://127.0.0.1:8000/docs/
 ## ⚙️ Features
 - **Generate OpenAPI schemas** with Pydantic v2.
 - **Data validation** using Pydantic models.
-- **Supports multiple frameworks:** Falcon, Flask, Quart, Sanic, Starlette.
+- **Supports multiple frameworks:** Falcon, Flask, Quart, Sanic, Starlette, Tornado.
 - **Proxy routing provides FastAPI-style routing**
 
 ---
