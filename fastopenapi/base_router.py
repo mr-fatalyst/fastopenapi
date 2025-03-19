@@ -132,9 +132,8 @@ class BaseRouter:
         info = {
             "title": self.title,
             "version": self.version,
+            "description": self.description,
         }
-        if self.description:
-            info["description"] = self.description
 
         schema = {
             "openapi": self.openapi_version,
@@ -183,9 +182,6 @@ class BaseRouter:
         path_params = {match.group(1) for match in re.finditer(r"{(\w+)}", route_path)}
 
         for param_name, param in sig.parameters.items():
-            if param.annotation is inspect.Parameter.empty:
-                continue
-
             if isinstance(param.annotation, type) and issubclass(
                 param.annotation, BaseModel
             ):
@@ -243,6 +239,8 @@ class BaseRouter:
                 responses[status_code]["content"] = {
                     "application/json": {"schema": resp_model_schema}
                 }
+            else:
+                raise Exception("Incorrect response_model")
         return responses
 
     def _register_docs_endpoints(self):

@@ -50,7 +50,7 @@ class StarletteRouter(BaseRouter):
         except Exception as e:
             if isinstance(e, HTTPException):
                 return await cls.handle_exceptions(request, e)
-            return JSONResponse({"detail": str(e)}, status_code=422)
+            return JSONResponse({"detail": str(e)}, status_code=500)
 
         meta = getattr(endpoint, "__route_meta__", {})
         status_code = meta.get("status_code", 200)

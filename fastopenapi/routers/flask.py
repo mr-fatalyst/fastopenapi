@@ -36,7 +36,7 @@ class FlaskRouter(BaseRouter):
                 except Exception as e:
                     if isinstance(e, HTTPException):
                         return self.handle_http_exception(e)
-                    return jsonify({"detail": str(e)}), 422
+                    return jsonify({"detail": str(e)}), 500
 
                 meta = getattr(endpoint, "__route_meta__", {})
                 status_code = meta.get("status_code", 200)

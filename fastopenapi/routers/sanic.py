@@ -48,7 +48,7 @@ class SanicRouter(BaseRouter):
             except Exception as e:
                 if isinstance(e, HTTPException):
                     return await self.handle_exceptions(request, e)
-                return response.json({"detail": str(e)}, status=422)
+                return response.json({"detail": str(e)}, status=500)
 
             meta = getattr(endpoint, "__route_meta__", {})
             status_code = meta.get("status_code", 200)

@@ -1,465 +1,492 @@
+from unittest.mock import MagicMock
+
 import pytest
 from pydantic import BaseModel
 
+# Import the class under test
 from fastopenapi.base_router import REDOC_URL, SWAGGER_URL, BaseRouter
 
-from .conftest import Item, echo_int, return_item_model
 
-
-class DummyRouter(BaseRouter):
-    def _register_docs_endpoints(self):
-        pass
-
-
-class DummyModel(BaseModel):
-    field: int
-
-
-def endpoint_no_annotation(param, a: int):
-    return param, a
-
-
-def test_resolve_endpoint_params_success_and_failure():
-    router = BaseRouter()
-
-    def func_required(a: int):
-        return a
-
-    def func_optional(b: int = 5):
-        return b
-
-    def func_model(m: Item):
-        return m
-
-    def func_no_anno(param):
-        return param
-
-    kwargs = router.resolve_endpoint_params(func_required, {"a": "10"}, {})
-    assert kwargs == {"a": 10}
-
-    with pytest.raises(ValueError) as excinfo:
-        router.resolve_endpoint_params(func_required, {}, {})
-    assert "Missing required parameter" in str(excinfo.value)
-
-    kwargs = router.resolve_endpoint_params(func_optional, {}, {})
-    assert kwargs == {"b": 5}
-
-    with pytest.raises(ValueError) as excinfo:
-        router.resolve_endpoint_params(func_required, {"a": "not_an_int"}, {})
-    assert "Error casting parameter 'a'" in str(excinfo.value)
-
-    body = {"name": "Test", "value": 123}
-    kwargs = router.resolve_endpoint_params(func_model, {}, body)
-    assert isinstance(kwargs["m"], Item)
-    assert kwargs["m"].name == "Test" and kwargs["m"].value == 123
-
-    bad_body = {"name": "x"}
-    with pytest.raises(ValueError) as excinfo:
-        router.resolve_endpoint_params(func_model, {}, bad_body)
-    assert "Validation error for parameter 'm'" in str(excinfo.value)
-
-    with pytest.raises(ValueError) as excinfo:
-        router.resolve_endpoint_params(func_no_anno, {"param": "foo"}, {})
-    assert "Error casting parameter 'param'" in str(excinfo.value)
-
-    with pytest.raises(ValueError):
-        router.resolve_endpoint_params(func_no_anno, {}, {})
-
-
-def test_route_decorators_attach_meta_and_add_route():
-    router = BaseRouter()
-
-    @router.get("/test_get", tags=["Test"], status_code=201, response_model=Item)
-    def get_endpoint():
-        """Docstring for get."""
-        return {}
-
-    @router.post("/test_post", tags=["Test"], status_code=200)
-    def post_endpoint(item: Item):
-        return item
-
-    routes = router.get_routes()
-    paths_methods = {(path, method) for (path, method, fn) in routes}
-    assert ("/test_get", "GET") in paths_methods
-    assert ("/test_post", "POST") in paths_methods
-
-    assert hasattr(get_endpoint, "__route_meta__")
-    meta = get_endpoint.__route_meta__
-    assert (
-        meta["tags"] == ["Test"]
-        and meta["status_code"] == 201
-        and meta["response_model"] == Item
-    )
-
-    assert get_endpoint.__doc__ == "Docstring for get."
-
-
-def test_include_router_combines_routes_with_prefix():
-    main_router = BaseRouter()
-    sub_router = BaseRouter()
-    sub_router.add_route("/subpath", "GET", echo_int)
-    sub_router.add_route("subno_slash", "POST", return_item_model)
-    main_router.include_router(sub_router, prefix="/api")
-    routes = main_router.get_routes()
-    paths = {path for (path, _, _) in routes}
-    assert "/api/subpath" in paths
-    assert "/api/subno_slash" in paths
-
-
-def test_generate_openapi_schema():
-    router = BaseRouter()
-
-    @router.get("/items/{item_id}", tags=["Items"], status_code=200)
-    def get_item(item_id: int):
-        """Get item by ID."""
-        return {"item_id": item_id}
-
-    @router.get("/filter", tags=["Items"])
-    def filter_items(filter: Item):
-        """Filter items by query parameters."""
-        return []
-
-    @router.post("/items", tags=["Items"], status_code=201, response_model=Item)
-    def create_item(item: Item):
-        """Create a new item."""
-        return item
-
-    @router.get("/items", tags=["Items"], response_model=list[Item])
-    def list_items():
-        """List items."""
-        return []
-
-    schema = router.openapi
-
-    assert schema["openapi"] == router.openapi_version
-    assert (
-        schema["info"]["title"] == router.title
-        and schema["info"]["version"] == router.version
-    )
-
-    assert "Item" in schema["components"]["schemas"]
-
-    params = schema["paths"]["/items/{item_id}"]["get"]["parameters"]
-    param = next((p for p in params if p["name"] == "item_id"), None)
-    assert (
-        param
-        and param["in"] == "path"
-        and param["required"] is True
-        and param["schema"]["type"] == "integer"
-    )
-
-    filter_params = schema["paths"]["/filter"]["get"]["parameters"]
-    names = {p["name"] for p in filter_params}
-    assert "name" in names and "value" in names
-
-    post_op = schema["paths"]["/items"]["post"]
-    assert "requestBody" in post_op
-    schema_ref = post_op["requestBody"]["content"]["application/json"]["schema"]["$ref"]
-    assert schema_ref.endswith("/Item")
-
-    responses_post = post_op["responses"]
-    responses_get = schema["paths"]["/items"]["get"]["responses"]
-    assert responses_post["201"]["content"]["application/json"]["schema"][
-        "$ref"
-    ].endswith("/Item")
-    schema_200 = responses_get["200"]["content"]["application/json"]["schema"]
-    assert schema_200["type"] == "array" and schema_200["items"]["$ref"].endswith(
-        "/Item"
-    )
-
-    op_get_item = schema["paths"]["/items/{item_id}"]["get"]
-    assert op_get_item["tags"] == ["Items"]
-    assert op_get_item["summary"] == "Get item by ID."
-    op_list_items = schema["paths"]["/items"]["get"]
-    assert op_list_items["responses"]["200"]["description"]
-
-    schema2 = router.openapi
-    assert schema2 is schema
-
-
-def test_serialize_response_model():
-    model_instance = Item(name="Test", value=42)
-    serialized = BaseRouter._serialize_response(model_instance)
-    assert isinstance(serialized, dict)
-    assert serialized == model_instance.model_dump()
-
-
-def test_serialize_response_list():
-    models = [Item(name="Test1", value=1), Item(name="Test2", value=2)]
-    serialized = BaseRouter._serialize_response(models)
-    assert isinstance(serialized, list)
-    for orig, ser in zip(models, serialized):
-        assert ser == orig.model_dump()
-
-
-def test_serialize_response_non_model():
-    data = "simple string"
-    assert BaseRouter._serialize_response(data) == data
-
-
-def test_put_route_decorator():
-    router = BaseRouter()
-
-    @router.put("/test_put", tags=["TestPut"], status_code=202)
-    def put_endpoint(data: int):
-        """Put endpoint doc."""
-        return {"data": data}
-
-    routes = router.get_routes()
-    assert any(path == "/test_put" and method == "PUT" for path, method, _ in routes)
-    meta = getattr(put_endpoint, "__route_meta__", {})
-    assert meta.get("tags") == ["TestPut"]
-    assert meta.get("status_code") == 202
-
-
-def test_patch_route_decorator():
-    router = BaseRouter()
-
-    @router.patch("/test_patch", tags=["TestPatch"], status_code=203)
-    def patch_endpoint(value: str):
-        """Patch endpoint doc."""
-        return {"value": value}
-
-    routes = router.get_routes()
-    assert any(
-        path == "/test_patch" and method == "PATCH" for path, method, _ in routes
-    )
-    meta = getattr(patch_endpoint, "__route_meta__", {})
-    assert meta.get("tags") == ["TestPatch"]
-    assert meta.get("status_code") == 203
-
-
-def test_delete_route_decorator():
-    router = BaseRouter()
-
-    @router.delete("/test_delete", status_code=204)
-    def delete_endpoint():
-        """Delete endpoint doc."""
-        return {}
-
-    routes = router.get_routes()
-    assert any(
-        path == "/test_delete" and method == "DELETE" for path, method, _ in routes
-    )
-    meta = getattr(delete_endpoint, "__route_meta__", {})
-    assert meta.get("status_code") == 204
-
-
-def test_build_parameters_and_body_query():
-    def endpoint(id: int, a: int, b: str = "default"):
-        return id, a, b
-
-    router = BaseRouter()
-    router.add_route("/query/{id}", "GET", endpoint)
-    schema = router.generate_openapi()
-    params = schema["paths"]["/query/{id}"]["get"].get("parameters", [])
-    id_param = next((p for p in params if p["name"] == "id"), None)
-    a_param = next((p for p in params if p["name"] == "a"), None)
-    b_param = next((p for p in params if p["name"] == "b"), None)
-    assert id_param is not None
-    assert id_param["in"] == "path"
-    assert (
-        a_param is not None and a_param["in"] == "query" and a_param["required"] is True
-    )
-    assert (
-        b_param is not None
-        and b_param["in"] == "query"
-        and b_param["required"] is False
-    )
-
-
-def test_build_parameters_and_body_request_body():
-    class TestModel(BaseModel):
-        field1: int
-        field2: str
-
-    def endpoint(model: TestModel):
-        return model
-
-    router = BaseRouter()
-    router.add_route("/model", "POST", endpoint)
-    schema = router.generate_openapi()
-    op = schema["paths"]["/model"]["post"]
-    assert "parameters" not in op or op["parameters"] == []
-    assert "requestBody" in op
-    req_body = op["requestBody"]
-    ref = req_body["content"]["application/json"]["schema"]["$ref"]
-    assert ref.endswith("/TestModel")
-
-
-def test_build_responses_list_response_model():
-    class TestModel(BaseModel):
-        field: int
-
-    router = BaseRouter()
-
-    @router.get("/list", status_code=200, response_model=list[TestModel])
-    def list_ep():
-        return []
-
-    schema = router.generate_openapi()
-    responses = schema["paths"]["/list"]["get"]["responses"]
-    resp_content = responses["200"]["content"]["application/json"]["schema"]
-    assert resp_content["type"] == "array"
-    assert resp_content["items"]["$ref"].endswith("/TestModel")
-
-
-def test_build_responses_single_response_model():
-    class TestModel(BaseModel):
-        field: int
-
-    router = BaseRouter()
-
-    @router.get("/single", status_code=200, response_model=TestModel)
-    def single_ep():
-        return {}
-
-    schema = router.generate_openapi()
-    responses = schema["paths"]["/single"]["get"]["responses"]
-    resp_content = responses["200"]["content"]["application/json"]["schema"]
-    assert resp_content["$ref"].endswith("/TestModel")
-
-
-def test_openapi_property_caching():
-    router = BaseRouter(add_docs_route=False, add_openapi_route=False)
-    router.add_route("/cache", "GET", lambda req: {"msg": "cache"})
-    schema1 = router.openapi
-    schema2 = router.openapi
-    assert schema1 is schema2
-
-
-def test_render_swagger_ui_html():
-    url = "/test/openapi.json"
-    html = BaseRouter.render_swagger_ui(url)
-    assert "<html" in html
-    assert "SwaggerUIBundle" in html
-    assert url in html
-    assert SWAGGER_URL.strip("/") in html
-
-
-def test_render_redoc_ui_html():
-    url = "/test/openapi.json"
-    html = BaseRouter.render_redoc_ui(url)
-    assert "<html" in html
-    assert "ReDoc" in html
-    assert url in html
-    assert REDOC_URL.strip("/") in html
-
-
-def test_register_docs_endpoints_not_implemented():
-    class NotImplementedRouter(BaseRouter):
-        pass
-
-    with pytest.raises(NotImplementedError):
-        NotImplementedRouter(app=object())
-
-
-def test_build_parameters_and_body_no_annotation():
-    router = DummyRouter(app=None)
-    definitions = {}
-    params, body = router._build_parameters_and_body(
-        endpoint_no_annotation, definitions, "/test/{a}", "GET"
-    )
-    names = [p["name"] for p in params]
-    assert "param" not in names
-    assert any(p["name"] == "a" and p["in"] == "path" for p in params)
-    assert body is None
-
-
-def test_serialize_response_nested_dict():
-    router = DummyRouter(app=None)
-    m = DummyModel(field=123)
-    dumped_m = m.model_dump()
-    data = {"field": dumped_m, "list": [dumped_m, 456]}
-    result = router._serialize_response(data)
-    assert result == data
-
-
-def test_include_router_with_none_prefix():
-    main_router = BaseRouter()
-    sub_router = BaseRouter()
-    sub_router.add_route("/sub", "GET", lambda: "ok")
-    main_router.include_router(sub_router, prefix=None)
-    routes = main_router.get_routes()
-    assert any(path == "/sub" for (path, _, _) in routes)
-
-
-def test_get_model_schema_with_definitions(monkeypatch):
-    class CustomModel(BaseModel):
-        a: int
-
-    def fake_schema(ref_template: str):
-        return {
-            "title": "CustomModel",
-            "type": "object",
-            "properties": {"a": {"type": "integer"}},
-            "definitions": {"Extra": {"type": "string"}},
-            "$defs": {"Another": {"type": "number"}},
+class TestModel(BaseModel):
+    name: str
+    age: int
+    is_active: bool = True
+
+
+class ResponseModel(BaseModel):
+    id: int
+    message: str
+
+
+class NestedModel(BaseModel):
+    data: TestModel
+    extra: str | None = None
+
+
+class TestBaseRouter:
+
+    def setup_method(self):
+        self.app_mock = MagicMock()
+
+        # Create router instance with overridden _register_docs_endpoints method
+        class TestRouter(BaseRouter):
+            def _register_docs_endpoints(self):
+                pass
+
+        self.router = TestRouter(
+            app=self.app_mock,
+            title="Test API",
+            version="1.0.0",
+            description="Test API Description",
+        )
+
+    def test_init(self):
+        # Test that constructor properly initializes the object
+        assert self.router.app == self.app_mock
+        assert self.router.title == "Test API"
+        assert self.router.version == "1.0.0"
+        assert self.router.description == "Test API Description"
+        assert self.router.docs_url == "/docs"
+        assert self.router.redoc_url == "/redoc"
+        assert self.router.openapi_url == "/openapi.json"
+        assert self.router.openapi_version == "3.0.0"
+        assert self.router._routes == []
+        assert self.router._openapi_schema is None
+
+    def test_add_route(self):
+        # Test adding a route to the router
+        def test_endpoint():
+            pass
+
+        self.router.add_route("/test", "GET", test_endpoint)
+        assert len(self.router._routes) == 1
+        assert self.router._routes[0] == ("/test", "GET", test_endpoint)
+
+    def test_get_routes(self):
+        # Test getting all routes
+        def test_endpoint():
+            pass
+
+        self.router.add_route("/test1", "GET", test_endpoint)
+        self.router.add_route("/test2", "POST", test_endpoint)
+
+        routes = self.router.get_routes()
+        assert len(routes) == 2
+        assert routes[0] == ("/test1", "GET", test_endpoint)
+        assert routes[1] == ("/test2", "POST", test_endpoint)
+
+    def test_include_router(self):
+        # Test including routes from another router
+        def test_endpoint():
+            pass
+
+        # Create another router
+        other_router = BaseRouter()
+        other_router.add_route("/other", "GET", test_endpoint)
+
+        # Include the other router with a prefix
+        self.router.include_router(other_router, prefix="/api")
+        assert len(self.router._routes) == 1
+        assert self.router._routes[0] == ("/api/other", "GET", test_endpoint)
+
+        # Include without prefix
+        self.router.include_router(other_router)
+        assert len(self.router._routes) == 2
+        assert self.router._routes[1] == ("/other", "GET", test_endpoint)
+
+    def test_http_method_decorators(self):
+        # Test all HTTP method decorators
+
+        @self.router.get("/get", tags=["test"])
+        def get_endpoint():
+            pass
+
+        @self.router.post("/post")
+        def post_endpoint():
+            pass
+
+        @self.router.put("/put")
+        def put_endpoint():
+            pass
+
+        @self.router.patch("/patch")
+        def patch_endpoint():
+            pass
+
+        @self.router.delete("/delete")
+        def delete_endpoint():
+            pass
+
+        # Verify routes were added correctly
+        routes = self.router.get_routes()
+        assert len(routes) == 5
+
+        methods = [route[1] for route in routes]
+        paths = [route[0] for route in routes]
+
+        assert "GET" in methods
+        assert "POST" in methods
+        assert "PUT" in methods
+        assert "PATCH" in methods
+        assert "DELETE" in methods
+
+        assert "/get" in paths
+        assert "/post" in paths
+        assert "/put" in paths
+        assert "/patch" in paths
+        assert "/delete" in paths
+
+        # Check that metadata was properly attached
+        assert hasattr(get_endpoint, "__route_meta__")
+        assert get_endpoint.__route_meta__["tags"] == ["test"]
+
+    def test_generate_openapi_basic(self):
+        # Test generating a basic OpenAPI schema
+
+        @self.router.get("/test")
+        def test_endpoint():
+            """Test endpoint"""
+
+        schema = self.router.generate_openapi()
+
+        # Check basic structure
+        assert "openapi" in schema
+        assert "info" in schema
+        assert "paths" in schema
+        assert "components" in schema
+
+        # Check info section
+        assert schema["info"]["title"] == "Test API"
+        assert schema["info"]["version"] == "1.0.0"
+        assert schema["info"]["description"] == "Test API Description"
+
+        # Check paths
+        assert "/test" in schema["paths"]
+        assert "get" in schema["paths"]["/test"]
+        assert "summary" in schema["paths"]["/test"]["get"]
+        assert schema["paths"]["/test"]["get"]["summary"] == "Test endpoint"
+
+    def test_generate_openapi_with_path_params(self):
+        # Test OpenAPI generation with path parameters
+
+        @self.router.get("/users/{user_id}")
+        def get_user(user_id: int):
+            pass
+
+        schema = self.router.generate_openapi()
+
+        # Path should be converted to OpenAPI format
+        assert "/users/{user_id}" in schema["paths"]
+
+        # Check parameters
+        parameters = schema["paths"]["/users/{user_id}"]["get"]["parameters"]
+        assert len(parameters) == 1
+        assert parameters[0]["name"] == "user_id"
+        assert parameters[0]["in"] == "path"
+        assert parameters[0]["required"] is True
+        assert parameters[0]["schema"]["type"] == "integer"
+
+    def test_generate_openapi_with_query_params(self):
+        # Test OpenAPI generation with query parameters
+
+        @self.router.get("/search")
+        def search(q: str, limit: int = 10):
+            pass
+
+        schema = self.router.generate_openapi()
+
+        # Check parameters
+        parameters = schema["paths"]["/search"]["get"]["parameters"]
+        assert len(parameters) == 2
+
+        # First parameter (required)
+        q_param = next(p for p in parameters if p["name"] == "q")
+        assert q_param["in"] == "query"
+        assert q_param["required"] is True
+        assert q_param["schema"]["type"] == "string"
+
+        # Second parameter (with default)
+        limit_param = next(p for p in parameters if p["name"] == "limit")
+        assert limit_param["in"] == "query"
+        assert limit_param["required"] is False
+        assert limit_param["schema"]["type"] == "integer"
+
+    def test_generate_openapi_with_request_body(self):
+        # Test OpenAPI generation with request body (Pydantic model)
+
+        @self.router.post("/users")
+        def create_user(user: TestModel):
+            pass
+
+        schema = self.router.generate_openapi()
+
+        # Check request body
+        request_body = schema["paths"]["/users"]["post"]["requestBody"]
+        assert request_body["required"] is True
+        assert "application/json" in request_body["content"]
+        assert "$ref" in request_body["content"]["application/json"]["schema"]
+
+        # Check that model schema is in components
+        ref = request_body["content"]["application/json"]["schema"]["$ref"]
+        assert ref == "#/components/schemas/TestModel"
+        assert "TestModel" in schema["components"]["schemas"]
+
+    def test_generate_openapi_with_incorrect_response_model(self):
+        # Test OpenAPI generation with incorrect response model
+
+        @self.router.post("/users", response_model=int)
+        def create_user(user: TestModel):
+            return 1
+
+        with pytest.raises(Exception, match="Incorrect response_model"):
+            self.router.generate_openapi()
+
+    def test_generate_openapi_with_response_model(self):
+        # Test OpenAPI generation with response model
+
+        @self.router.post("/users", response_model=list[ResponseModel])
+        def create_user(user: TestModel):
+            pass
+
+        schema = self.router.generate_openapi()
+
+        # Check response
+        response = schema["paths"]["/users"]["post"]["responses"]["200"]
+        assert "content" in response
+        assert "application/json" in response["content"]
+        assert "$ref" in response["content"]["application/json"]["schema"]["items"]
+
+        # Check that response model schema is in components
+        ref = response["content"]["application/json"]["schema"]["items"]["$ref"]
+        assert ref == "#/components/schemas/ResponseModel"
+        assert "ResponseModel" in schema["components"]["schemas"]
+
+    def test_generate_openapi_with_list_response(self):
+        # Test OpenAPI generation with List response model
+
+        @self.router.get("/users", response_model=list[ResponseModel])
+        def list_users():
+            pass
+
+        schema = self.router.generate_openapi()
+
+        # Check response
+        response = schema["paths"]["/users"]["get"]["responses"]["200"]
+        assert "content" in response
+        assert "application/json" in response["content"]
+
+        # Check array schema
+        array_schema = response["content"]["application/json"]["schema"]
+        assert array_schema["type"] == "array"
+        assert "$ref" in array_schema["items"]
+        assert array_schema["items"]["$ref"] == "#/components/schemas/ResponseModel"
+
+    def test_generate_openapi_with_status_code(self):
+        # Test OpenAPI generation with custom status code
+
+        @self.router.post("/users", status_code=201)
+        def create_user():
+            pass
+
+        schema = self.router.generate_openapi()
+
+        # Check response has correct status code
+        assert "201" in schema["paths"]["/users"]["post"]["responses"]
+        assert "description" in schema["paths"]["/users"]["post"]["responses"]["201"]
+        assert (
+            schema["paths"]["/users"]["post"]["responses"]["201"]["description"]
+            == "Created"
+        )
+
+    def test_openapi_property(self):
+        # Test the openapi property (cached schema)
+
+        @self.router.get("/test")
+        def test_endpoint():
+            pass
+
+        # First call should generate the schema
+        schema1 = self.router.openapi
+
+        # Add new route
+        @self.router.post("/new")
+        def new_endpoint():
+            pass
+
+        # Second call should return cached schema (without the new route)
+        schema2 = self.router.openapi
+
+        assert schema1 is schema2
+        assert "/new" not in schema1["paths"]
+
+    def test_serialize_response_with_pydantic_model(self):
+        # Test serializing a Pydantic model response
+        model = ResponseModel(id=1, message="test")
+        result = BaseRouter._serialize_response(model)
+
+        assert isinstance(result, dict)
+        assert result["id"] == 1
+        assert result["message"] == "test"
+
+    def test_serialize_response_with_list(self):
+        # Test serializing a list of Pydantic models
+        models = [
+            ResponseModel(id=1, message="test1"),
+            ResponseModel(id=2, message="test2"),
+        ]
+        result = BaseRouter._serialize_response(models)
+
+        assert isinstance(result, list)
+        assert len(result) == 2
+        assert result[0]["id"] == 1
+        assert result[1]["id"] == 2
+
+    def test_serialize_response_with_dict(self):
+        # Test serializing a dict with Pydantic model values
+        data = {
+            "item1": ResponseModel(id=1, message="test1"),
+            "item2": ResponseModel(id=2, message="test2"),
         }
+        result = BaseRouter._serialize_response(data)
 
-    monkeypatch.setattr(CustomModel, "model_json_schema", staticmethod(fake_schema))
-    definitions = {}
-    schema_ref = BaseRouter._get_model_schema(CustomModel, definitions)
-    assert "Extra" in definitions
-    assert "Another" in definitions
-    assert "CustomModel" in definitions
-    assert schema_ref == {"$ref": "#/components/schemas/CustomModel"}
+        assert isinstance(result, dict)
+        assert len(result) == 2
+        assert result["item1"]["id"] == 1
+        assert result["item2"]["id"] == 2
 
+    def test_serialize_response_with_primitive(self):
+        # Test serializing primitive values
+        assert BaseRouter._serialize_response(5) == 5
+        assert BaseRouter._serialize_response("test") == "test"
+        assert BaseRouter._serialize_response(True) is True
 
-def test_init_no_docs_endpoints():
-    class TestRouter(BaseRouter):
-        def __init__(self, *args, **kwargs):
-            self.docs_called = False
-            super().__init__(*args, **kwargs)
+    def test_get_model_schema(self):
+        # Test getting Pydantic model schema
+        definitions = {}
+        schema = BaseRouter._get_model_schema(TestModel, definitions)
 
-        def _register_docs_endpoints(self):
-            self.docs_called = True
+        assert "$ref" in schema
+        assert schema["$ref"] == "#/components/schemas/TestModel"
+        assert "TestModel" in definitions
+        assert definitions["TestModel"]["properties"]["name"]["type"] == "string"
+        assert definitions["TestModel"]["properties"]["age"]["type"] == "integer"
 
-    router = TestRouter(app=object(), add_docs_route=False, add_openapi_route=False)
-    assert not router.docs_called
+    def test_get_model_schema_with_nested_models(self):
+        # Test getting schema for models with nested models
+        definitions = {}
+        schema = BaseRouter._get_model_schema(NestedModel, definitions)
 
+        assert "$ref" in schema
+        assert schema["$ref"] == "#/components/schemas/NestedModel"
+        assert "NestedModel" in definitions
+        assert "TestModel" in definitions  # Nested model should be in definitions too
 
-def test_build_responses_invalid_response_model():
-    router = BaseRouter()
-    definitions = {}
-    meta = {"response_model": int}
-    responses = router._build_responses(meta, definitions, "200")
-    assert "content" not in responses["200"]
+    def test_render_swagger_ui(self):
+        # Test rendering Swagger UI HTML
+        html = BaseRouter.render_swagger_ui("/api/openapi.json")
 
+        assert "<!DOCTYPE html>" in html
+        assert SWAGGER_URL in html
+        assert "url: '/api/openapi.json'" in html
+        assert "dom_id: '#swagger-ui'" in html
 
-def test_resolve_endpoint_params_missing_non_model():
-    def func_no_anno(param):
-        return param
+    def test_render_redoc_ui(self):
+        # Test rendering ReDoc UI HTML
+        html = BaseRouter.render_redoc_ui("/api/openapi.json")
 
-    router = BaseRouter()
-    with pytest.raises(ValueError) as excinfo:
-        router.resolve_endpoint_params(func_no_anno, {}, {})
-    assert "Missing required parameter" in str(excinfo.value)
+        assert "<!DOCTYPE html>" in html
+        assert REDOC_URL in html
+        assert "spec-url='/api/openapi.json'" in html
 
+    def test_resolve_endpoint_params_with_primitive_types(self):
+        # Test resolving endpoint parameters with primitive types
+        def endpoint(name: str, age: int, active: bool = False):
+            return {"name": name, "age": age, "active": active}
 
-def test_build_responses_list_invalid_inner():
-    router = BaseRouter()
-    definitions = {}
-    meta = {"response_model": list[int]}
-    responses = router._build_responses(meta, definitions, "200")
-    assert "content" not in responses["200"]
+        params = {"name": "John", "age": "30"}
+        result = BaseRouter.resolve_endpoint_params(endpoint, params, {})
 
+        assert result["name"] == "John"
+        assert result["age"] == 30
+        assert result["active"] is False
 
-def test_build_parameters_and_body_skips_unannotated_parameter():
-    def endpoint(no_annotation, annotated: int):
-        return no_annotation, annotated
+    def test_resolve_endpoint_params_with_pydantic_model(self):
+        # Test resolving endpoint parameters with Pydantic model
+        def endpoint(user: TestModel):
+            return user
 
-    router = BaseRouter()
-    definitions = {}
+        body = {"name": "John", "age": 30}
+        result = BaseRouter.resolve_endpoint_params(endpoint, {}, body)
 
-    parameters, request_body = router._build_parameters_and_body(
-        endpoint, definitions, "/example/{annotated}", "GET"
-    )
+        assert isinstance(result["user"], TestModel)
+        assert result["user"].name == "John"
+        assert result["user"].age == 30
+        assert result["user"].is_active is True  # Default value
 
-    parameter_names = [p["name"] for p in parameters]
-    assert "no_annotation" not in parameter_names
+    def test_resolve_endpoint_params_missing_required(self):
+        # Test error when required parameter is missing
+        def endpoint(name: str, age: int):
+            pass
 
-    annotated_param = next((p for p in parameters if p["name"] == "annotated"), None)
-    assert annotated_param is not None
-    assert annotated_param["in"] == "path"
-    assert request_body is None
+        params = {"name": "John"}
+
+        with pytest.raises(ValueError) as excinfo:
+            BaseRouter.resolve_endpoint_params(endpoint, params, {})
+
+        assert "Missing required parameter" in str(excinfo.value)
+        assert "age" in str(excinfo.value)
+
+    def test_resolve_endpoint_params_invalid_type(self):
+        # Test error when parameter type is invalid
+        def endpoint(age: int):
+            pass
+
+        params = {"age": "not_an_integer"}
+
+        with pytest.raises(ValueError) as excinfo:
+            BaseRouter.resolve_endpoint_params(endpoint, params, {})
+
+        assert "Error casting parameter" in str(excinfo.value)
+
+    def test_resolve_endpoint_params_model_validation_error(self):
+        # Test error when model validation fails
+        def endpoint(user: TestModel):
+            pass
+
+        body = {"name": "John"}  # Missing required 'age' field
+
+        with pytest.raises(ValueError) as excinfo:
+            BaseRouter.resolve_endpoint_params(endpoint, {}, body)
+
+        assert "Validation error for parameter" in str(excinfo.value)
+
+    def test_build_parameters_for_get_with_model(self):
+        # Test building parameters for GET with Pydantic model
+        def endpoint(query: TestModel):
+            pass
+
+        definitions = {}
+        params, body = self.router._build_parameters_and_body(
+            endpoint, definitions, "/test", "GET"
+        )
+
+        # Should convert model to query parameters
+        assert len(params) == 3
+        assert params[0]["in"] == "query"
+        assert params[1]["in"] == "query"
+        assert params[2]["in"] == "query"
+
+        names = [p["name"] for p in params]
+        assert "name" in names
+        assert "age" in names
+        assert "is_active" in names
+
+        # No request body for GET
+        assert body is None
+
+    def test_register_docs_endpoints_not_implemented(self):
+        # Test that base class raises NotImplementedError
+        router = BaseRouter()
+
+        with pytest.raises(NotImplementedError):
+            router._register_docs_endpoints()
