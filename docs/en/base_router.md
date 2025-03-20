@@ -11,7 +11,8 @@ BaseRouter(app, docs_url="/docs", openapi_version="3.0.3", title="API", descript
 ### Arguments
 
 - `app`: Framework-specific app instance. It's required only for main router.
-- `docs_url`: URL for documentation.
+- `docs_url`: URL for Swagger UI.
+- `redoc_url`: URL for ReDoc.
 - `openapi_version`: OpenAPI spec version.
 - `title`: API title.
 - `description`: API description.

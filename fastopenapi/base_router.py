@@ -38,10 +38,6 @@ class BaseRouter:
     - `version`: Version of the API (defaults to "0.1.0").
     - `description`: Description of the API
     (included in OpenAPI info, default "API documentation").
-    - `add_docs_route`: Whether to automatically add the documentation UI route
-    (defaults to True).
-    - `add_openapi_route`: Whether to automatically add the OpenAPI JSON schema route
-    (defaults to True).
 
     The BaseRouter allows defining routes using decorator methods (get, post, etc.).
     It can include sub-routers and generate an OpenAPI specification from
@@ -58,8 +54,6 @@ class BaseRouter:
         title: str = "My App",
         version: str = "0.1.0",
         description: str = "API documentation",
-        add_docs_route: bool = True,
-        add_openapi_route: bool = True,
     ):
         self.app = app
         self.docs_url = docs_url
@@ -69,13 +63,16 @@ class BaseRouter:
         self.title = title
         self.version = version
         self.description = description
-        self.add_docs_route = add_docs_route
-        self.add_openapi_route = add_openapi_route
         self._routes: list[tuple[str, str, Callable]] = []
         self._openapi_schema = None
         if self.app is not None:
-            if self.add_docs_route or self.add_openapi_route:
+            if self.docs_url and self.redoc_url and self.openapi_url:
                 self._register_docs_endpoints()
+            else:
+                print(
+                    "Warning! You didn't set docs_url, redoc_url or openapi_url.\n"
+                    "API Documentation will be skipped."
+                )
 
     def add_route(self, path: str, method: str, endpoint: Callable):
         self._routes.append((path, method.upper(), endpoint))

@@ -4,11 +4,20 @@ All notable changes to FastOpenAPI are documented in this file.
 
 FastOpenAPI follows the [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) format.
 
-## [0.4.0] - Unreleased
+## [0.4.0] - 2025-03-20
 
 ### Added
 - `ReDoc UI` and default URL (`host:port/redoc`)
 - `TornadoRouter` for integration with the `Tornado` framework
+
+### Changed
+- Revised and updated all tests.
+
+### Fixed
+- Status code for error response fixed: 422 -> 500
+
+### Removed
+- Removed the `add_docs_route` and `add_openapi_route` from `BaseRouter`.
 
 ## [0.3.1] - 2025-03-15
 

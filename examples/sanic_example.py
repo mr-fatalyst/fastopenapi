@@ -4,7 +4,7 @@ from sanic import Sanic
 from fastopenapi.routers import SanicRouter
 
 app = Sanic("MySanicApp")
-router = SanicRouter(app=app, docs_url="/docs", openapi_version="3.0.0")
+router = SanicRouter(app=app)
 
 
 class HelloResponse(BaseModel):

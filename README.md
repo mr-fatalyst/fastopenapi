@@ -69,7 +69,7 @@ pip install fastopenapi[tornado]
     from fastopenapi.routers import FalconRouter
     
     app = falcon.asgi.App()
-    router = FalconRouter(app=app, docs_url="/docs/", openapi_version="3.0.0")
+    router = FalconRouter(app=app)
     
     
     class HelloResponse(BaseModel):
@@ -98,7 +98,7 @@ pip install fastopenapi[tornado]
     from fastopenapi.routers import FlaskRouter
     
     app = Flask(__name__)
-    router = FlaskRouter(app=app, docs_url="/docs/", openapi_version="3.0.0")
+    router = FlaskRouter(app=app)
     
     
     class HelloResponse(BaseModel):
@@ -127,7 +127,7 @@ pip install fastopenapi[tornado]
     from fastopenapi.routers import QuartRouter
     
     app = Quart(__name__)
-    router = QuartRouter(app=app, docs_url="/docs/", openapi_version="3.0.0")
+    router = QuartRouter(app=app)
     
     
     class HelloResponse(BaseModel):
@@ -156,7 +156,7 @@ pip install fastopenapi[tornado]
     from fastopenapi.routers import SanicRouter
     
     app = Sanic("MySanicApp")
-    router = SanicRouter(app=app, docs_url="/docs/", openapi_version="3.0.0")
+    router = SanicRouter(app=app)
     
     
     class HelloResponse(BaseModel):
@@ -186,7 +186,7 @@ pip install fastopenapi[tornado]
     from fastopenapi.routers import StarletteRouter
     
     app = Starlette()
-    router = StarletteRouter(app=app, docs_url="/docs/", openapi_version="3.0.0")
+    router = StarletteRouter(app=app)
     
     
     class HelloResponse(BaseModel):
@@ -217,9 +217,7 @@ pip install fastopenapi[tornado]
   
     app = Application()
   
-    router = TornadoRouter(
-        app=app, docs_url="/docs", openapi_url="/openapi.json", openapi_version="3.0.0"
-    )
+    router = TornadoRouter(app=app)
   
   
     class HelloResponse(BaseModel):

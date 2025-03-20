@@ -1,4 +1,4 @@
-from starlette.exceptions import HTTPException
+from tornado.web import HTTPError
 
 from ..schemas.posts import (
     CreatePostSchema,
@@ -14,7 +14,7 @@ class PostService:
         post_counter = len(posts)
         author = authors.get(body.author_id)
         if not author:
-            raise HTTPException(status_code=404, detail="Author not found")
+            raise HTTPError(status_code=404, log_message="Author not Found")
 
         data = {
             "id": post_counter,

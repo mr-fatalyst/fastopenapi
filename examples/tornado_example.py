@@ -7,9 +7,7 @@ from fastopenapi.routers.tornado import TornadoRouter
 
 app = Application()
 
-router = TornadoRouter(
-    app=app, docs_url="/docs", openapi_url="/openapi.json", openapi_version="3.0.0"
-)
+router = TornadoRouter(app=app)
 
 
 class HelloResponse(BaseModel):

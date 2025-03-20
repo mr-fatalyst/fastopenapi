@@ -100,8 +100,6 @@ class TornadoRouter(BaseRouter):
         self._endpoint_map: dict[str, dict[str, Callable]] = {}
         self._registered_paths: set[str] = set()
         super().__init__(app, **kwargs)
-        if self.app is not None and (self.add_docs_route or self.add_openapi_route):
-            self._register_docs_endpoints()
 
     def add_route(self, path: str, method: str, endpoint: Callable):
         super().add_route(path, method, endpoint)

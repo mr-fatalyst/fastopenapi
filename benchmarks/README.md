@@ -8,11 +8,12 @@ Each implementation runs in a separate instance, and the benchmark measures resp
 
 ### 📈 Rough results
 - You can check rough results here:
-  - [Falcon](FALCON.md)
-  - [Flask](FLASK.md)
-  - [Quart](QUART.md)
-  - [Sanic](SANIC.md)
-  - [Starlette](STARLETTE.md)
+  - [Falcon](falcon/FALCON.md)
+  - [Flask](flask/FLASK.md)
+  - [Quart](quart/QUART.md)
+  - [Sanic](sanic/SANIC.md)
+  - [Starlette](starlette/STARLETTE.md)
+  - [Tornado](tornado/TORNADO.md)
 
 ### 📖 How It Works
 - The script runs **10,000 requests per endpoint**. You can set your own value.

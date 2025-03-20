@@ -28,8 +28,8 @@ class TestTornadoRouter:
             title="Test API",
             version="1.0.0",
             description="Dummy description",
-            add_docs_route=False,
-            add_openapi_route=False,
+            docs_url=None,
+            redoc_url=None,
         )
 
     @pytest.fixture
@@ -41,8 +41,6 @@ class TestTornadoRouter:
             title="Test API",
             version="1.0.0",
             description="Dummy description",
-            add_docs_route=True,
-            add_openapi_route=True,
         )
 
     @pytest.fixture
@@ -53,8 +51,6 @@ class TestTornadoRouter:
             title="Test API",
             version="1.0.0",
             description="Dummy description",
-            add_docs_route=True,
-            add_openapi_route=True,
         )
 
     def test_init_with_app_and_docs(self, router_with_docs):
