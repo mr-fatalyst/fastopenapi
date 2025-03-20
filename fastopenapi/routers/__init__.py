@@ -28,10 +28,16 @@ try:
 except ModuleNotFoundError:
     StarletteRouter = MissingRouter
 
+try:
+    from fastopenapi.routers.tornado import TornadoRouter
+except ModuleNotFoundError:
+    TornadoRouter = MissingRouter
+
 __all__ = [
     "FalconRouter",
     "FlaskRouter",
     "QuartRouter",
     "SanicRouter",
     "StarletteRouter",
+    "TornadoRouter",
 ]

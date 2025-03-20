@@ -6,7 +6,8 @@ Each framework router inherits BaseRouter:
 - **FlaskRouter(app, docs_url, ...)**  
 - **QuartRouter(app, docs_url, ...)**  
 - **SanicRouter(app, docs_url, ...)**  
-- **StarletteRouter(app, docs_url, ...)**  
+- **StarletteRouter(app, docs_url, ...)**
+- **TornadoRouter(app, docs_url, ...)**  
 
 Each router registers endpoints with framework-specific mechanisms.
 

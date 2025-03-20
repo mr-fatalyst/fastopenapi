@@ -8,6 +8,7 @@ from typing import Any
 from pydantic import BaseModel
 
 SWAGGER_URL = "https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.20.0/"
+REDOC_URL = "https://cdn.jsdelivr.net/npm/redoc@next/bundles/redoc.standalone.js"
 
 PYTHON_TYPE_MAPPING = {
     int: "integer",
@@ -26,8 +27,10 @@ class BaseRouter:
     **Parameters**:
     - `app`: The web framework application instance (e.g., Flask, Falcon, etc.).
     If provided, documentation and schema routes are automatically added to the app.
-    - `docs_url`: URL path prefix where the documentation UI will be served
-    (defaults to "/docs/").
+    - `docs_url`: URL path prefix where the Swagger documentation UI will be served
+    (defaults to "/docs").
+    - `redoc_url`: URL path prefix where the Redoc documentation UI will be served
+    (defaults to "/docs").
     - `openapi_url`: URL path where the OpenAPI JSON schema will be served
     (defaults to "/openapi.json").
     - `openapi_version`: OpenAPI version for the schema (defaults to "3.0.0").
@@ -35,10 +38,6 @@ class BaseRouter:
     - `version`: Version of the API (defaults to "0.1.0").
     - `description`: Description of the API
     (included in OpenAPI info, default "API documentation").
-    - `add_docs_route`: Whether to automatically add the documentation UI route
-    (defaults to True).
-    - `add_openapi_route`: Whether to automatically add the OpenAPI JSON schema route
-    (defaults to True).
 
     The BaseRouter allows defining routes using decorator methods (get, post, etc.).
     It can include sub-routers and generate an OpenAPI specification from
@@ -48,29 +47,32 @@ class BaseRouter:
     def __init__(
         self,
         app: Any = None,
-        docs_url: str = "/docs/",
+        docs_url: str = "/docs",
+        redoc_url: str = "/redoc",
         openapi_url: str = "/openapi.json",
         openapi_version: str = "3.0.0",
         title: str = "My App",
         version: str = "0.1.0",
         description: str = "API documentation",
-        add_docs_route: bool = True,
-        add_openapi_route: bool = True,
     ):
         self.app = app
         self.docs_url = docs_url
+        self.redoc_url = redoc_url
         self.openapi_url = openapi_url
         self.openapi_version = openapi_version
         self.title = title
         self.version = version
         self.description = description
-        self.add_docs_route = add_docs_route
-        self.add_openapi_route = add_openapi_route
         self._routes: list[tuple[str, str, Callable]] = []
         self._openapi_schema = None
         if self.app is not None:
-            if self.add_docs_route or self.add_openapi_route:
+            if self.docs_url and self.redoc_url and self.openapi_url:
                 self._register_docs_endpoints()
+            else:
+                print(
+                    "Warning! You didn't set docs_url, redoc_url or openapi_url.\n"
+                    "API Documentation will be skipped."
+                )
 
     def add_route(self, path: str, method: str, endpoint: Callable):
         self._routes.append((path, method.upper(), endpoint))
@@ -127,9 +129,8 @@ class BaseRouter:
         info = {
             "title": self.title,
             "version": self.version,
+            "description": self.description,
         }
-        if self.description:
-            info["description"] = self.description
 
         schema = {
             "openapi": self.openapi_version,
@@ -178,9 +179,6 @@ class BaseRouter:
         path_params = {match.group(1) for match in re.finditer(r"{(\w+)}", route_path)}
 
         for param_name, param in sig.parameters.items():
-            if param.annotation is inspect.Parameter.empty:
-                continue
-
             if isinstance(param.annotation, type) and issubclass(
                 param.annotation, BaseModel
             ):
@@ -238,6 +236,8 @@ class BaseRouter:
                 responses[status_code]["content"] = {
                     "application/json": {"schema": resp_model_schema}
                 }
+            else:
+                raise Exception("Incorrect response_model")
         return responses
 
     def _register_docs_endpoints(self):
@@ -291,6 +291,29 @@ class BaseRouter:
                 dom_id: '#swagger-ui'
               }});
             </script>
+          </body>
+        </html>
+        """
+
+    @staticmethod
+    def render_redoc_ui(openapi_json_url: str) -> str:
+        return f"""
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <title>ReDoc</title>
+            <meta charset="utf-8"/>
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            <style>
+              body {{
+                margin: 0;
+                padding: 0;
+              }}
+            </style>
+          </head>
+          <body>
+            <redoc spec-url='{openapi_json_url}'></redoc>
+            <script src="{REDOC_URL}"></script>
           </body>
         </html>
         """

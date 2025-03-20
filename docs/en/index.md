@@ -7,6 +7,10 @@
 </p>
 
 <p align="center">
+  This project was inspired by <a href="https://fastapi.tiangolo.com/">FastAPI</a> and aims to provide a similar developer-friendly experience.
+</p>
+
+<p align="center">
   <img src="https://img.shields.io/github/license/mr-fatalyst/fastopenapi">
   <img src="https://github.com/mr-fatalyst/fastopenapi/actions/workflows/master.yml/badge.svg">
   <img src="https://codecov.io/gh/mr-fatalyst/fastopenapi/branch/master/graph/badge.svg?token=USHR1I0CJB">

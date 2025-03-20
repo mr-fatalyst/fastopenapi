@@ -36,7 +36,7 @@ class FlaskRouter(BaseRouter):
                 except Exception as e:
                     if isinstance(e, HTTPException):
                         return self.handle_http_exception(e)
-                    return jsonify({"detail": str(e)}), 422
+                    return jsonify({"detail": str(e)}), 500
 
                 meta = getattr(endpoint, "__route_meta__", {})
                 status_code = meta.get("status_code", 200)
@@ -55,4 +55,9 @@ class FlaskRouter(BaseRouter):
         @self.app.route(self.docs_url, methods=["GET"])
         def docs_view():
             html = self.render_swagger_ui(self.openapi_url)
+            return Response(html, mimetype="text/html")
+
+        @self.app.route(self.redoc_url, methods=["GET"])
+        def redoc_view():
+            html = self.render_redoc_ui(self.openapi_url)
             return Response(html, mimetype="text/html")

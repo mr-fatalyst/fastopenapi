@@ -1,4 +1,3 @@
-import inspect
 import re
 from collections.abc import Callable
 
@@ -33,14 +32,11 @@ class QuartRouter(BaseRouter):
                 except Exception as e:
                     return jsonify({"detail": str(e)}), 422
                 try:
-                    if inspect.iscoroutinefunction(endpoint):
-                        result = await endpoint(**kwargs)
-                    else:
-                        result = endpoint(**kwargs)
+                    result = await endpoint(**kwargs)
                 except Exception as e:
                     if isinstance(e, HTTPException):
                         return await self.handle_http_exception(e)
-                    return jsonify({"detail": str(e)}), 422
+                    return jsonify({"detail": str(e)}), 500
 
                 meta = getattr(endpoint, "__route_meta__", {})
                 status_code = meta.get("status_code", 200)
@@ -59,4 +55,9 @@ class QuartRouter(BaseRouter):
         @self.app.route(self.docs_url, methods=["GET"])
         async def docs_view():
             html = self.render_swagger_ui(self.openapi_url)
+            return Response(html, mimetype="text/html")
+
+        @self.app.route(self.redoc_url, methods=["GET"])
+        async def redoc_view():
+            html = self.render_redoc_ui(self.openapi_url)
             return Response(html, mimetype="text/html")

@@ -76,7 +76,7 @@ class FalconRouter(BaseRouter):
         try:
             kwargs = self.resolve_endpoint_params(endpoint, all_params, body)
         except Exception as e:
-            return self._handle_error(resp, str(e))
+            return self._handle_request_error(resp, str(e))
         try:
             if inspect.iscoroutinefunction(endpoint):
                 result = await endpoint(**kwargs)
@@ -85,7 +85,7 @@ class FalconRouter(BaseRouter):
         except Exception as e:
             if isinstance(e, falcon.HTTPError):
                 raise
-            return self._handle_error(resp, str(e))
+            return self._handle_response_error(resp, str(e))
         resp.status = get_falcon_status(status_code)
         result = self._serialize_response(result)
         resp.media = result
@@ -99,8 +99,12 @@ class FalconRouter(BaseRouter):
             pass
         return {}
 
-    def _handle_error(self, resp, error_message: str):
+    def _handle_request_error(self, resp, error_message: str):
         resp.status = falcon.HTTP_422
+        resp.media = {"detail": error_message}
+
+    def _handle_response_error(self, resp, error_message: str):
+        resp.status = falcon.HTTP_500
         resp.media = {"detail": error_message}
 
     def _register_docs_endpoints(self):
@@ -118,4 +122,11 @@ class FalconRouter(BaseRouter):
                 resp.content_type = "text/html"
                 resp.text = html
 
+        class RedocUIResource:
+            async def on_get(inner_self, req, resp):
+                html = outer.render_redoc_ui(outer.openapi_url)
+                resp.content_type = "text/html"
+                resp.text = html
+
         self.app.add_route(self.docs_url, SwaggerUIResource())
+        self.app.add_route(self.redoc_url, RedocUIResource())

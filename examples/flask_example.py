@@ -4,7 +4,7 @@ from pydantic import BaseModel
 from fastopenapi.routers import FlaskRouter
 
 app = Flask(__name__)
-router = FlaskRouter(app=app, docs_url="/docs/", openapi_version="3.0.0")
+router = FlaskRouter(app=app)
 
 
 class HelloResponse(BaseModel):

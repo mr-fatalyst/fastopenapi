@@ -48,7 +48,7 @@ class SanicRouter(BaseRouter):
             except Exception as e:
                 if isinstance(e, HTTPException):
                     return await self.handle_exceptions(request, e)
-                return response.json({"detail": str(e)}, status=422)
+                return response.json({"detail": str(e)}, status=500)
 
             meta = getattr(endpoint, "__route_meta__", {})
             status_code = meta.get("status_code", 200)
@@ -68,4 +68,9 @@ class SanicRouter(BaseRouter):
         @self.app.route(self.docs_url, methods=["GET"])
         async def docs_view(request):
             html = self.render_swagger_ui(self.openapi_url)
+            return response.html(html)
+
+        @self.app.route(self.redoc_url, methods=["GET"])
+        async def redoc_view(request):
+            html = self.render_redoc_ui(self.openapi_url)
             return response.html(html)
