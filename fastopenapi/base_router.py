@@ -3,7 +3,7 @@ import re
 import typing
 from collections.abc import Callable
 from http import HTTPStatus
-from typing import Any
+from typing import Any, Dict, ClassVar
 
 from pydantic import BaseModel
 
@@ -43,6 +43,8 @@ class BaseRouter:
     It can include sub-routers and generate an OpenAPI specification from
     the declared routes.
     """
+    # Class-level cache for model schemas to avoid redundant processing
+    _model_schema_cache: ClassVar[Dict[str, dict]] = {}
 
     def __init__(
         self,
@@ -140,7 +142,7 @@ class BaseRouter:
         }
         definitions = {}
         for path, method, endpoint in self._routes:
-            openapi_path = re.sub(r"<(?:w:)?(\w+)>", r"{\1}", path)
+            openapi_path = re.sub(r"<(?:\w:)?(\w+)>", r"{\1}", path)
             operation = self._build_operation(
                 endpoint, definitions, openapi_path, method
             )
@@ -259,18 +261,35 @@ class BaseRouter:
             return {k: BaseRouter._serialize_response(v) for k, v in result.items()}
         return result
 
-    @staticmethod
-    def _get_model_schema(model: type[BaseModel], definitions: dict) -> dict:
-        model_schema = model.model_json_schema(
-            ref_template="#/components/schemas/{model}"
-        )
-        for key in ("definitions", "$defs"):
-            if key in model_schema:
-                definitions.update(model_schema[key])
-                del model_schema[key]
-        if model.__name__ not in definitions:
-            definitions[model.__name__] = model_schema
-        return {"$ref": f"#/components/schemas/{model.__name__}"}
+    @classmethod
+    def _get_model_schema(cls, model: type[BaseModel], definitions: dict) -> dict:
+        """
+        Get the OpenAPI schema for a Pydantic model, with caching for better performance.
+        """
+        model_name = model.__name__
+        cache_key = f"{model.__module__}.{model_name}"
+        
+        # Check if the schema is already in the class-level cache
+        if cache_key not in cls._model_schema_cache:
+            # Generate the schema if it's not in the cache
+            model_schema = model.model_json_schema(
+                ref_template="#/components/schemas/{model}"
+            )
+            
+            # Process and store nested definitions
+            for key in ("definitions", "$defs"):
+                if key in model_schema:
+                    definitions.update(model_schema[key])
+                    del model_schema[key]
+                    
+            # Add schema to the cache
+            cls._model_schema_cache[cache_key] = model_schema
+            
+        # Make sure the schema is in the definitions dictionary
+        if model_name not in definitions:
+            definitions[model_name] = cls._model_schema_cache[cache_key]
+            
+        return {"$ref": f"#/components/schemas/{model_name}"}
 
     @staticmethod
     def render_swagger_ui(openapi_json_url: str) -> str:
