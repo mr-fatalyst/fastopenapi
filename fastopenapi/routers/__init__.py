@@ -4,6 +4,11 @@ class MissingRouter:
 
 
 try:
+    from fastopenapi.routers.aiohttp import AioHttpRouter
+except ModuleNotFoundError:
+    FalconRouter = AioHttpRouter
+
+try:
     from fastopenapi.routers.falcon import FalconRouter
 except ModuleNotFoundError:
     FalconRouter = MissingRouter

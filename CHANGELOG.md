@@ -7,6 +7,7 @@ FastOpenAPI follows the [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 ## [0.5.0] - Unreleased
 
 ### Added
+- `AioHttpRouter` for integration with the `AioHttp` framework
 - Class-level cache for model schemas
 
 ## [0.4.0] - 2025-03-20

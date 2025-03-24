@@ -1,6 +1,6 @@
-import falcon
+from aiohttp import web
 
-from fastopenapi.routers import FalconRouter
+from fastopenapi.routers import AioHttpRouter
 
 from ...schemas.posts import (
     CreatePostSchema,
@@ -11,7 +11,7 @@ from ...schemas.posts import (
 from ...services.posts import PostService
 
 post_service = PostService()
-router = FalconRouter()
+router = AioHttpRouter()
 
 
 @router.post("/posts", tags=["Posts"], status_code=201, response_model=PostSchema)
@@ -23,7 +23,7 @@ async def create_post(body: CreatePostSchema) -> PostSchema:
 async def get_post(post_id: int) -> PostSchema:
     post = await post_service.get_post(post_id)
     if not post:
-        raise falcon.HTTPNotFound()
+        raise web.HTTPNotFound(reason="Author not found")
     return post
 
 
@@ -36,12 +36,12 @@ async def get_posts(body: FilterPostSchema) -> list[PostSchema]:
 async def delete_post(post_id: int) -> None:
     post = await post_service.delete_post(post_id)
     if not post:
-        raise falcon.HTTPNotFound()
+        raise web.HTTPNotFound(reason="Post not found")
 
 
 @router.patch("/posts/{post_id}", tags=["Posts"], response_model=PostSchema)
 async def update_post(post_id: int, body: UpdatePostSchema) -> PostSchema:
     post = await post_service.update_post(post_id, body)
     if not post:
-        raise falcon.HTTPNotFound()
+        raise web.HTTPNotFound(reason="Post not found")
     return post
