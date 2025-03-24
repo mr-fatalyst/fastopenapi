@@ -4,6 +4,11 @@ All notable changes to FastOpenAPI are documented in this file.
 
 FastOpenAPI follows the [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) format.
 
+## [0.5.0] - Unreleased
+
+### Added
+- Class-level cache for model schemas
+
 ## [0.4.0] - 2025-03-20
 
 ### Added

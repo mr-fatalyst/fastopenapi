@@ -36,6 +36,9 @@ pip install fastopenapi[falcon]
 pip install fastopenapi[flask]
 ```
 ```bash
+pip install fastopenapi[quart]
+```
+```bash
 pip install fastopenapi[sanic]
 ```
 ```bash
