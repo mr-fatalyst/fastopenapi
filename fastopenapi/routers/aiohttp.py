@@ -81,11 +81,3 @@ class AioHttpRouter(BaseRouter):
             self.app.router.add_route("GET", self.openapi_url, openapi_view)
             self.app.router.add_route("GET", self.docs_url, docs_view)
             self.app.router.add_route("GET", self.redoc_url, redoc_view)
-
-    def configure_routes(self, app: web.Application):
-        """
-        Configure routes for an application when not passed during initialization
-        """
-        for path, method, view in self._routes_aiohttp:
-            app.router.add_route(method.upper(), path, view)
-        self._register_docs_endpoints()

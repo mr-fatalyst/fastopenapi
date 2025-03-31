@@ -371,4 +371,6 @@ class BaseRouter:
     def openapi(self) -> dict:
         if self._openapi_schema is None:
             self._openapi_schema = self.generate_openapi()
+            # We don't need model cache anymore
+            self.__class__._model_schema_cache.clear()
         return self._openapi_schema

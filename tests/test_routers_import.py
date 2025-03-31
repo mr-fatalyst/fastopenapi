@@ -14,6 +14,7 @@ class TestFastOpenAPIRouters:
 
     def test_all_missing(self, monkeypatch):
         modules_to_fail = {
+            "fastopenapi.routers.aiohttp",
             "fastopenapi.routers.falcon",
             "fastopenapi.routers.flask",
             "fastopenapi.routers.quart",
@@ -33,6 +34,7 @@ class TestFastOpenAPIRouters:
         importlib.reload(routers)
         from fastopenapi.routers import MissingRouter
 
+        assert routers.AioHttpRouter is MissingRouter
         assert routers.FalconRouter is MissingRouter
         assert routers.FlaskRouter is MissingRouter
         assert routers.QuartRouter is MissingRouter
@@ -47,6 +49,7 @@ class TestFastOpenAPIRouters:
         import fastopenapi.routers as routers
 
         expected = [
+            "AioHttpRouter",
             "FalconRouter",
             "FlaskRouter",
             "QuartRouter",

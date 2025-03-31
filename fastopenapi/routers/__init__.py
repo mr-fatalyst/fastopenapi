@@ -6,7 +6,7 @@ class MissingRouter:
 try:
     from fastopenapi.routers.aiohttp import AioHttpRouter
 except ModuleNotFoundError:
-    FalconRouter = AioHttpRouter
+    AioHttpRouter = MissingRouter
 
 try:
     from fastopenapi.routers.falcon import FalconRouter
@@ -39,6 +39,7 @@ except ModuleNotFoundError:
     TornadoRouter = MissingRouter
 
 __all__ = [
+    "AioHttpRouter",
     "FalconRouter",
     "FlaskRouter",
     "QuartRouter",

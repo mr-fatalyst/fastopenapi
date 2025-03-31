@@ -30,6 +30,9 @@ pip install fastopenapi
 
 #### Install FastOpenAPI with a specific framework:
 ```bash
+pip install fastopenapi[aiohttp]
+```
+```bash
 pip install fastopenapi[falcon]
 ```
 ```bash
@@ -59,6 +62,35 @@ pip install fastopenapi[tornado]
 - For some examples uvicorn is required (`pip install uvicorn`)
 
 #### Examples:
+
+- ![AIOHTTP](https://img.shields.io/badge/AioHttp-0078D7?style=flat&logo=python&logoColor=white)
+  <details>
+    <summary>Click to expand the Falcon Example</summary>
+    
+    ```python
+    from aiohttp import web
+    from pydantic import BaseModel
+    
+    from fastopenapi.routers import AioHttpRouter
+    
+    app = web.Application()
+    router = AioHttpRouter(app=app)
+    
+    
+    class HelloResponse(BaseModel):
+        message: str
+    
+    
+    @router.get("/hello", tags=["Hello"], status_code=200, response_model=HelloResponse)
+    async def hello(name: str):
+        """Say hello from aiohttp"""
+        return HelloResponse(message=f"Hello, {name}! It's aiohttp!")
+    
+    
+    if __name__ == "__main__":
+        web.run_app(app, host="127.0.0.1", port=8000)
+    ```
+  </details>
 
 - ![Falcon](https://img.shields.io/badge/Falcon-45b8d8?style=flat&logo=falcon&logoColor=white)
   <details>
@@ -267,7 +299,7 @@ http://127.0.0.1:8000/redoc
 ## ⚙️ Features
 - **Generate OpenAPI schemas** with Pydantic v2.
 - **Data validation** using Pydantic models.
-- **Supports multiple frameworks:** Falcon, Flask, Quart, Sanic, Starlette, Tornado.
+- **Supports multiple frameworks:** AIOHTTP, Falcon, Flask, Quart, Sanic, Starlette, Tornado.
 - **Proxy routing provides FastAPI-style routing**
 
 ---
