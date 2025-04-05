@@ -24,7 +24,7 @@ class BaseRouter:
     This class is extended by specific framework routers to integrate with
     web frameworks.
 
-    **Parameters**:
+    Parameters:
     - `app`: The web framework application instance (e.g., Flask, Falcon, etc.).
     If provided, documentation and schema routes are automatically added to the app.
     - `docs_url`: URL path prefix where the Swagger documentation UI will be served
