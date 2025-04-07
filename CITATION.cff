@@ -1,0 +1,26 @@
+cff-version: 1.2.0
+title: FastOpenAPI
+message: 'If you use this software, please cite it as below.'
+type: software
+authors:
+  - given-names: Nikita
+    family-names: Ryzhenkov
+    email: nikita.ryzhenkoff@gmail.com
+identifiers:
+repository-code: 'https://github.com/mr-fatalyst/fastopenapi'
+url: 'https://fastopenapi.fatalyst.dev/'
+abstract: >-
+  FastOpenAPI is a library for generating and integrating OpenAPI schemas
+  using Pydantic v2 and various frameworks
+  (AioHttp, Falcon, Flask, Quart, Sanic, Starlette, Tornado).
+keywords:
+  - aiohttp
+  - falcon
+  - flask
+  - quart
+  - sanic
+  - starlette
+  - tornado
+  - pydantic
+  - openapi
+license: MIT
