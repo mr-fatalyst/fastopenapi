@@ -139,7 +139,7 @@ class TestTornadoIntegration(AsyncHTTPTestCase):
         )
         self.assertEqual(response.code, 500)
         result = self.parse_json(response)
-        self.assertIn("TEST ERROR", result.get("detail", ""))
+        self.assertIn("TEST ERROR", result["error"]["message"])
 
     @gen_test
     async def test_get_item(self):
@@ -155,9 +155,9 @@ class TestTornadoIntegration(AsyncHTTPTestCase):
         response = await self.http_client.fetch(
             self.get_url("/items/abc"), raise_error=False
         )
-        self.assertEqual(response.code, 422)
+        self.assertEqual(response.code, 400)
         result = self.parse_json(response)
-        self.assertIn("Error casting parameter", result.get("detail", ""))
+        self.assertIn("Error parsing parameter", result["error"]["message"])
 
     @gen_test
     async def test_get_nonexistent_item(self):
@@ -197,7 +197,7 @@ class TestTornadoIntegration(AsyncHTTPTestCase):
         )
         self.assertEqual(response.code, 422)
         result = self.parse_json(response)
-        self.assertIn("Validation error", result.get("detail", ""))
+        self.assertIn("Validation error", result["error"]["message"])
 
     @gen_test
     async def test_create_item_invalid_json(self):
@@ -212,7 +212,7 @@ class TestTornadoIntegration(AsyncHTTPTestCase):
         )
         self.assertEqual(response.code, 422)
         result = self.parse_json(response)
-        detail = result.get("detail", "")
+        detail = result["error"]["message"]
         self.assertTrue("Validation error" in detail or "JSON" in detail)
 
     @gen_test

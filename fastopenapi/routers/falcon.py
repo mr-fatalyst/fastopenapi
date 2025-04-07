@@ -44,6 +44,11 @@ def get_falcon_status(http_status):
     return HTTP_STATUS_TO_FALCON.get(http_status, falcon.HTTP_500)
 
 
+def get_falcon_status_by_code(code):
+    http_status = HTTPStatus(code)
+    return get_falcon_status(http_status)
+
+
 class FalconRouter(BaseRouter):
     def __init__(self, app: falcon.asgi.App = None, **kwargs):
         self._resources = {}
@@ -76,16 +81,20 @@ class FalconRouter(BaseRouter):
         try:
             kwargs = self.resolve_endpoint_params(endpoint, all_params, body)
         except Exception as e:
-            return self._handle_request_error(resp, str(e))
+            error_response = self.handle_exception(e)
+            resp.status = get_falcon_status_by_code(getattr(e, "status_code", 422))
+            resp.media = error_response
+            return
         try:
             if inspect.iscoroutinefunction(endpoint):
                 result = await endpoint(**kwargs)
             else:
                 result = endpoint(**kwargs)
         except Exception as e:
-            if isinstance(e, falcon.HTTPError):
-                raise
-            return self._handle_response_error(resp, str(e))
+            error_response = self.handle_exception(e)
+            resp.status = get_falcon_status_by_code(getattr(e, "status_code", 500))
+            resp.media = error_response
+            return
         resp.status = get_falcon_status(status_code)
         result = self._serialize_response(result)
         resp.media = result
@@ -99,13 +108,13 @@ class FalconRouter(BaseRouter):
             pass
         return {}
 
-    def _handle_request_error(self, resp, error_message: str):
-        resp.status = falcon.HTTP_422
-        resp.media = {"detail": error_message}
-
-    def _handle_response_error(self, resp, error_message: str):
-        resp.status = falcon.HTTP_500
-        resp.media = {"detail": error_message}
+    # def _handle_request_error(self, resp, error_message: str):
+    #     resp.status = falcon.HTTP_422
+    #     resp.media = {"detail": error_message}
+    #
+    # def _handle_response_error(self, resp, error_message: str):
+    #     resp.status = falcon.HTTP_500
+    #     resp.media = {"detail": error_message}
 
     def _register_docs_endpoints(self):
         outer = self

@@ -8,6 +8,7 @@ Each implementation runs in a separate instance, and the benchmark measures resp
 
 ### 📈 Rough results
 - You can check rough results here:
+  - [AioHttp](aiohttp/AIOHTTP.md)
   - [Falcon](falcon/FALCON.md)
   - [Flask](flask/FLASK.md)
   - [Quart](quart/QUART.md)

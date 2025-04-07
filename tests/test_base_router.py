@@ -5,6 +5,7 @@ from pydantic import BaseModel
 
 # Import the class under test
 from fastopenapi.base_router import REDOC_URL, SWAGGER_URL, BaseRouter
+from fastopenapi.error_handler import BadRequestError, ValidationError
 
 
 class TestModel(BaseModel):
@@ -40,6 +41,8 @@ class TestBaseRouter:
             description="Test API Description",
         )
 
+        self.router_no_app = TestRouter()
+
     def test_init(self):
         # Test that constructor properly initializes the object
         assert self.router.app == self.app_mock
@@ -52,6 +55,18 @@ class TestBaseRouter:
         assert self.router.openapi_version == "3.0.0"
         assert self.router._routes == []
         assert self.router._openapi_schema is None
+
+    def test_init_without_app(self):
+        assert self.router_no_app.app is None
+        assert self.router_no_app.title == "My App"
+        assert self.router_no_app.version == "0.1.0"
+        assert self.router_no_app.description == "API documentation"
+        assert self.router_no_app.docs_url == "/docs"
+        assert self.router_no_app.redoc_url == "/redoc"
+        assert self.router_no_app.openapi_url == "/openapi.json"
+        assert self.router_no_app.openapi_version == "3.0.0"
+        assert self.router_no_app._routes == []
+        assert self.router_no_app._openapi_schema is None
 
     def test_add_route(self):
         # Test adding a route to the router
@@ -430,7 +445,7 @@ class TestBaseRouter:
 
         params = {"name": "John"}
 
-        with pytest.raises(ValueError) as excinfo:
+        with pytest.raises(BadRequestError) as excinfo:
             BaseRouter.resolve_endpoint_params(endpoint, params, {})
 
         assert "Missing required parameter" in str(excinfo.value)
@@ -443,10 +458,10 @@ class TestBaseRouter:
 
         params = {"age": "not_an_integer"}
 
-        with pytest.raises(ValueError) as excinfo:
+        with pytest.raises(BadRequestError) as excinfo:
             BaseRouter.resolve_endpoint_params(endpoint, params, {})
 
-        assert "Error casting parameter" in str(excinfo.value)
+        assert "Error parsing parameter" in str(excinfo.value)
 
     def test_resolve_endpoint_params_model_validation_error(self):
         # Test error when model validation fails
@@ -455,7 +470,7 @@ class TestBaseRouter:
 
         body = {"name": "John"}  # Missing required 'age' field
 
-        with pytest.raises(ValueError) as excinfo:
+        with pytest.raises(ValidationError) as excinfo:
             BaseRouter.resolve_endpoint_params(endpoint, {}, body)
 
         assert "Validation error for parameter" in str(excinfo.value)

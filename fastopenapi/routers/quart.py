@@ -2,21 +2,11 @@ import re
 from collections.abc import Callable
 
 from quart import Response, jsonify, request
-from werkzeug.exceptions import HTTPException
 
 from fastopenapi.base_router import BaseRouter
 
 
 class QuartRouter(BaseRouter):
-    @staticmethod
-    async def handle_http_exception(e):
-        response = e.get_response()
-        response.data = await jsonify(
-            {"code": e.code, "name": e.name, "description": e.description}
-        ).get_data(as_text=True)
-        response.content_type = "application/json"
-        return response
-
     def add_route(self, path: str, method: str, endpoint: Callable):
         super().add_route(path, method, endpoint)
         if self.app is not None:
@@ -30,13 +20,13 @@ class QuartRouter(BaseRouter):
                 try:
                     kwargs = self.resolve_endpoint_params(endpoint, all_params, body)
                 except Exception as e:
-                    return jsonify({"detail": str(e)}), 422
+                    error_response = self.handle_exception(e)
+                    return jsonify(error_response), getattr(e, "status_code", 422)
                 try:
                     result = await endpoint(**kwargs)
                 except Exception as e:
-                    if isinstance(e, HTTPException):
-                        return await self.handle_http_exception(e)
-                    return jsonify({"detail": str(e)}), 500
+                    error_response = self.handle_exception(e)
+                    return jsonify(error_response), getattr(e, "code", 500)
 
                 meta = getattr(endpoint, "__route_meta__", {})
                 status_code = meta.get("status_code", 200)

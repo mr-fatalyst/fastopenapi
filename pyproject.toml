@@ -1,6 +1,6 @@
 [project]
 name = "fastopenapi"
-version = "0.4.0"
+version = "0.5.0"
 description = "FastOpenAPI is a library for generating and integrating OpenAPI schemas using Pydantic."
 authors = [
     {name = "Nikita Ryzhenkov", email = "nikita.ryzhenkoff@gmail.com"}
@@ -35,6 +35,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+aiohttp = ["aiohttp (>=3.11.0,<3.12.0)"]
 falcon = ["falcon (>=4.0.2,<5.0.0)"]
 flask = ["flask (>=3.1.0,<4.0.0)"]
 sanic = ["sanic (>=24.12.0,<25.0.0)"]

@@ -4,7 +4,6 @@ import json
 from collections.abc import Callable
 
 from starlette.applications import Starlette
-from starlette.exceptions import HTTPException
 from starlette.responses import HTMLResponse, JSONResponse
 from starlette.routing import Route
 
@@ -15,17 +14,6 @@ class StarletteRouter(BaseRouter):
     def __init__(self, app: Starlette = None, **kwargs):
         self._routes_starlette = []
         super().__init__(app, **kwargs)
-
-    @staticmethod
-    async def handle_exceptions(request, exc):
-        return JSONResponse(
-            {
-                "description": exc.detail or "An error occurred",
-                "status": exc.status_code,
-                "message": str(exc),
-            },
-            status_code=exc.status_code,
-        )
 
     @classmethod
     async def _starlette_view(cls, request, router, endpoint):
@@ -41,16 +29,20 @@ class StarletteRouter(BaseRouter):
         try:
             kwargs = router.resolve_endpoint_params(endpoint, all_params, body)
         except Exception as e:
-            return JSONResponse({"detail": str(e)}, status_code=422)
+            error_response = cls.handle_exception(e)
+            return JSONResponse(
+                error_response, status_code=getattr(e, "status_code", 422)
+            )
         try:
             if inspect.iscoroutinefunction(endpoint):
                 result = await endpoint(**kwargs)
             else:
                 result = endpoint(**kwargs)
         except Exception as e:
-            if isinstance(e, HTTPException):
-                return await cls.handle_exceptions(request, e)
-            return JSONResponse({"detail": str(e)}, status_code=500)
+            error_response = cls.handle_exception(e)
+            return JSONResponse(
+                error_response, status_code=getattr(e, "status_code", 500)
+            )
 
         meta = getattr(endpoint, "__route_meta__", {})
         status_code = meta.get("status_code", 200)
