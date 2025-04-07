@@ -1,0 +1,54 @@
+name: Bug Report
+description: File a bug report to help us improve FastOpenAPI
+title: "[Bug] "
+labels: [bug]
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug! Please fill out this form so we can better understand the issue.
+
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: Describe your environment (Python version, OS, FastOpenAPI version, framework used, etc.)
+      placeholder: Python 3.11, FastOpenAPI 0.5.0, Ubuntu 22.04, Flask 2.2
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Bug Description
+      description: What happened and what did you expect to happen?
+      placeholder: A clear and concise description of the problem.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to Reproduce
+      description: How can we reproduce the bug?
+      placeholder: |
+        1. Go to '...'
+        2. Use this code snippet '...'
+        3. See the error message '...'
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or Tracebacks
+      description: Paste relevant logs or tracebacks here.
+      render: shell
+
+  - type: input
+    id: contact
+    attributes:
+      label: Contact
+      description: Optional – how can we reach you if we need more info?

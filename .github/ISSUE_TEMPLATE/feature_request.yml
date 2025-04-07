@@ -1,0 +1,39 @@
+name: Feature Request
+description: Suggest a new feature or enhancement
+title: "[Feature] "
+labels: [enhancement]
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Have an idea for FastOpenAPI? We'd love to hear it!
+
+  - type: input
+    id: motivation
+    attributes:
+      label: What problem are you trying to solve?
+      description: Explain the use case or need behind this feature.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed Solution
+      description: Describe the feature you’d like to see and how it might work.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Considered
+      description: Have you tried any alternative approaches or workarounds?
+
+  - type: input
+    id: contact
+    attributes:
+      label: Contact
+      description: Optional – how can we reach you if we need more info?
