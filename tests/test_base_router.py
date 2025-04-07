@@ -5,6 +5,7 @@ from pydantic import BaseModel
 
 # Import the class under test
 from fastopenapi.base_router import REDOC_URL, SWAGGER_URL, BaseRouter
+from fastopenapi.error_handler import BadRequestError, ValidationError
 
 
 class TestModel(BaseModel):
@@ -444,7 +445,7 @@ class TestBaseRouter:
 
         params = {"name": "John"}
 
-        with pytest.raises(ValueError) as excinfo:
+        with pytest.raises(BadRequestError) as excinfo:
             BaseRouter.resolve_endpoint_params(endpoint, params, {})
 
         assert "Missing required parameter" in str(excinfo.value)
@@ -457,10 +458,10 @@ class TestBaseRouter:
 
         params = {"age": "not_an_integer"}
 
-        with pytest.raises(ValueError) as excinfo:
+        with pytest.raises(BadRequestError) as excinfo:
             BaseRouter.resolve_endpoint_params(endpoint, params, {})
 
-        assert "Error casting parameter" in str(excinfo.value)
+        assert "Error parsing parameter" in str(excinfo.value)
 
     def test_resolve_endpoint_params_model_validation_error(self):
         # Test error when model validation fails
@@ -469,7 +470,7 @@ class TestBaseRouter:
 
         body = {"name": "John"}  # Missing required 'age' field
 
-        with pytest.raises(ValueError) as excinfo:
+        with pytest.raises(ValidationError) as excinfo:
             BaseRouter.resolve_endpoint_params(endpoint, {}, body)
 
         assert "Validation error for parameter" in str(excinfo.value)

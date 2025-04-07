@@ -7,6 +7,12 @@ from typing import Any, ClassVar
 
 from pydantic import BaseModel
 
+from fastopenapi.error_handler import (
+    BadRequestError,
+    ValidationError,
+    format_exception_response,
+)
+
 SWAGGER_URL = "https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.20.0/"
 REDOC_URL = "https://cdn.jsdelivr.net/npm/redoc@next/bundles/redoc.standalone.js"
 
@@ -25,18 +31,18 @@ class BaseRouter:
     web frameworks.
 
     Parameters:
-    - `app`: The web framework application instance (e.g., Flask, Falcon, etc.).
+    - app: The web framework application instance (e.g., Flask, Falcon, etc.).
     If provided, documentation and schema routes are automatically added to the app.
-    - `docs_url`: URL path prefix where the Swagger documentation UI will be served
+    - docs_url: URL path prefix where the Swagger documentation UI will be served
     (defaults to "/docs").
-    - `redoc_url`: URL path prefix where the Redoc documentation UI will be served
+    - redoc_url: URL path prefix where the Redoc documentation UI will be served
     (defaults to "/docs").
-    - `openapi_url`: URL path where the OpenAPI JSON schema will be served
+    - openapi_url: URL path where the OpenAPI JSON schema will be served
     (defaults to "/openapi.json").
-    - `openapi_version`: OpenAPI version for the schema (defaults to "3.0.0").
-    - `title`: Title of the API documentation (defaults to "My App").
-    - `version`: Version of the API (defaults to "0.1.0").
-    - `description`: Description of the API
+    - openapi_version: OpenAPI version for the schema (defaults to "3.0.0").
+    - title: Title of the API documentation (defaults to "My App").
+    - version: Version of the API (defaults to "0.1.0").
+    - description: Description of the API
     (included in OpenAPI info, default "API documentation").
 
     The BaseRouter allows defining routes using decorator methods (get, post, etc.).
@@ -142,6 +148,11 @@ class BaseRouter:
             "components": {"schemas": {}},
         }
         definitions = {}
+
+        # Add standard error responses to components schema
+        error_schema = self._generate_error_schema()
+        definitions.update(error_schema)
+
         for path, method, endpoint in self._routes:
             openapi_path = re.sub(r"<(?:\w:)?(\w+)>", r"{\1}", path)
             operation = self._build_operation(
@@ -150,6 +161,27 @@ class BaseRouter:
             schema["paths"].setdefault(openapi_path, {})[method.lower()] = operation
         schema["components"]["schemas"].update(definitions)
         return schema
+
+    def _generate_error_schema(self) -> dict[str, Any]:
+        """Generate OpenAPI schemas for standard error responses."""
+        return {
+            "ErrorSchema": {
+                "type": "object",
+                "properties": {
+                    "error": {
+                        "type": "object",
+                        "properties": {
+                            "type": {"type": "string"},
+                            "message": {"type": "string"},
+                            "status": {"type": "integer"},
+                            "details": {"type": "string"},
+                        },
+                        "required": ["type", "message", "status"],
+                    }
+                },
+                "required": ["error"],
+            }
+        }
 
     def _build_operation(
         self, endpoint, definitions: dict, route_path: str, http_method: str
@@ -160,9 +192,16 @@ class BaseRouter:
 
         meta = getattr(endpoint, "__route_meta__", {})
         status_code = str(meta.get("status_code", 200))
+
+        # Build standard responses including error responses
+        responses = self._build_responses(meta, definitions, status_code)
+
+        # Add standard error responses
+        responses.update(self._build_error_responses(meta))
+
         op = {
             "summary": endpoint.__doc__ or "",
-            "responses": self._build_responses(meta, definitions, status_code),
+            "responses": responses,
         }
         if parameters:
             op["parameters"] = parameters
@@ -242,6 +281,41 @@ class BaseRouter:
             else:
                 raise Exception("Incorrect response_model")
         return responses
+
+    def _build_error_responses(self, meta) -> dict[str, Any]:
+        """Build standard error responses for OpenAPI docs."""
+        response_errors = meta.get("response_errors")
+        error_ref = {"$ref": "#/components/schemas/ErrorSchema"}
+        errors_dict = {
+            "400": {
+                "description": "Bad Request",
+                "content": {"application/json": {"schema": error_ref}},
+            },
+            "401": {
+                "description": "Unauthorized",
+                "content": {"application/json": {"schema": error_ref}},
+            },
+            "403": {
+                "description": "Forbidden",
+                "content": {"application/json": {"schema": error_ref}},
+            },
+            "404": {
+                "description": "Not Found",
+                "content": {"application/json": {"schema": error_ref}},
+            },
+            "422": {
+                "description": "Validation Error",
+                "content": {"application/json": {"schema": error_ref}},
+            },
+            "500": {
+                "description": "Internal Server Error",
+                "content": {"application/json": {"schema": error_ref}},
+            },
+        }
+        if response_errors:
+            return {str(code): errors_dict[str(code)] for code in response_errors}
+        else:
+            return {}
 
     def _register_docs_endpoints(self):
         """
@@ -352,19 +426,26 @@ class BaseRouter:
                     params = body if body else all_params
                     kwargs[name] = annotation(**params)
                 except Exception as e:
-                    raise ValueError(f"Validation error for parameter '{name}': {e}")
+                    # Use 422 for Pydantic model validation errors
+                    raise ValidationError(
+                        f"Validation error for parameter '{name}'", str(e)
+                    )
             else:
                 if name in all_params:
                     try:
                         kwargs[name] = annotation(all_params[name])
                     except Exception as e:
-                        raise ValueError(
-                            f"Error casting parameter '{name}' to {annotation}: {e}"
+                        # Use 400 for type conversion errors
+                        raise BadRequestError(
+                            f"Error parsing parameter '{name}'. "
+                            f"Must be a valid {annotation.__name__}",
+                            str(e),
                         )
                 elif not is_required:
                     kwargs[name] = param.default
                 else:
-                    raise ValueError(f"Missing required parameter: '{name}'")
+                    # Missing a required parameter is 400
+                    raise BadRequestError(f"Missing required parameter: '{name}'")
         return kwargs
 
     @property
@@ -374,3 +455,10 @@ class BaseRouter:
             # We don't need model cache anymore
             self.__class__._model_schema_cache.clear()
         return self._openapi_schema
+
+    @staticmethod
+    def handle_exception(exception: Exception) -> dict[str, Any]:
+        """
+        Process any exception into a standardized error response.
+        """
+        return format_exception_response(exception)

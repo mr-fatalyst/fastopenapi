@@ -16,12 +16,23 @@ post_service = PostService()
 router = FlaskRouter()
 
 
-@router.post("/posts", tags=["Posts"], status_code=201, response_model=PostSchema)
+@router.post(
+    "/posts",
+    tags=["Posts"],
+    status_code=201,
+    response_errors=[400, 422, 500],
+    response_model=PostSchema,
+)
 def create_post(body: CreatePostSchema) -> PostSchema:
     return post_service.create_post(body)
 
 
-@router.get("/posts/{post_id}", tags=["Posts"], response_model=PostSchema)
+@router.get(
+    "/posts/{post_id}",
+    tags=["Posts"],
+    response_errors=[400, 404, 500],
+    response_model=PostSchema,
+)
 def get_post(post_id: int) -> PostSchema:
     post = post_service.get_post(post_id)
     if not post:
@@ -29,19 +40,28 @@ def get_post(post_id: int) -> PostSchema:
     return post
 
 
-@router.get("/posts/", tags=["Posts"], response_model=list[PostSchema])
+@router.get(
+    "/posts/", tags=["Posts"], response_errors=[500], response_model=list[PostSchema]
+)
 def get_posts(body: FilterPostSchema) -> list[PostSchema]:
     return post_service.get_posts(body)
 
 
-@router.delete("/posts/{post_id}", tags=["Posts"], status_code=204)
+@router.delete(
+    "/posts/{post_id}", tags=["Posts"], status_code=204, response_errors=[400, 404, 500]
+)
 def delete_post(post_id: int) -> None:
     post = post_service.delete_post(post_id)
     if not post:
         abort(HTTPStatus.NOT_FOUND)
 
 
-@router.patch("/posts/{post_id}", tags=["Posts"], response_model=PostSchema)
+@router.patch(
+    "/posts/{post_id}",
+    tags=["Posts"],
+    response_errors=[400, 404, 422, 500],
+    response_model=PostSchema,
+)
 def update_post(post_id: int, body: UpdatePostSchema) -> PostSchema:
     post = post_service.update_post(post_id, body)
     if not post:

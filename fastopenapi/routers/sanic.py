@@ -3,25 +3,11 @@ import re
 from collections.abc import Callable
 
 from sanic import response
-from sanic.exceptions import HTTPException
 
 from fastopenapi.base_router import BaseRouter
 
 
 class SanicRouter(BaseRouter):
-    @staticmethod
-    async def handle_exceptions(request, exception):
-        return response.json(
-            {
-                "description": exception.args[0] if exception.args else "Error",
-                "status": (
-                    exception.status_code if hasattr(exception, "status_code") else 500
-                ),
-                "message": str(exception),
-            },
-            status=exception.status_code if hasattr(exception, "status_code") else 500,
-        )
-
     def add_route(self, path: str, method: str, endpoint: Callable):
         super().add_route(path, method, endpoint)
         if self.app is None:
@@ -39,16 +25,20 @@ class SanicRouter(BaseRouter):
             try:
                 kwargs = self.resolve_endpoint_params(endpoint, all_params, body)
             except Exception as e:
-                return response.json({"detail": str(e)}, status=422)
+                error_response = self.handle_exception(e)
+                return response.json(
+                    error_response, status=getattr(e, "status_code", 422)
+                )
             try:
                 if inspect.iscoroutinefunction(endpoint):
                     result = await endpoint(**kwargs)
                 else:
                     result = endpoint(**kwargs)
             except Exception as e:
-                if isinstance(e, HTTPException):
-                    return await self.handle_exceptions(request, e)
-                return response.json({"detail": str(e)}, status=500)
+                error_response = self.handle_exception(e)
+                return response.json(
+                    error_response, status=getattr(e, "status_code", 500)
+                )
 
             meta = getattr(endpoint, "__route_meta__", {})
             status_code = meta.get("status_code", 200)

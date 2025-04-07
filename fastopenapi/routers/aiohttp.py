@@ -3,7 +3,6 @@ import inspect
 from collections.abc import Callable
 
 from aiohttp import web
-from aiohttp.web_exceptions import HTTPException
 
 from fastopenapi.base_router import BaseRouter
 
@@ -31,7 +30,10 @@ class AioHttpRouter(BaseRouter):
         try:
             kwargs = router.resolve_endpoint_params(endpoint, all_params, body)
         except Exception as e:
-            return web.json_response({"detail": str(e)}, status=422)
+            error_response = cls.handle_exception(e)
+            return web.json_response(
+                error_response, status=getattr(e, "status_code", 422)
+            )
 
         try:
             if inspect.iscoroutinefunction(endpoint):
@@ -39,9 +41,10 @@ class AioHttpRouter(BaseRouter):
             else:
                 result = endpoint(**kwargs)
         except Exception as e:
-            if isinstance(e, HTTPException):
-                raise
-            return web.json_response({"detail": str(e)}, status=500)
+            error_response = cls.handle_exception(e)
+            return web.json_response(
+                error_response, status=getattr(e, "status_code", 500)
+            )
 
         meta = getattr(endpoint, "__route_meta__", {})
         status_code = meta.get("status_code", 200)

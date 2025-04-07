@@ -30,7 +30,7 @@ class TestAioHttpIntegration:
         resp = await client.get("/items-fail")
         assert resp.status == 500
         data = await resp.json()
-        assert data["detail"] == "TEST ERROR"
+        assert data["error"]["message"] == "TEST ERROR"
 
     @pytest.mark.asyncio
     async def test_get_item(self, client):
@@ -43,12 +43,12 @@ class TestAioHttpIntegration:
         assert data["description"] == "Description 1"
 
     @pytest.mark.asyncio
-    async def test_get_item_unprocessable(self, client):
+    async def test_get_item_bad_request(self, client):
         """Test retrieving item with incorrect parameter type"""
         resp = await client.get("/items/abc")
-        assert resp.status == 422
+        assert resp.status == 400
         data = await resp.json()
-        assert "Error casting parameter" in data["detail"]
+        assert "Error parsing parameter" in data["error"]["message"]
 
     @pytest.mark.asyncio
     async def test_get_nonexistent_item(self, client):
@@ -76,7 +76,7 @@ class TestAioHttpIntegration:
         resp = await client.post("/items", data=json.dumps(new_item), headers=headers)
         assert resp.status == 422
         data = await resp.json()
-        assert "Validation error for parameter" in data["detail"]
+        assert "Validation error for parameter" in data["error"]["message"]
 
     @pytest.mark.asyncio
     async def test_create_item_invalid_json(self, client):
@@ -85,7 +85,7 @@ class TestAioHttpIntegration:
         resp = await client.post("/items", data="incorrect json", headers=headers)
         assert resp.status == 422
         data = await resp.json()
-        assert "Validation error for parameter" in data["detail"]
+        assert "Validation error for parameter" in data["error"]["message"]
 
     @pytest.mark.asyncio
     async def test_update_item(self, client):

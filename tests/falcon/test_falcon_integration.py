@@ -33,7 +33,7 @@ class TestFalconIntegration:
 
         assert response.status_code == 500
         result = json.loads(response.text)
-        assert result["detail"] == "TEST ERROR"
+        assert result["error"]["message"] == "TEST ERROR"
 
     @pytest.mark.asyncio
     async def test_get_item(self, async_client):
@@ -47,15 +47,14 @@ class TestFalconIntegration:
         assert result["description"] == "Description 1"
 
     @pytest.mark.asyncio
-    async def test_get_item_unprocessable(self, async_client):
+    async def test_get_item_bad_request(self, async_client):
         """Test fetching an item with an incorrect ID type"""
         response = await async_client.simulate_get("/items/abc")
 
-        assert response.status_code == 422
+        assert response.status_code == 400
         result = json.loads(response.text)
-        assert result["detail"] == (
-            "Error casting parameter 'item_id' to <class 'int'>: "
-            "invalid literal for int() with base 10: 'abc'"
+        assert result["error"]["message"] == (
+            "Error parsing parameter 'item_id'. Must be a valid int"
         )
 
     @pytest.mark.asyncio
@@ -93,7 +92,7 @@ class TestFalconIntegration:
 
         assert response.status_code == 422
         result = json.loads(response.text)
-        assert "Validation error for parameter" in result["detail"]
+        assert "Validation error for parameter" in result["error"]["message"]
 
     @pytest.mark.asyncio
     async def test_create_item_invalid_json(self, async_client):
@@ -106,7 +105,7 @@ class TestFalconIntegration:
 
         assert response.status_code == 422
         result = json.loads(response.text)
-        assert "Validation error for parameter" in result["detail"]
+        assert "Validation error for parameter" in result["error"]["message"]
 
     @pytest.mark.asyncio
     async def test_update_item(self, async_client):

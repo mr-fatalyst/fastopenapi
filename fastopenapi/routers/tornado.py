@@ -3,7 +3,7 @@ import re
 from collections.abc import Callable
 
 from tornado.escape import json_decode, json_encode
-from tornado.web import Application, HTTPError, RequestHandler, url
+from tornado.web import Application, RequestHandler, url
 
 from fastopenapi.base_router import BaseRouter
 
@@ -53,8 +53,10 @@ class TornadoDynamicHandler(RequestHandler):
                 self.endpoint, all_params, body
             )
         except Exception as e:
-            self.set_status(422)
-            await self.finish(json_encode({"detail": str(e)}))
+            error_response = self.router.handle_exception(e)
+            self.set_status(getattr(e, "status_code", 422))
+            self.set_header("Content-Type", "application/json")
+            await self.finish(json_encode(error_response))
             return
         try:
             if inspect.iscoroutinefunction(self.endpoint):
@@ -62,11 +64,10 @@ class TornadoDynamicHandler(RequestHandler):
             else:
                 result = self.endpoint(**resolved_kwargs)
         except Exception as e:
-            if isinstance(e, HTTPError):
-                await self.handle_http_exception(e)
-                return
-            self.set_status(500)
-            await self.finish(json_encode({"detail": str(e)}))
+            error_response = self.router.handle_exception(e)
+            self.set_status(getattr(e, "status_code", 500))
+            self.set_header("Content-Type", "application/json")
+            await self.finish(json_encode(error_response))
             return
         meta = getattr(self.endpoint, "__route_meta__", {})
         status_code = meta.get("status_code", 200)
