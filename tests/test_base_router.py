@@ -24,6 +24,11 @@ class NestedModel(BaseModel):
     extra: str | None = None
 
 
+class NestedListModel(BaseModel):
+    data: list[TestModel]
+    extra: str | None = None
+
+
 class TestBaseRouter:
 
     def setup_method(self):
@@ -246,15 +251,64 @@ class TestBaseRouter:
         assert ref == "#/components/schemas/TestModel"
         assert "TestModel" in schema["components"]["schemas"]
 
+    def test_generate_openapi_with_response_error(self):
+        # Test OpenAPI generation with response error
+
+        @self.router.post("/users", response_errors=[400, 404, 500], response_model=int)
+        def create_user(user: TestModel):
+            return 1
+
+        schema = self.router.generate_openapi()
+
+        # Check response
+        response = schema["paths"]["/users"]["post"]["responses"]["200"]
+        assert "content" in response
+        assert "application/json" in response["content"]
+
+        responses = schema["paths"]["/users"]["post"]["responses"]
+        assert "200" in responses
+        assert "400" in responses
+        assert "404" in responses
+        assert "500" in responses
+
+        assert "ErrorSchema" in schema["components"]["schemas"]
+
     def test_generate_openapi_with_incorrect_response_model(self):
         # Test OpenAPI generation with incorrect response model
+
+        @self.router.post("/users", response_model=tuple)
+        def create_user(user: TestModel):
+            return (1, 2)
+
+        with pytest.raises(Exception, match="Incorrect response_model"):
+            self.router.generate_openapi()
+
+    def test_generate_openapi_with_incorrect_list_response_model(self):
+        # Test OpenAPI generation with incorrect response model
+
+        @self.router.post("/users", response_model=list[tuple])
+        def create_user(user: TestModel):
+            return [(1, 2)]
+
+        with pytest.raises(Exception, match="Incorrect response_model"):
+            self.router.generate_openapi()
+
+    def test_generate_openapi_with_simple_type_as_response_model(self):
+        # Test OpenAPI generation with python type as response model
 
         @self.router.post("/users", response_model=int)
         def create_user(user: TestModel):
             return 1
 
-        with pytest.raises(Exception, match="Incorrect response_model"):
-            self.router.generate_openapi()
+        schema = self.router.generate_openapi()
+
+        # Check response
+        response = schema["paths"]["/users"]["post"]["responses"]["200"]
+        assert "content" in response
+        assert "application/json" in response["content"]
+
+        resp_type = response["content"]["application/json"]["schema"]["type"]
+        assert "integer" == resp_type
 
     def test_generate_openapi_with_response_model(self):
         # Test OpenAPI generation with response model
@@ -275,6 +329,32 @@ class TestBaseRouter:
         ref = response["content"]["application/json"]["schema"]["items"]["$ref"]
         assert ref == "#/components/schemas/ResponseModel"
         assert "ResponseModel" in schema["components"]["schemas"]
+
+    def test_generate_openapi_with_nested_list_response_model(self):
+        # Test OpenAPI generation with response model with nested model list
+
+        @self.router.post("/users", response_model=NestedListModel)
+        def create_user(user: TestModel):
+            pass
+
+        schema = self.router.generate_openapi()
+
+        # Check response
+        response = schema["paths"]["/users"]["post"]["responses"]["200"]
+        assert "content" in response
+        assert "application/json" in response["content"]
+        assert "$ref" in response["content"]["application/json"]["schema"]
+
+        # Check that response model schema is in components
+        ref = response["content"]["application/json"]["schema"]["$ref"]
+        schemas = schema["components"]["schemas"]
+        assert ref == "#/components/schemas/NestedListModel"
+        assert "NestedListModel" in schemas
+        assert "TestModel" in schemas
+
+        # Check that TestModel inside NestedModel
+        ref = schemas["NestedListModel"]["properties"]["data"]["items"]["$ref"]
+        assert ref == "#/components/schemas/TestModel"
 
     def test_generate_openapi_with_list_response(self):
         # Test OpenAPI generation with List response model

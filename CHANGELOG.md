@@ -11,6 +11,7 @@ FastOpenAPI follows the [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 - Class-level cache for model schemas
 - `response_errors` for routers
 - `error_handler` for standard error responses
+- Some python types as response_model (`int`, `float`, `bool`, `str`)
 
 ## [0.4.0] - 2025-03-20
 

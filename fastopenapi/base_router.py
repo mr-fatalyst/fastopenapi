@@ -271,12 +271,20 @@ class BaseRouter:
                     responses[status_code]["content"] = {
                         "application/json": {"schema": array_schema}
                     }
+                else:
+                    raise Exception("Incorrect response_model")
             elif isinstance(response_model, type) and issubclass(
                 response_model, BaseModel
             ):
                 resp_model_schema = self._get_model_schema(response_model, definitions)
                 responses[status_code]["content"] = {
                     "application/json": {"schema": resp_model_schema}
+                }
+            elif response_model in PYTHON_TYPE_MAPPING:
+                responses[status_code]["content"] = {
+                    "application/json": {
+                        "schema": {"type": PYTHON_TYPE_MAPPING[response_model]}
+                    }
                 }
             else:
                 raise Exception("Incorrect response_model")
