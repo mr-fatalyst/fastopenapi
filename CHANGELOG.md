@@ -4,7 +4,7 @@ All notable changes to FastOpenAPI are documented in this file.
 
 FastOpenAPI follows the [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) format.
 
-## [0.5.0] - Unreleased
+## [0.5.0] - 2025-04-13
 
 ### Added
 - `AioHttpRouter` for integration with the `AioHttp` framework

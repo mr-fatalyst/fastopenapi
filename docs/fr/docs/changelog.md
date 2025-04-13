@@ -2,7 +2,7 @@
 
 Toutes les modifications importantes de FastOpenAPI sont documentées dans ce fichier.
 
-## [0.5.0] – Non publié
+## [0.5.0] – 2025-04-13
 
 ### Ajouté
 - **AioHttpRouter** pour l’intégration avec le framework AIOHTTP (prise en charge asynchrone).
