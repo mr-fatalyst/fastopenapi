@@ -10,6 +10,7 @@ This guide explains how to get started, make contributions, write commits, open 
 Install dependencies with:
 
 ```bash
+# Fork the repo on GitHub first, then:
 git clone https://github.com/yourusername/fastopenapi.git
 cd fastopenapi
 poetry install
@@ -48,6 +49,7 @@ Tests cover both internal logic and integration with aiohttp, flask, sanic, and 
 ## Code Style
 
 This project uses:
+
 - `black` — code formatting
 - `flake8` — linting
 - `isort` — import sorting

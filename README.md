@@ -306,7 +306,7 @@ http://127.0.0.1:8000/redoc
 
 ## 📖 Documentation
 
-Explore the [Docs](https://github.com/mr-fatalyst/fastopenapi/blob/master/docs/en/index.md) for an overview of FastOpenAPI, its core components, and usage guidelines. The documentation is continuously updated and improved.
+Explore the [Docs](https://fastopenapi.fatalyst.dev/) for an overview of FastOpenAPI, its core components, and usage guidelines. The documentation is continuously updated and improved.
 
 ---
 

@@ -10,6 +10,7 @@ Esta guía explica cómo comenzar, realizar aportes, escribir commits, abrir pul
 Instala las dependencias con:
 
 ```bash
+# Fork the repo on GitHub first, then:
 git clone https://github.com/yourusername/fastopenapi.git
 cd fastopenapi
 poetry install

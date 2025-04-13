@@ -10,6 +10,7 @@ Dieses Dokument erklärt, wie du loslegen kannst, Beiträge leistest, Commits er
 Installiere Abhängigkeiten mit:
 
 ```bash
+# Fork the repo on GitHub first, then:
 git clone https://github.com/yourusername/fastopenapi.git
 cd fastopenapi
 poetry install

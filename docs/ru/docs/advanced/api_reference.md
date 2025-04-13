@@ -44,19 +44,123 @@ fastopenapi/
 
 ---
 
-## Роутеры по фреймворкам
+## Роутеры для фреймворков
 
 Каждый роутер наследуется от `BaseRouter` и адаптирован под конкретный фреймворк.
 
-Примеры инициализации и маршрутов приведены для:
+### AioHttpRouter
 
-- **AioHttpRouter**
-- **FalconRouter**
-- **FlaskRouter**
-- **QuartRouter**
-- **SanicRouter**
-- **StarletteRouter**
-- **TornadoRouter**
+```python
+from aiohttp import web
+from fastopenapi.routers import AioHttpRouter
+
+app = web.Application()
+router = AioHttpRouter(app=app)
+
+@router.get("/status")
+async def status():
+    return {"status": "ok"}
+```
+
+---
+
+### FalconRouter
+
+```python
+import falcon.asgi
+from fastopenapi.routers import FalconRouter
+
+app = falcon.asgi.App()
+router = FalconRouter(app=app)
+
+@router.get("/status")
+async def status():
+    return {"status": "ok"}
+```
+
+---
+
+### FlaskRouter
+
+```python
+from flask import Flask
+from fastopenapi.routers import FlaskRouter
+
+app = Flask(__name__)
+router = FlaskRouter(app=app)
+
+@router.get("/hello")
+def hello(name: str):
+    return {"message": f"Hello {name}"}
+```
+
+---
+
+### QuartRouter
+
+```python
+from quart import Quart
+from fastopenapi.routers import QuartRouter
+
+app = Quart(__name__)
+router = QuartRouter(app=app)
+
+@router.get("/ping")
+async def ping():
+    return {"pong": True}
+```
+
+---
+
+### SanicRouter
+
+```python
+from sanic import Sanic
+from fastopenapi.routers import SanicRouter
+
+app = Sanic("MySanicApp")
+router = SanicRouter(app=app)
+
+@router.get("/info")
+async def info():
+    return {"framework": "Sanic", "status": "running"}
+```
+
+---
+
+### StarletteRouter
+
+Use for Starlette integration.
+
+```python
+from starlette.applications import Starlette
+from fastopenapi.routers import StarletteRouter
+
+app = Starlette()
+router = StarletteRouter(app=app)
+
+@router.get("/check")
+async def check():
+    return {"status": "healthy"}
+```
+
+---
+
+### TornadoRouter
+
+Use for Tornado integration.
+
+```python
+from tornado.web import Application
+from fastopenapi.routers import TornadoRouter
+
+app = Application()
+router = TornadoRouter(app=app)
+
+@router.get("/status")
+def status():
+    return {"running": True}
+```
 
 ---
 

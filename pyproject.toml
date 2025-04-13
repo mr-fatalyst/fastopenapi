@@ -44,9 +44,9 @@ quart = ["quart (>=0.20.0, <0.21.0)"]
 tornado = ["tornado (>=6.4.0, <6.5.0)"]
 
 [project.urls]
-Homepage = "https://github.com/mr-fatalyst/fastopenapi"
+Homepage = "https://fastopenapi.fatalyst.dev/"
 Repository = "https://github.com/mr-fatalyst/fastopenapi"
-Documentation = "https://github.com/mr-fatalyst/fastopenapi/blob/master/docs/en/index.md"
+Documentation = "https://fastopenapi.fatalyst.dev/"
 Issues = "https://github.com/mr-fatalyst/fastopenapi/issues"
 
 [build-system]
