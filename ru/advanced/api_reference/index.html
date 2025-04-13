@@ -1003,9 +1003,78 @@
         <li class="md-nav__item">
   <a href="#_4" class="md-nav__link">
     <span class="md-ellipsis">
-      Роутеры по фреймворкам
+      Роутеры для фреймворков
     </span>
   </a>
+  
+    <nav class="md-nav" aria-label="Роутеры для фреймворков">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#aiohttprouter" class="md-nav__link">
+    <span class="md-ellipsis">
+      AioHttpRouter
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#falconrouter" class="md-nav__link">
+    <span class="md-ellipsis">
+      FalconRouter
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#flaskrouter" class="md-nav__link">
+    <span class="md-ellipsis">
+      FlaskRouter
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#quartrouter" class="md-nav__link">
+    <span class="md-ellipsis">
+      QuartRouter
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#sanicrouter" class="md-nav__link">
+    <span class="md-ellipsis">
+      SanicRouter
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#starletterouter" class="md-nav__link">
+    <span class="md-ellipsis">
+      StarletteRouter
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#tornadorouter" class="md-nav__link">
+    <span class="md-ellipsis">
+      TornadoRouter
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
       
@@ -1273,9 +1342,78 @@
         <li class="md-nav__item">
   <a href="#_4" class="md-nav__link">
     <span class="md-ellipsis">
-      Роутеры по фреймворкам
+      Роутеры для фреймворков
     </span>
   </a>
+  
+    <nav class="md-nav" aria-label="Роутеры для фреймворков">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#aiohttprouter" class="md-nav__link">
+    <span class="md-ellipsis">
+      AioHttpRouter
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#falconrouter" class="md-nav__link">
+    <span class="md-ellipsis">
+      FalconRouter
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#flaskrouter" class="md-nav__link">
+    <span class="md-ellipsis">
+      FlaskRouter
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#quartrouter" class="md-nav__link">
+    <span class="md-ellipsis">
+      QuartRouter
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#sanicrouter" class="md-nav__link">
+    <span class="md-ellipsis">
+      SanicRouter
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#starletterouter" class="md-nav__link">
+    <span class="md-ellipsis">
+      StarletteRouter
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#tornadorouter" class="md-nav__link">
+    <span class="md-ellipsis">
+      TornadoRouter
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
       
@@ -1445,18 +1583,93 @@
 <li><code>title</code>, <code>description</code>, <code>version</code>: Метаданные OpenAPI.</li>
 </ul>
 <hr />
-<h2 id="_4">Роутеры по фреймворкам</h2>
+<h2 id="_4">Роутеры для фреймворков</h2>
 <p>Каждый роутер наследуется от <code>BaseRouter</code> и адаптирован под конкретный фреймворк.</p>
-<p>Примеры инициализации и маршрутов приведены для:</p>
-<ul>
-<li><strong>AioHttpRouter</strong></li>
-<li><strong>FalconRouter</strong></li>
-<li><strong>FlaskRouter</strong></li>
-<li><strong>QuartRouter</strong></li>
-<li><strong>SanicRouter</strong></li>
-<li><strong>StarletteRouter</strong></li>
-<li><strong>TornadoRouter</strong></li>
-</ul>
+<h3 id="aiohttprouter">AioHttpRouter</h3>
+<pre><code class="language-python">from aiohttp import web
+from fastopenapi.routers import AioHttpRouter
+
+app = web.Application()
+router = AioHttpRouter(app=app)
+
+@router.get(&quot;/status&quot;)
+async def status():
+    return {&quot;status&quot;: &quot;ok&quot;}
+</code></pre>
+<hr />
+<h3 id="falconrouter">FalconRouter</h3>
+<pre><code class="language-python">import falcon.asgi
+from fastopenapi.routers import FalconRouter
+
+app = falcon.asgi.App()
+router = FalconRouter(app=app)
+
+@router.get(&quot;/status&quot;)
+async def status():
+    return {&quot;status&quot;: &quot;ok&quot;}
+</code></pre>
+<hr />
+<h3 id="flaskrouter">FlaskRouter</h3>
+<pre><code class="language-python">from flask import Flask
+from fastopenapi.routers import FlaskRouter
+
+app = Flask(__name__)
+router = FlaskRouter(app=app)
+
+@router.get(&quot;/hello&quot;)
+def hello(name: str):
+    return {&quot;message&quot;: f&quot;Hello {name}&quot;}
+</code></pre>
+<hr />
+<h3 id="quartrouter">QuartRouter</h3>
+<pre><code class="language-python">from quart import Quart
+from fastopenapi.routers import QuartRouter
+
+app = Quart(__name__)
+router = QuartRouter(app=app)
+
+@router.get(&quot;/ping&quot;)
+async def ping():
+    return {&quot;pong&quot;: True}
+</code></pre>
+<hr />
+<h3 id="sanicrouter">SanicRouter</h3>
+<pre><code class="language-python">from sanic import Sanic
+from fastopenapi.routers import SanicRouter
+
+app = Sanic(&quot;MySanicApp&quot;)
+router = SanicRouter(app=app)
+
+@router.get(&quot;/info&quot;)
+async def info():
+    return {&quot;framework&quot;: &quot;Sanic&quot;, &quot;status&quot;: &quot;running&quot;}
+</code></pre>
+<hr />
+<h3 id="starletterouter">StarletteRouter</h3>
+<p>Use for Starlette integration.</p>
+<pre><code class="language-python">from starlette.applications import Starlette
+from fastopenapi.routers import StarletteRouter
+
+app = Starlette()
+router = StarletteRouter(app=app)
+
+@router.get(&quot;/check&quot;)
+async def check():
+    return {&quot;status&quot;: &quot;healthy&quot;}
+</code></pre>
+<hr />
+<h3 id="tornadorouter">TornadoRouter</h3>
+<p>Use for Tornado integration.</p>
+<pre><code class="language-python">from tornado.web import Application
+from fastopenapi.routers import TornadoRouter
+
+app = Application()
+router = TornadoRouter(app=app)
+
+@router.get(&quot;/status&quot;)
+def status():
+    return {&quot;running&quot;: True}
+</code></pre>
 <hr />
 <h2 id="_5">Подроутеры</h2>
 <p>Вы можете объединять маршруты через <code>include_router</code>:</p>

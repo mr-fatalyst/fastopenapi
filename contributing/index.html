@@ -1212,7 +1212,8 @@ This guide explains how to get started, make contributions, write commits, open 
 <hr />
 <h2 id="setup-running">Setup &amp; Running</h2>
 <p>Install dependencies with:</p>
-<pre><code class="language-bash">git clone https://github.com/yourusername/fastopenapi.git
+<pre><code class="language-bash"># Fork the repo on GitHub first, then:
+git clone https://github.com/yourusername/fastopenapi.git
 cd fastopenapi
 poetry install
 </code></pre>
@@ -1236,11 +1237,13 @@ poetry install
 <p>Tests cover both internal logic and integration with aiohttp, flask, sanic, and more.</p>
 <hr />
 <h2 id="code-style">Code Style</h2>
-<p>This project uses:
-- <code>black</code> — code formatting
-- <code>flake8</code> — linting
-- <code>isort</code> — import sorting
-- <code>pre-commit</code> — hooks for clean code before commit</p>
+<p>This project uses:</p>
+<ul>
+<li><code>black</code> — code formatting</li>
+<li><code>flake8</code> — linting</li>
+<li><code>isort</code> — import sorting</li>
+<li><code>pre-commit</code> — hooks for clean code before commit</li>
+</ul>
 <p>Install pre-commit hooks:</p>
 <pre><code class="language-bash">pre-commit install
 </code></pre>

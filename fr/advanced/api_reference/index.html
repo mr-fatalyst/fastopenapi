@@ -1007,6 +1007,75 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Routeurs spécifiques aux frameworks">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#aiohttprouter" class="md-nav__link">
+    <span class="md-ellipsis">
+      AioHttpRouter
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#falconrouter" class="md-nav__link">
+    <span class="md-ellipsis">
+      FalconRouter
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#flaskrouter" class="md-nav__link">
+    <span class="md-ellipsis">
+      FlaskRouter
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#quartrouter" class="md-nav__link">
+    <span class="md-ellipsis">
+      QuartRouter
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#sanicrouter" class="md-nav__link">
+    <span class="md-ellipsis">
+      SanicRouter
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#starletterouter" class="md-nav__link">
+    <span class="md-ellipsis">
+      StarletteRouter
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#tornadorouter" class="md-nav__link">
+    <span class="md-ellipsis">
+      TornadoRouter
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -1277,6 +1346,75 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Routeurs spécifiques aux frameworks">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#aiohttprouter" class="md-nav__link">
+    <span class="md-ellipsis">
+      AioHttpRouter
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#falconrouter" class="md-nav__link">
+    <span class="md-ellipsis">
+      FalconRouter
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#flaskrouter" class="md-nav__link">
+    <span class="md-ellipsis">
+      FlaskRouter
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#quartrouter" class="md-nav__link">
+    <span class="md-ellipsis">
+      QuartRouter
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#sanicrouter" class="md-nav__link">
+    <span class="md-ellipsis">
+      SanicRouter
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#starletterouter" class="md-nav__link">
+    <span class="md-ellipsis">
+      StarletteRouter
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#tornadorouter" class="md-nav__link">
+    <span class="md-ellipsis">
+      TornadoRouter
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -1444,17 +1582,93 @@
 </ul>
 <hr />
 <h2 id="routeurs-specifiques-aux-frameworks">Routeurs spécifiques aux frameworks</h2>
-<p>FastOpenAPI fournit un routeur dédié pour chaque framework pris en charge :</p>
-<ul>
-<li><code>AioHttpRouter</code></li>
-<li><code>FalconRouter</code></li>
-<li><code>FlaskRouter</code></li>
-<li><code>QuartRouter</code></li>
-<li><code>SanicRouter</code></li>
-<li><code>StarletteRouter</code></li>
-<li><code>TornadoRouter</code></li>
-</ul>
-<p>Tous ces routeurs héritent de <code>BaseRouter</code> et adaptent la logique de routing à l’interface du framework.</p>
+<p>FastOpenAPI fournit un routeur dédié pour chaque framework pris en charge.
+Tous ces routeurs héritent de <code>BaseRouter</code> et adaptent la logique de routing à l’interface du framework.</p>
+<h3 id="aiohttprouter">AioHttpRouter</h3>
+<pre><code class="language-python">from aiohttp import web
+from fastopenapi.routers import AioHttpRouter
+
+app = web.Application()
+router = AioHttpRouter(app=app)
+
+@router.get(&quot;/status&quot;)
+async def status():
+    return {&quot;status&quot;: &quot;ok&quot;}
+</code></pre>
+<hr />
+<h3 id="falconrouter">FalconRouter</h3>
+<pre><code class="language-python">import falcon.asgi
+from fastopenapi.routers import FalconRouter
+
+app = falcon.asgi.App()
+router = FalconRouter(app=app)
+
+@router.get(&quot;/status&quot;)
+async def status():
+    return {&quot;status&quot;: &quot;ok&quot;}
+</code></pre>
+<hr />
+<h3 id="flaskrouter">FlaskRouter</h3>
+<pre><code class="language-python">from flask import Flask
+from fastopenapi.routers import FlaskRouter
+
+app = Flask(__name__)
+router = FlaskRouter(app=app)
+
+@router.get(&quot;/hello&quot;)
+def hello(name: str):
+    return {&quot;message&quot;: f&quot;Hello {name}&quot;}
+</code></pre>
+<hr />
+<h3 id="quartrouter">QuartRouter</h3>
+<pre><code class="language-python">from quart import Quart
+from fastopenapi.routers import QuartRouter
+
+app = Quart(__name__)
+router = QuartRouter(app=app)
+
+@router.get(&quot;/ping&quot;)
+async def ping():
+    return {&quot;pong&quot;: True}
+</code></pre>
+<hr />
+<h3 id="sanicrouter">SanicRouter</h3>
+<pre><code class="language-python">from sanic import Sanic
+from fastopenapi.routers import SanicRouter
+
+app = Sanic(&quot;MySanicApp&quot;)
+router = SanicRouter(app=app)
+
+@router.get(&quot;/info&quot;)
+async def info():
+    return {&quot;framework&quot;: &quot;Sanic&quot;, &quot;status&quot;: &quot;running&quot;}
+</code></pre>
+<hr />
+<h3 id="starletterouter">StarletteRouter</h3>
+<p>Use for Starlette integration.</p>
+<pre><code class="language-python">from starlette.applications import Starlette
+from fastopenapi.routers import StarletteRouter
+
+app = Starlette()
+router = StarletteRouter(app=app)
+
+@router.get(&quot;/check&quot;)
+async def check():
+    return {&quot;status&quot;: &quot;healthy&quot;}
+</code></pre>
+<hr />
+<h3 id="tornadorouter">TornadoRouter</h3>
+<p>Use for Tornado integration.</p>
+<pre><code class="language-python">from tornado.web import Application
+from fastopenapi.routers import TornadoRouter
+
+app = Application()
+router = TornadoRouter(app=app)
+
+@router.get(&quot;/status&quot;)
+def status():
+    return {&quot;running&quot;: True}
+</code></pre>
 <hr />
 <h2 id="exemple-de-sous-routeur">Exemple de sous-routeur</h2>
 <pre><code class="language-python">api_v1 = FlaskRouter()
