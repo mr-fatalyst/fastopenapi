@@ -225,7 +225,9 @@ class BaseRouter:
                 param.annotation, BaseModel
             ):
                 if http_method.upper() == "GET":
-                    model_schema = param.annotation.model_json_schema()
+                    model_schema = param.annotation.model_json_schema(
+                        mode="serialization"
+                    )
                     required_fields = model_schema.get("required", [])
                     properties = model_schema.get("properties", {})
                     for prop_name, prop_schema in properties.items():
@@ -337,7 +339,7 @@ class BaseRouter:
         from pydantic import BaseModel
 
         if isinstance(result, BaseModel):
-            return result.model_dump()
+            return result.model_dump(by_alias=True)
         if isinstance(result, list):
             return [BaseRouter._serialize_response(item) for item in result]
         if isinstance(result, dict):
@@ -356,7 +358,7 @@ class BaseRouter:
         if cache_key not in cls._model_schema_cache:
             # Generate the schema if it's not in the cache
             model_schema = model.model_json_schema(
-                ref_template="#/components/schemas/{model}"
+                mode="serialization", ref_template="#/components/schemas/{model}"
             )
 
             # Process and store nested definitions

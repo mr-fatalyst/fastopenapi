@@ -1,7 +1,7 @@
 from unittest.mock import MagicMock
 
 import pytest
-from pydantic import BaseModel
+from pydantic import BaseModel, computed_field
 
 # Import the class under test
 from fastopenapi.base_router import REDOC_URL, SWAGGER_URL, BaseRouter
@@ -12,6 +12,10 @@ class TestModel(BaseModel):
     name: str
     age: int
     is_active: bool = True
+
+    @computed_field(alias="$active")
+    def aliased_is_active(self) -> bool:
+        return self.is_active
 
 
 class ResponseModel(BaseModel):
@@ -30,7 +34,6 @@ class NestedListModel(BaseModel):
 
 
 class TestBaseRouter:
-
     def setup_method(self):
         self.app_mock = MagicMock()
 
@@ -465,6 +468,7 @@ class TestBaseRouter:
         assert "TestModel" in definitions
         assert definitions["TestModel"]["properties"]["name"]["type"] == "string"
         assert definitions["TestModel"]["properties"]["age"]["type"] == "integer"
+        assert definitions["TestModel"]["properties"]["$active"]["type"] == "boolean"
 
     def test_get_model_schema_with_nested_models(self):
         # Test getting schema for models with nested models
@@ -517,6 +521,7 @@ class TestBaseRouter:
         assert result["user"].name == "John"
         assert result["user"].age == 30
         assert result["user"].is_active is True  # Default value
+        assert result["user"].aliased_is_active is True
 
     def test_resolve_endpoint_params_missing_required(self):
         # Test error when required parameter is missing
@@ -566,15 +571,17 @@ class TestBaseRouter:
         )
 
         # Should convert model to query parameters
-        assert len(params) == 3
+        assert len(params) == 4
         assert params[0]["in"] == "query"
         assert params[1]["in"] == "query"
         assert params[2]["in"] == "query"
+        assert params[3]["in"] == "query"
 
         names = [p["name"] for p in params]
         assert "name" in names
         assert "age" in names
         assert "is_active" in names
+        assert "$active" in names  # alias
 
         # No request body for GET
         assert body is None
