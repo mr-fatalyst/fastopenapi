@@ -76,6 +76,12 @@ class TestBaseRouter:
         assert self.router_no_app._routes == []
         assert self.router_no_app._openapi_schema is None
 
+    def test_use_aliases_deprecation_warning(self):
+        with pytest.warns(FutureWarning) as record:
+            BaseRouter(use_aliases=False)
+        msg = str(record[0].message)
+        assert "will be removed in version 0.7.0" in msg
+
     def test_add_route(self):
         # Test adding a route to the router
         def test_endpoint():
@@ -420,7 +426,7 @@ class TestBaseRouter:
     def test_serialize_response_with_pydantic_model(self):
         # Test serializing a Pydantic model response
         model = ResponseModel(id=1, message="test")
-        result = BaseRouter._serialize_response(model)
+        result = BaseRouter()._serialize_response(model)
 
         assert isinstance(result, dict)
         assert result["id"] == 1
@@ -432,7 +438,7 @@ class TestBaseRouter:
             ResponseModel(id=1, message="test1"),
             ResponseModel(id=2, message="test2"),
         ]
-        result = BaseRouter._serialize_response(models)
+        result = BaseRouter()._serialize_response(models)
 
         assert isinstance(result, list)
         assert len(result) == 2
@@ -445,7 +451,7 @@ class TestBaseRouter:
             "item1": ResponseModel(id=1, message="test1"),
             "item2": ResponseModel(id=2, message="test2"),
         }
-        result = BaseRouter._serialize_response(data)
+        result = BaseRouter()._serialize_response(data)
 
         assert isinstance(result, dict)
         assert len(result) == 2
@@ -454,14 +460,15 @@ class TestBaseRouter:
 
     def test_serialize_response_with_primitive(self):
         # Test serializing primitive values
-        assert BaseRouter._serialize_response(5) == 5
-        assert BaseRouter._serialize_response("test") == "test"
-        assert BaseRouter._serialize_response(True) is True
+        router = BaseRouter()
+        assert router._serialize_response(5) == 5
+        assert router._serialize_response("test") == "test"
+        assert router._serialize_response(True) is True
 
     def test_get_model_schema(self):
         # Test getting Pydantic model schema
         definitions = {}
-        schema = BaseRouter._get_model_schema(TestModel, definitions)
+        schema = BaseRouter()._get_model_schema(TestModel, definitions)
 
         assert "$ref" in schema
         assert schema["$ref"] == "#/components/schemas/TestModel"
@@ -473,7 +480,7 @@ class TestBaseRouter:
     def test_get_model_schema_with_nested_models(self):
         # Test getting schema for models with nested models
         definitions = {}
-        schema = BaseRouter._get_model_schema(NestedModel, definitions)
+        schema = BaseRouter()._get_model_schema(NestedModel, definitions)
 
         assert "$ref" in schema
         assert schema["$ref"] == "#/components/schemas/NestedModel"

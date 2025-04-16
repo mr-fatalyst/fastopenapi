@@ -1,6 +1,7 @@
 import inspect
 import re
 import typing
+import warnings
 from collections.abc import Callable
 from http import HTTPStatus
 from typing import Any, ClassVar
@@ -43,6 +44,7 @@ class BaseRouter:
     - title: Title of the API documentation (defaults to "My App").
     - version: Version of the API (defaults to "0.1.0").
     - description: Description of the API
+    - use_aliases: Temporary argument to maintain backward compatibility
     (included in OpenAPI info, default "API documentation").
 
     The BaseRouter allows defining routes using decorator methods (get, post, etc.).
@@ -63,6 +65,7 @@ class BaseRouter:
         title: str = "My App",
         version: str = "0.1.0",
         description: str = "API documentation",
+        use_aliases: bool = True,
     ):
         self.app = app
         self.docs_url = docs_url
@@ -74,6 +77,15 @@ class BaseRouter:
         self.description = description
         self._routes: list[tuple[str, str, Callable]] = []
         self._openapi_schema = None
+        self.use_aliases = use_aliases
+        # TODO Remove use_aliases in 0.7.0
+        if not use_aliases:
+            warnings.warn(
+                "Setting use_aliases=False is deprecated. "
+                "It will be removed in version 0.7.0",
+                FutureWarning,
+                stacklevel=2,
+            )
         if self.app is not None:
             if self.docs_url and self.redoc_url and self.openapi_url:
                 self._register_docs_endpoints()
@@ -225,8 +237,9 @@ class BaseRouter:
                 param.annotation, BaseModel
             ):
                 if http_method.upper() == "GET":
+                    # TODO Remove use_aliases in 0.7.0
                     model_schema = param.annotation.model_json_schema(
-                        mode="serialization"
+                        mode="serialization" if self.use_aliases else "validation"
                     )
                     required_fields = model_schema.get("required", [])
                     properties = model_schema.get("properties", {})
@@ -334,20 +347,19 @@ class BaseRouter:
         """
         raise NotImplementedError
 
-    @staticmethod
-    def _serialize_response(result: Any) -> Any:
+    def _serialize_response(self, result: Any) -> Any:
         from pydantic import BaseModel
 
         if isinstance(result, BaseModel):
-            return result.model_dump(by_alias=True)
+            # TODO Remove use_aliases in 0.7.0
+            return result.model_dump(by_alias=self.use_aliases)
         if isinstance(result, list):
-            return [BaseRouter._serialize_response(item) for item in result]
+            return [self._serialize_response(item) for item in result]
         if isinstance(result, dict):
-            return {k: BaseRouter._serialize_response(v) for k, v in result.items()}
+            return {k: self._serialize_response(v) for k, v in result.items()}
         return result
 
-    @classmethod
-    def _get_model_schema(cls, model: type[BaseModel], definitions: dict) -> dict:
+    def _get_model_schema(self, model: type[BaseModel], definitions: dict) -> dict:
         """
         Get the OpenAPI schema for a Pydantic model, with caching for better performance
         """
@@ -355,10 +367,12 @@ class BaseRouter:
         cache_key = f"{model.__module__}.{model_name}"
 
         # Check if the schema is already in the class-level cache
-        if cache_key not in cls._model_schema_cache:
+        if cache_key not in self._model_schema_cache:
             # Generate the schema if it's not in the cache
+            # TODO Remove use_aliases in 0.7.0
             model_schema = model.model_json_schema(
-                mode="serialization", ref_template="#/components/schemas/{model}"
+                mode="serialization" if self.use_aliases else "validation",
+                ref_template="#/components/schemas/{model}",
             )
 
             # Process and store nested definitions
@@ -368,11 +382,11 @@ class BaseRouter:
                     del model_schema[key]
 
             # Add schema to the cache
-            cls._model_schema_cache[cache_key] = model_schema
+            self._model_schema_cache[cache_key] = model_schema
 
         # Make sure the schema is in the definitions dictionary
         if model_name not in definitions:
-            definitions[model_name] = cls._model_schema_cache[cache_key]
+            definitions[model_name] = self._model_schema_cache[cache_key]
 
         return {"$ref": f"#/components/schemas/{model_name}"}
 

@@ -2,6 +2,19 @@
 
 All notable changes to FastOpenAPI will be documented in this file.
 
+## [0.6.0] – 2025‑04‑16
+
+### Added
+- The `use_aliases` parameter was added to the `BaseRouter` constructor. Default is `True`. To preserve the previous behavior (without using aliases from Pydantic), set `use_aliases=False`. 
+
+### Changed
+- The `_serialize_response method` is now an instance method (was a `@staticmethod`) — to support `use_aliases`.
+- The `_get_model_schema` method was temporarily changed from a `@classmethod` to a regular method — for consistent behavior with `use_aliases`.
+
+### Deprecated
+- `use_aliases` is deprecated and will be removed in version 0.7.0.
+
+
 ## [0.5.0] - 2025-04-13
 
 ### Added

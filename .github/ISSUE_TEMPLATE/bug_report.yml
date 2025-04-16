@@ -15,7 +15,7 @@ body:
     attributes:
       label: Environment
       description: Describe your environment (Python version, OS, FastOpenAPI version, framework used, etc.)
-      placeholder: Python 3.11, FastOpenAPI 0.5.0, Ubuntu 22.04, Flask 2.2
+      placeholder: Python 3.11, FastOpenAPI 0.6.0, Ubuntu 22.04, Flask 2.2
     validations:
       required: true
 
