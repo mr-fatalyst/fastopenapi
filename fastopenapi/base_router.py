@@ -437,39 +437,92 @@ class BaseRouter:
         """
 
     @staticmethod
+    def _resolve_pydantic_model(model_class, params, param_name):
+        """Resolving parameters for a Pydantic model"""
+        try:
+            params_copy = params.copy()
+
+            if hasattr(model_class, "model_fields"):
+                for field_name, field_info in model_class.model_fields.items():
+                    if (
+                        field_name in params_copy
+                        and not isinstance(params_copy[field_name], list)
+                        and hasattr(field_info, "annotation")
+                        and typing.get_origin(field_info.annotation) is list
+                    ):
+                        params_copy[field_name] = [params_copy[field_name]]
+
+            return model_class(**params_copy)
+        except Exception as e:
+            raise ValidationError(
+                f"Validation error for parameter '{param_name}'", str(e)
+            )
+
+    @staticmethod
+    def _resolve_list_param(param_name, value, annotation):
+        """Resolving a list-type parameter"""
+        args = typing.get_args(annotation)
+        try:
+            if args:
+                return [args[0](value)]
+            else:
+                return [value]
+        except Exception as e:
+            type_name = args[0].__name__ if args else "value"
+            raise BadRequestError(
+                f"Error parsing parameter '{param_name}' as list item. "
+                f"Must be a valid {type_name}",
+                str(e),
+            )
+
+    @staticmethod
+    def _resolve_scalar_param(param_name, value, annotation):
+        """Resolving a scalar parameter"""
+        try:
+            return annotation(value)
+        except Exception as e:
+            type_name = getattr(annotation, "__name__", str(annotation))
+            raise BadRequestError(
+                f"Error parsing parameter '{param_name}'. "
+                f"Must be a valid {type_name}",
+                str(e),
+            )
+
+    @staticmethod
     def resolve_endpoint_params(
         endpoint: Callable, all_params: dict, body: dict
     ) -> dict:
+        """Main method for resolving endpoint parameters"""
         sig = inspect.signature(endpoint)
         kwargs = {}
+
         for name, param in sig.parameters.items():
             annotation = param.annotation
             is_required = param.default is inspect.Parameter.empty
+
             if isinstance(annotation, type) and issubclass(annotation, BaseModel):
-                try:
-                    params = body if body else all_params
-                    kwargs[name] = annotation(**params)
-                except Exception as e:
-                    # Use 422 for Pydantic model validation errors
-                    raise ValidationError(
-                        f"Validation error for parameter '{name}'", str(e)
-                    )
-            else:
-                if name in all_params:
-                    try:
-                        kwargs[name] = annotation(all_params[name])
-                    except Exception as e:
-                        # Use 400 for type conversion errors
-                        raise BadRequestError(
-                            f"Error parsing parameter '{name}'. "
-                            f"Must be a valid {annotation.__name__}",
-                            str(e),
-                        )
-                elif not is_required:
-                    kwargs[name] = param.default
-                else:
-                    # Missing a required parameter is 400
+                kwargs[name] = BaseRouter._resolve_pydantic_model(
+                    annotation, body if body else all_params, name
+                )
+                continue
+
+            if name not in all_params:
+                if is_required:
                     raise BadRequestError(f"Missing required parameter: '{name}'")
+                kwargs[name] = param.default
+                continue
+
+            origin = typing.get_origin(annotation)
+
+            if origin is list and not isinstance(all_params[name], list):
+                kwargs[name] = BaseRouter._resolve_list_param(
+                    name, all_params[name], annotation
+                )
+            else:
+                kwargs[name] = BaseRouter._resolve_scalar_param(
+                    name, all_params[name], annotation
+                )
+
         return kwargs
 
     @property

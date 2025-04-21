@@ -42,9 +42,10 @@ class TornadoDynamicHandler(RequestHandler):
             self.send_error(405)
             return
 
-        query_params = {
-            k: self.get_query_argument(k) for k in self.request.query_arguments
-        }
+        query_params = {}
+        for key in self.request.query_arguments:
+            values = self.get_query_arguments(key)
+            query_params[key] = values[0] if len(values) == 1 else values
 
         all_params = {**self.path_kwargs, **query_params}
         body = getattr(self, "json_body", {})

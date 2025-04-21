@@ -17,7 +17,10 @@ class AioHttpRouter(BaseRouter):
         """
         Handle request routing and parameter resolution for AioHttp
         """
-        query_params = dict(request.query)
+        query_params = {}
+        for key in request.query:
+            values = request.query.getall(key)
+            query_params[key] = values[0] if len(values) == 1 else values
         body = {}
         try:
             body_bytes = await request.read()

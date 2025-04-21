@@ -14,7 +14,10 @@ class QuartRouter(BaseRouter):
 
             async def view_func(**path_params):
                 json_data = await request.get_json(silent=True) or {}
-                query_params = request.args.to_dict()
+                query_params = {}
+                for key in request.args:
+                    values = request.args.getlist(key)
+                    query_params[key] = values[0] if len(values) == 1 else values
                 all_params = {**query_params, **path_params}
                 body = json_data
                 try:

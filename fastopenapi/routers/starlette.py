@@ -17,7 +17,10 @@ class StarletteRouter(BaseRouter):
 
     @classmethod
     async def _starlette_view(cls, request, router, endpoint):
-        query_params = dict(request.query_params)
+        query_params = {}
+        for key in request.query_params:
+            values = request.query_params.getlist(key)
+            query_params[key] = values[0] if len(values) == 1 else values
         body = {}
         try:
             body_bytes = await request.body()

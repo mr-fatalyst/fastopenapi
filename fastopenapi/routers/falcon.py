@@ -76,7 +76,14 @@ class FalconRouter(BaseRouter):
     async def _handle_request(self, endpoint, req, resp, **path_params):
         meta = getattr(endpoint, "__route_meta__", {})
         status_code = meta.get("status_code", 200)
-        all_params = {**dict(req.params), **path_params}
+        all_params = {**path_params}
+        for key in req.params.keys():
+            values = (
+                req.params.getall(key)
+                if hasattr(req.params, "getall")
+                else [req.params.get(key)]
+            )
+            all_params[key] = values[0] if len(values) == 1 else values
         body = await self._read_body(req)
         try:
             kwargs = self.resolve_endpoint_params(endpoint, all_params, body)
