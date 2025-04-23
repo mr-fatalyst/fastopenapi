@@ -9,10 +9,14 @@ FastOpenAPI follows the [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 ### Fixed
 - Fixed issue with parsing repeated query parameters in URL.
 
+### Removed
+- Removed the `use_aliases` from `BaseRouter` and reverted changes from 0.6.0.
+
 ## [0.6.0] – 2025‑04‑16
 
 ### Added
-- The `use_aliases` parameter was added to the `BaseRouter` constructor. Default is `True`. To preserve the previous behavior (without using aliases from Pydantic), set `use_aliases=False`. 
+- The `use_aliases` parameter was added to the `BaseRouter` constructor. Default is `True`. To preserve the previous behavior (without using aliases from Pydantic), set `use_aliases=False`.
+- support for Pydantic models with `alias=` by [PR #8](https://github.com/mr-fatalyst/fastopenapi/pull/8)
 
 ### Changed
 - The `_serialize_response method` is now an instance method (was a `@staticmethod`) — to support `use_aliases`.

@@ -1,7 +1,31 @@
+# ==============================================================================
+# WARNING: This module currently violates the Single Responsibility Principle.
+# It takes on multiple concerns that should ideally be decoupled:
+#
+# Responsibilities overloaded:
+# - Route registration
+# - OpenAPI schema generation
+# - Parameter resolution and validation
+# - Response serialization
+# - Error handling
+# - API documentation UI rendering
+#
+# Structural issues:
+# - Methods operate at inconsistent levels of abstraction
+# - Some functions are overly long and do too much
+# - Inter-method cohesion is weak or unclear
+#
+# Risks and pitfalls:
+# - Missing or weak type annotations in places
+# - Logic and presentation are mixed in some implementations
+#
+# I'm actively collecting feedback and tracking bugs.
+# A full refactor is planned once this phase is complete.
+# ==============================================================================
+
 import inspect
 import re
 import typing
-import warnings
 from collections.abc import Callable
 from http import HTTPStatus
 from typing import Any, ClassVar
@@ -44,7 +68,6 @@ class BaseRouter:
     - title: Title of the API documentation (defaults to "My App").
     - version: Version of the API (defaults to "0.1.0").
     - description: Description of the API
-    - use_aliases: Temporary argument to maintain backward compatibility
     (included in OpenAPI info, default "API documentation").
 
     The BaseRouter allows defining routes using decorator methods (get, post, etc.).
@@ -65,7 +88,6 @@ class BaseRouter:
         title: str = "My App",
         version: str = "0.1.0",
         description: str = "API documentation",
-        use_aliases: bool = True,
     ):
         self.app = app
         self.docs_url = docs_url
@@ -77,15 +99,6 @@ class BaseRouter:
         self.description = description
         self._routes: list[tuple[str, str, Callable]] = []
         self._openapi_schema = None
-        self.use_aliases = use_aliases
-        # TODO Remove use_aliases in 0.7.0
-        if not use_aliases:
-            warnings.warn(
-                "Setting use_aliases=False is deprecated. "
-                "It will be removed in version 0.7.0",
-                FutureWarning,
-                stacklevel=2,
-            )
         if self.app is not None:
             if self.docs_url and self.redoc_url and self.openapi_url:
                 self._register_docs_endpoints()
@@ -226,32 +239,17 @@ class BaseRouter:
     def _build_parameters_and_body(
         self, endpoint, definitions: dict, route_path: str, http_method: str
     ):
+        """Build OpenAPI parameters and request body from endpoint signature."""
         sig = inspect.signature(endpoint)
         parameters = []
         request_body = None
-
         path_params = {match.group(1) for match in re.finditer(r"{(\w+)}", route_path)}
 
         for param_name, param in sig.parameters.items():
-            if isinstance(param.annotation, type) and issubclass(
-                param.annotation, BaseModel
-            ):
+            if self._is_pydantic_model(param.annotation):
                 if http_method.upper() == "GET":
-                    # TODO Remove use_aliases in 0.7.0
-                    model_schema = param.annotation.model_json_schema(
-                        mode="serialization" if self.use_aliases else "validation"
-                    )
-                    required_fields = model_schema.get("required", [])
-                    properties = model_schema.get("properties", {})
-                    for prop_name, prop_schema in properties.items():
-                        parameters.append(
-                            {
-                                "name": prop_name,
-                                "in": "query",
-                                "required": prop_name in required_fields,
-                                "schema": prop_schema,
-                            }
-                        )
+                    query_params = self._build_query_params_from_model(param.annotation)
+                    parameters.extend(query_params)
                 else:
                     model_schema = self._get_model_schema(param.annotation, definitions)
                     request_body = {
@@ -259,19 +257,66 @@ class BaseRouter:
                         "required": param.default is inspect.Parameter.empty,
                     }
             else:
-                location = "path" if param_name in path_params else "query"
-                openapi_type = PYTHON_TYPE_MAPPING.get(param.annotation, "string")
-                parameters.append(
-                    {
-                        "name": param_name,
-                        "in": location,
-                        "required": (param.default is inspect.Parameter.empty)
-                        or (location == "path"),
-                        "schema": {"type": openapi_type},
-                    }
-                )
+                param_info = self._build_parameter_info(param_name, param, path_params)
+                parameters.append(param_info)
 
         return parameters, request_body
+
+    @staticmethod
+    def _is_pydantic_model(annotation) -> bool:
+        return isinstance(annotation, type) and issubclass(annotation, BaseModel)
+
+    @staticmethod
+    def _build_query_params_from_model(model_class) -> list:
+        """Convert Pydantic model fields to query parameters."""
+        parameters = []
+        model_schema = model_class.model_json_schema(mode="serialization")
+        required_fields = model_schema.get("required", [])
+        properties = model_schema.get("properties", {})
+
+        for prop_name, prop_schema in properties.items():
+            parameters.append(
+                {
+                    "name": prop_name,
+                    "in": "query",
+                    "required": prop_name in required_fields,
+                    "schema": prop_schema,
+                }
+            )
+
+        return parameters
+
+    def _build_parameter_info(self, param_name, param, path_params) -> dict:
+        """Build parameter info for path or query parameters."""
+        location = "path" if param_name in path_params else "query"
+        schema = self._build_parameter_schema(param.annotation)
+        is_required = param.default is inspect.Parameter.empty or location == "path"
+
+        return {
+            "name": param_name,
+            "in": location,
+            "required": is_required,
+            "schema": schema,
+        }
+
+    def _build_parameter_schema(self, annotation) -> dict:
+        """Build OpenAPI schema for a parameter based on its type annotation."""
+        origin = typing.get_origin(annotation)
+        if origin is list:
+            return self._build_array_schema(annotation)
+
+        return {"type": PYTHON_TYPE_MAPPING.get(annotation, "string")}
+
+    def _build_array_schema(self, list_annotation) -> dict:
+        """Build OpenAPI schema for an array type."""
+        args = typing.get_args(list_annotation)
+        item_type = "string"  # default
+
+        # Get the inner type if available
+        if args and args[0] in PYTHON_TYPE_MAPPING:
+            item_type = PYTHON_TYPE_MAPPING[args[0]]
+
+        return {"type": "array", "items": {"type": item_type}}
 
     def _build_responses(self, meta: dict, definitions: dict, status_code: str) -> dict:
         responses = {status_code: {"description": HTTPStatus(int(status_code)).phrase}}
@@ -347,19 +392,18 @@ class BaseRouter:
         """
         raise NotImplementedError
 
-    def _serialize_response(self, result: Any) -> Any:
-        from pydantic import BaseModel
-
+    @classmethod
+    def _serialize_response(cls, result: Any) -> Any:
         if isinstance(result, BaseModel):
-            # TODO Remove use_aliases in 0.7.0
-            return result.model_dump(by_alias=self.use_aliases)
+            return result.model_dump(by_alias=True)
         if isinstance(result, list):
-            return [self._serialize_response(item) for item in result]
+            return [cls._serialize_response(item) for item in result]
         if isinstance(result, dict):
-            return {k: self._serialize_response(v) for k, v in result.items()}
+            return {k: cls._serialize_response(v) for k, v in result.items()}
         return result
 
-    def _get_model_schema(self, model: type[BaseModel], definitions: dict) -> dict:
+    @classmethod
+    def _get_model_schema(cls, model: type[BaseModel], definitions: dict) -> dict:
         """
         Get the OpenAPI schema for a Pydantic model, with caching for better performance
         """
@@ -367,11 +411,10 @@ class BaseRouter:
         cache_key = f"{model.__module__}.{model_name}"
 
         # Check if the schema is already in the class-level cache
-        if cache_key not in self._model_schema_cache:
+        if cache_key not in cls._model_schema_cache:
             # Generate the schema if it's not in the cache
-            # TODO Remove use_aliases in 0.7.0
             model_schema = model.model_json_schema(
-                mode="serialization" if self.use_aliases else "validation",
+                mode="serialization",
                 ref_template="#/components/schemas/{model}",
             )
 
@@ -382,11 +425,11 @@ class BaseRouter:
                     del model_schema[key]
 
             # Add schema to the cache
-            self._model_schema_cache[cache_key] = model_schema
+            cls._model_schema_cache[cache_key] = model_schema
 
         # Make sure the schema is in the definitions dictionary
         if model_name not in definitions:
-            definitions[model_name] = self._model_schema_cache[cache_key]
+            definitions[model_name] = cls._model_schema_cache[cache_key]
 
         return {"$ref": f"#/components/schemas/{model_name}"}
 

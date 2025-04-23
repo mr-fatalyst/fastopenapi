@@ -76,12 +76,6 @@ class TestBaseRouter:
         assert self.router_no_app._routes == []
         assert self.router_no_app._openapi_schema is None
 
-    def test_use_aliases_deprecation_warning(self):
-        with pytest.warns(FutureWarning) as record:
-            BaseRouter(use_aliases=False)
-        msg = str(record[0].message)
-        assert "will be removed in version 0.7.0" in msg
-
     def test_add_route(self):
         # Test adding a route to the router
         def test_endpoint():
@@ -599,3 +593,142 @@ class TestBaseRouter:
 
         with pytest.raises(NotImplementedError):
             router._register_docs_endpoints()
+
+    def test_resolve_list_param(self):
+        """Test resolving list parameters."""
+        # Test successful list param resolution
+        param_name = "tags"
+        value = "python"
+        annotation = list[str]
+
+        result = BaseRouter._resolve_list_param(param_name, value, annotation)
+        assert result == ["python"]
+
+        # Test list with int conversion
+        result = BaseRouter._resolve_list_param("numbers", "42", list[int])
+        assert result == [42]
+
+        # Test error case
+        with pytest.raises(BadRequestError) as excinfo:
+            BaseRouter._resolve_list_param("numbers", "not_a_number", list[int])
+        assert "Error parsing parameter 'numbers' as list item" in str(excinfo.value)
+        assert "Must be a valid int" in str(excinfo.value)
+
+        # Test with no type args
+        result = BaseRouter._resolve_list_param("generic", "value", list)
+        assert result == ["value"]
+
+    def test_resolve_scalar_param(self):
+        """Test resolving scalar parameters."""
+        # Test successful scalar param resolution
+        result = BaseRouter._resolve_scalar_param("age", "42", int)
+        assert result == 42
+
+        # Test error case
+        with pytest.raises(BadRequestError) as excinfo:
+            BaseRouter._resolve_scalar_param("age", "not_a_number", int)
+        assert "Error parsing parameter 'age'" in str(excinfo.value)
+        assert "Must be a valid int" in str(excinfo.value)
+
+    def test_resolve_pydantic_model(self):
+        """Test resolving parameters for a Pydantic model."""
+        # Successful case
+        params = {"name": "John", "age": "30"}
+        result = BaseRouter._resolve_pydantic_model(TestModel, params, "user")
+        assert isinstance(result, TestModel)
+        assert result.name == "John"
+        assert result.age == 30
+
+        # Test with list field as string (conversion to list)
+        class ModelWithList(BaseModel):
+            tags: list[str]
+            name: str
+
+        params = {"tags": "python", "name": "John"}
+        result = BaseRouter._resolve_pydantic_model(ModelWithList, params, "model")
+        assert isinstance(result, ModelWithList)
+        assert result.tags == ["python"]
+
+        # Error case
+        with pytest.raises(ValidationError) as excinfo:
+            BaseRouter._resolve_pydantic_model(TestModel, {"name": "John"}, "user")
+        assert "Validation error for parameter 'user'" in str(excinfo.value)
+
+    def test_build_array_schema(self):
+        """Test building OpenAPI schema for array types."""
+        # Test with typed list
+        schema = self.router._build_array_schema(list[int])
+        assert schema["type"] == "array"
+        assert schema["items"]["type"] == "integer"
+
+        # Test with string list
+        schema = self.router._build_array_schema(list[str])
+        assert schema["type"] == "array"
+        assert schema["items"]["type"] == "string"
+
+        # Test with untyped list
+        schema = self.router._build_array_schema(list)
+        assert schema["type"] == "array"
+        assert schema["items"]["type"] == "string"  # Default type
+
+    def test_resolve_endpoint_params_with_list(self):
+        """Test resolving endpoint params with list type."""
+
+        # Define endpoint with list parameter
+        def endpoint(tags: list[str]):
+            return tags
+
+        # Test with string value that should be converted to list
+        params = {"tags": "python"}
+        result = BaseRouter.resolve_endpoint_params(endpoint, params, {})
+        assert result["tags"] == ["python"]
+
+        # Test with already list value
+        params = {"tags": ["python", "fastapi"]}
+        result = BaseRouter.resolve_endpoint_params(endpoint, params, {})
+        assert result["tags"] == ["python", "fastapi"]
+
+    def test_build_parameter_schema(self):
+        """Test the _build_parameter_schema method.
+        This targets both branches - list type and non-list type."""
+
+        # Test with a list type - should call _build_array_schema
+        list_schema = self.router._build_parameter_schema(list[str])
+        assert list_schema["type"] == "array"
+        assert list_schema["items"]["type"] == "string"
+
+        # Test with a typing.List type - should also call _build_array_schema
+        typing_list_schema = self.router._build_parameter_schema(list[int])
+        assert typing_list_schema["type"] == "array"
+        assert typing_list_schema["items"]["type"] == "integer"
+
+        # Test with non-list type, which is in PYTHON_TYPE_MAPPING
+        int_schema = self.router._build_parameter_schema(int)
+        assert int_schema["type"] == "integer"
+
+        # Test with non-list type, not in PYTHON_TYPE_MAPPING (should default to string)
+        class CustomType:
+            pass
+
+        custom_schema = self.router._build_parameter_schema(CustomType)
+        assert custom_schema["type"] == "string"
+
+    def test_resolve_pydantic_model_no_model_fields(self):
+        """
+        Test the branch in _resolve_pydantic_model where
+        hasattr(model_class, "model_fields") is False
+        """
+
+        class FakeModel:
+            def __init__(self, **kwargs):
+                for key, value in kwargs.items():
+                    setattr(self, key, value)
+
+        assert not hasattr(FakeModel, "model_fields")
+
+        params = {"name": "test", "value": 42}
+        result = BaseRouter._resolve_pydantic_model(FakeModel, params, "fake_model")
+
+        assert isinstance(result, FakeModel)
+        assert result.name == "test"
+        assert result.value == 42
