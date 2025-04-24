@@ -42,6 +42,11 @@ def app(items_db):  # noqa: C901
         version="0.1.0",
     )
 
+    @router.get("/list-test")
+    def list_endpoint(param1: str, param2: list[str] = None):
+        """Test endpoint that returns the parameters it receives"""
+        return {"received_param1": param1, "received_param2": param2}
+
     @router.get("/items", response_model=list[ItemResponse], tags=["items"])
     def get_items():
         """Get all items"""

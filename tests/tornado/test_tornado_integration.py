@@ -42,6 +42,11 @@ class TestTornadoIntegration(AsyncHTTPTestCase):
             version="0.1.0",
         )
 
+        @router.get("/list-test")
+        async def list_endpoint(param1: str, param2: list[str] = None):
+            """Test endpoint that returns the parameters it receives"""
+            return {"received_param1": param1, "received_param2": param2}
+
         @router.get("/items-sync", response_model=list[ItemResponse], tags=["items"])
         def get_items_sync():
             return [Item(**item) for item in self.items_db]
@@ -285,3 +290,25 @@ class TestTornadoIntegration(AsyncHTTPTestCase):
         self.assertIn("text/html", response.headers.get("Content-Type", ""))
         html_text = response.body.decode().lower()
         self.assertIn("redoc", html_text)
+
+    @gen_test
+    async def test_query_parameters_handling(self):
+        """Test handling of query parameters"""
+        # Test with a single value parameter
+        response = await self.http_client.fetch(
+            self.get_url("/list-test?param1=single_value"), raise_error=False
+        )
+        self.assertEqual(response.code, 200)
+        data = self.parse_json(response)
+        self.assertEqual(data["received_param1"], "single_value")
+
+        # Test with a parameter that has multiple values
+        response = await self.http_client.fetch(
+            self.get_url("/list-test?param1=first_value&param2=value1&param2=value2"),
+            raise_error=False,
+        )
+        self.assertEqual(response.code, 200)
+        data = self.parse_json(response)
+        self.assertEqual(data["received_param1"], "first_value")
+        self.assertTrue(isinstance(data["received_param2"], list))
+        self.assertEqual(data["received_param2"], ["value1", "value2"])

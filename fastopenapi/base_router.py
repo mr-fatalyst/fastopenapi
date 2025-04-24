@@ -31,6 +31,8 @@ from http import HTTPStatus
 from typing import Any, ClassVar
 
 from pydantic import BaseModel
+from pydantic import ValidationError as PydanticValidationError
+from pydantic import create_model
 
 from fastopenapi.error_handler import (
     BadRequestError,
@@ -77,13 +79,14 @@ class BaseRouter:
 
     # Class-level cache for model schemas to avoid redundant processing
     _model_schema_cache: ClassVar[dict[str, dict]] = {}
+    _param_model_cache: ClassVar[dict[frozenset, type[BaseModel]]] = {}
 
     def __init__(
         self,
         app: Any = None,
-        docs_url: str = "/docs",
-        redoc_url: str = "/redoc",
-        openapi_url: str = "/openapi.json",
+        docs_url: str | None = "/docs",
+        redoc_url: str | None = "/redoc",
+        openapi_url: str | None = "/openapi.json",
         openapi_version: str = "3.0.0",
         title: str = "My App",
         version: str = "0.1.0",
@@ -166,12 +169,7 @@ class BaseRouter:
             "description": self.description,
         }
 
-        schema = {
-            "openapi": self.openapi_version,
-            "info": info,
-            "paths": {},
-            "components": {"schemas": {}},
-        }
+        paths = {}
         definitions = {}
 
         # Add standard error responses to components schema
@@ -183,8 +181,19 @@ class BaseRouter:
             operation = self._build_operation(
                 endpoint, definitions, openapi_path, method
             )
-            schema["paths"].setdefault(openapi_path, {})[method.lower()] = operation
-        schema["components"]["schemas"].update(definitions)
+
+            if openapi_path not in paths:
+                paths[openapi_path] = {}
+
+            paths[openapi_path][method.lower()] = operation
+
+        schema = {
+            "openapi": self.openapi_version,
+            "info": info,
+            "paths": paths,
+            "components": {"schemas": definitions},
+        }
+
         return schema
 
     def _generate_error_schema(self) -> dict[str, Any]:
@@ -209,7 +218,7 @@ class BaseRouter:
         }
 
     def _build_operation(
-        self, endpoint, definitions: dict, route_path: str, http_method: str
+        self, endpoint: Callable, definitions: dict, route_path: str, http_method: str
     ) -> dict:
         parameters, request_body = self._build_parameters_and_body(
             endpoint, definitions, route_path, http_method
@@ -501,72 +510,120 @@ class BaseRouter:
                 f"Validation error for parameter '{param_name}'", str(e)
             )
 
-    @staticmethod
-    def _resolve_list_param(param_name, value, annotation):
-        """Resolving a list-type parameter"""
-        args = typing.get_args(annotation)
-        try:
-            if args:
-                return [args[0](value)]
-            else:
-                return [value]
-        except Exception as e:
-            type_name = args[0].__name__ if args else "value"
-            raise BadRequestError(
-                f"Error parsing parameter '{param_name}' as list item. "
-                f"Must be a valid {type_name}",
-                str(e),
-            )
-
-    @staticmethod
-    def _resolve_scalar_param(param_name, value, annotation):
-        """Resolving a scalar parameter"""
-        try:
-            return annotation(value)
-        except Exception as e:
-            type_name = getattr(annotation, "__name__", str(annotation))
-            raise BadRequestError(
-                f"Error parsing parameter '{param_name}'. "
-                f"Must be a valid {type_name}",
-                str(e),
-            )
-
-    @staticmethod
+    @classmethod
     def resolve_endpoint_params(
-        endpoint: Callable, all_params: dict, body: dict
-    ) -> dict:
-        """Main method for resolving endpoint parameters"""
+        cls, endpoint: Callable, all_params: dict[str, Any], body: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Resolves endpoint parameters using Pydantic validation with caching"""
         sig = inspect.signature(endpoint)
         kwargs = {}
+        model_fields = {}
+        model_values = {}
+        param_types = cls._extract_param_types(sig)
 
+        # Process each parameter from the endpoint signature
         for name, param in sig.parameters.items():
             annotation = param.annotation
-            is_required = param.default is inspect.Parameter.empty
 
-            if isinstance(annotation, type) and issubclass(annotation, BaseModel):
-                kwargs[name] = BaseRouter._resolve_pydantic_model(
-                    annotation, body if body else all_params, name
+            # Handle Pydantic model parameters
+            if cls._is_pydantic_model(annotation):
+                kwargs[name] = cls._process_pydantic_param(
+                    name, annotation, body if body else all_params
                 )
                 continue
 
+            # Handle missing parameters
             if name not in all_params:
-                if is_required:
-                    raise BadRequestError(f"Missing required parameter: '{name}'")
-                kwargs[name] = param.default
+                kwargs[name] = cls._handle_missing_param(name, param)
                 continue
 
-            origin = typing.get_origin(annotation)
+            # Collect fields for dynamic model validation
+            model_fields[name] = (
+                annotation,
+                param.default if param.default is not inspect.Parameter.empty else ...,
+            )
+            model_values[name] = all_params[name]
 
-            if origin is list and not isinstance(all_params[name], list):
-                kwargs[name] = BaseRouter._resolve_list_param(
-                    name, all_params[name], annotation
-                )
-            else:
-                kwargs[name] = BaseRouter._resolve_scalar_param(
-                    name, all_params[name], annotation
-                )
+        # Validate collected parameters using dynamic model
+        if model_fields:
+            validated_params = cls._validate_with_dynamic_model(
+                endpoint, model_fields, model_values, param_types
+            )
+            kwargs.update(validated_params)
 
         return kwargs
+
+    @classmethod
+    def _extract_param_types(cls, sig: inspect.Signature) -> dict[str, Any]:
+        """Extract parameter types from signature"""
+        return {name: param.annotation for name, param in sig.parameters.items()}
+
+    @classmethod
+    def _process_pydantic_param(
+        cls, name: str, model_class: type[BaseModel], params: dict[str, Any]
+    ) -> BaseModel:
+        """Process a parameter that's a Pydantic model"""
+        try:
+            return cls._resolve_pydantic_model(model_class, params, name)
+        except Exception as e:
+            raise ValidationError(f"Validation error for parameter '{name}'", str(e))
+
+    @staticmethod
+    def _handle_missing_param(name: str, param: inspect.Parameter) -> Any:
+        """Handle parameters not provided in the request"""
+        if param.default is inspect.Parameter.empty:
+            raise BadRequestError(f"Missing required parameter: '{name}'")
+        return param.default
+
+    @classmethod
+    def _validate_with_dynamic_model(
+        cls,
+        endpoint: Callable,
+        model_fields: dict,
+        model_values: dict,
+        param_types: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        """Validate parameters using a dynamically created Pydantic model"""
+        # Create cache key for the dynamic model
+        cache_key = frozenset(
+            (endpoint.__module__, endpoint.__name__, name, str(ann))
+            for name, (ann, _) in model_fields.items()
+        )
+
+        # Get or create the model class
+        if cache_key not in cls._param_model_cache:
+            cls._param_model_cache[cache_key] = create_model(
+                "ParamsModel", **model_fields
+            )
+
+        try:
+            # Validate parameters against the model
+            validated = cls._param_model_cache[cache_key](**model_values)
+            return validated.model_dump()
+        except PydanticValidationError as e:
+            raise cls._handle_validation_error(e, param_types)
+
+    @staticmethod
+    def _handle_validation_error(
+        error: PydanticValidationError, param_types: dict[str, Any]
+    ) -> BadRequestError:
+        """Handle validation errors with detailed messages"""
+        exc = BadRequestError("Parameter validation failed", str(error))
+        errors = error.errors()
+        if errors:
+            error_info = errors[0]
+            loc = error_info.get("loc", [])
+            if loc and len(loc) > 0:
+                param_name = str(loc[0])
+                if param_name in param_types:
+                    type_name = getattr(param_types[param_name], "__name__", "value")
+                    exc = BadRequestError(
+                        f"Error parsing parameter '{param_name}'. "
+                        f"Must be a valid {type_name}",
+                        str(error_info.get("msg", "")),
+                    )
+
+        return exc
 
     @property
     def openapi(self) -> dict:

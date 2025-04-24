@@ -156,3 +156,22 @@ class TestQuartIntegration:
         data = await response.data
         html_text = data.decode()
         assert "redoc" in html_text
+
+    @pytest.mark.asyncio
+    async def test_query_parameters_handling(self, client):
+        """Test handling of query parameters"""
+        # Test with a single value parameter
+        response = await client.get("/list-test?param1=single_value")
+        assert response.status_code == 200
+        data = await response.get_json()
+        assert data["received_param1"] == "single_value"
+
+        # Test with a parameter that has multiple values
+        response = await client.get(
+            "/list-test?param1=first_value&param2=value1&param2=value2"
+        )
+        assert response.status_code == 200
+        data = await response.get_json()
+        assert data["received_param1"] == "first_value"
+        assert isinstance(data["received_param2"], list)
+        assert data["received_param2"] == ["value1", "value2"]

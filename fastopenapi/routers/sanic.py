@@ -18,7 +18,7 @@ class SanicRouter(BaseRouter):
         async def view_func(request, **path_params):
             query_params = {}
             for k, v in request.args.items():
-                values = request.args.getall(k)
+                values = request.args.getlist(k)
                 query_params[k] = values[0] if len(values) == 1 else values
             json_body = request.json or {}
             all_params = {**query_params, **path_params}

@@ -115,14 +115,6 @@ class FalconRouter(BaseRouter):
             pass
         return {}
 
-    # def _handle_request_error(self, resp, error_message: str):
-    #     resp.status = falcon.HTTP_422
-    #     resp.media = {"detail": error_message}
-    #
-    # def _handle_response_error(self, resp, error_message: str):
-    #     resp.status = falcon.HTTP_500
-    #     resp.media = {"detail": error_message}
-
     def _register_docs_endpoints(self):
         outer = self
 

@@ -25,12 +25,10 @@ class BaseRecordHandler(RequestHandler):
 
 class RecordsHandler(BaseRecordHandler):
     def get(self):
-        """Получить все записи (эквивалент @app.get("/records"))"""
         records = store.get_all()
         self.write(json.dumps([record.model_dump() for record in records]))
 
     def post(self):
-        """Создать новую запись (эквивалент @app.post("/records"))"""
         try:
             data = json.loads(self.request.body)
             record_data = RecordCreate(**data)
@@ -44,7 +42,6 @@ class RecordsHandler(BaseRecordHandler):
 
 class RecordHandler(BaseRecordHandler):
     def get(self, record_id):
-        """Получить конкретную запись (эквивалент @app.get("/records/<record_id>"))"""
         record = store.get_by_id(record_id)
         if record:
             self.write(json.dumps(record.model_dump()))
@@ -53,7 +50,6 @@ class RecordHandler(BaseRecordHandler):
             self.write(json.dumps({"error": "Record not found"}))
 
     def put(self, record_id):
-        """Заменить запись (эквивалент @app.put("/records/<record_id>"))"""
         try:
             if not store.get_by_id(record_id):
                 self.set_status(404)
@@ -71,7 +67,6 @@ class RecordHandler(BaseRecordHandler):
             self.write(json.dumps({"error": str(e)}))
 
     def patch(self, record_id):
-        """Обновить запись частично (эквивалент @app.patch("/records/<record_id>"))"""
         try:
             data = json.loads(self.request.body)
             record_data = RecordUpdate(**data)
@@ -86,7 +81,6 @@ class RecordHandler(BaseRecordHandler):
             self.write(json.dumps({"error": str(e)}))
 
     def delete(self, record_id):
-        """Удалить запись (эквивалент @app.delete("/records/<record_id>"))"""
         if store.delete(record_id):
             self.set_status(204)
             self.finish()
@@ -98,9 +92,8 @@ class RecordHandler(BaseRecordHandler):
 def make_app():
     return tornado.web.Application(
         [
-            (r"/records", RecordsHandler),  # Обрабатывает GET и POST для /records
+            (r"/records", RecordsHandler),
             (r"/records/([^/]+)", RecordHandler),
-            # Обрабатывает GET, PUT, PATCH, DELETE для /records/<id>
         ]
     )
 

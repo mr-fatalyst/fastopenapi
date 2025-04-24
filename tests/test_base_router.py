@@ -594,42 +594,6 @@ class TestBaseRouter:
         with pytest.raises(NotImplementedError):
             router._register_docs_endpoints()
 
-    def test_resolve_list_param(self):
-        """Test resolving list parameters."""
-        # Test successful list param resolution
-        param_name = "tags"
-        value = "python"
-        annotation = list[str]
-
-        result = BaseRouter._resolve_list_param(param_name, value, annotation)
-        assert result == ["python"]
-
-        # Test list with int conversion
-        result = BaseRouter._resolve_list_param("numbers", "42", list[int])
-        assert result == [42]
-
-        # Test error case
-        with pytest.raises(BadRequestError) as excinfo:
-            BaseRouter._resolve_list_param("numbers", "not_a_number", list[int])
-        assert "Error parsing parameter 'numbers' as list item" in str(excinfo.value)
-        assert "Must be a valid int" in str(excinfo.value)
-
-        # Test with no type args
-        result = BaseRouter._resolve_list_param("generic", "value", list)
-        assert result == ["value"]
-
-    def test_resolve_scalar_param(self):
-        """Test resolving scalar parameters."""
-        # Test successful scalar param resolution
-        result = BaseRouter._resolve_scalar_param("age", "42", int)
-        assert result == 42
-
-        # Test error case
-        with pytest.raises(BadRequestError) as excinfo:
-            BaseRouter._resolve_scalar_param("age", "not_a_number", int)
-        assert "Error parsing parameter 'age'" in str(excinfo.value)
-        assert "Must be a valid int" in str(excinfo.value)
-
     def test_resolve_pydantic_model(self):
         """Test resolving parameters for a Pydantic model."""
         # Successful case
@@ -679,7 +643,7 @@ class TestBaseRouter:
             return tags
 
         # Test with string value that should be converted to list
-        params = {"tags": "python"}
+        params = {"tags": ["python"]}
         result = BaseRouter.resolve_endpoint_params(endpoint, params, {})
         assert result["tags"] == ["python"]
 
@@ -732,3 +696,60 @@ class TestBaseRouter:
         assert isinstance(result, FakeModel)
         assert result.name == "test"
         assert result.value == 42
+
+    def test_handle_validation_error_no_errors(self):
+        """Test _handle_validation_error when error.errors() returns an empty list"""
+        # Create a mock PydanticValidationError that returns an empty errors list
+        from unittest.mock import MagicMock
+
+        mock_error = MagicMock()
+        mock_error.errors.return_value = (
+            []
+        )  # Empty list will make 'if errors:' evaluate to False
+        # String representation of the error for the error message
+        mock_error.__str__.return_value = "Empty validation error"
+
+        param_types = {"name": str, "age": int}
+
+        # Call the method and expect a BadRequestError
+        error = BaseRouter._handle_validation_error(mock_error, param_types)
+
+        # Check that we got the generic error message (else branch after 'if errors:')
+        assert isinstance(error, BadRequestError)
+        assert "Parameter validation failed" in error.message
+        assert "Empty validation error" in error.details
+
+    def test_handle_validation_error_empty_loc(self):
+        """Test _handle_validation_error when 'loc' is empty"""
+
+        mock_error = MagicMock()
+        mock_error.errors.return_value = [
+            {"msg": "validation error message", "loc": []}  # Empty loc list
+        ]
+        mock_error.__str__.return_value = "Error with empty location"
+
+        param_types = {"name": str, "age": int}
+
+        error = BaseRouter._handle_validation_error(mock_error, param_types)
+
+        assert isinstance(error, BadRequestError)
+        assert "Parameter validation failed" in error.message
+        assert "Error with empty location" in error.details
+
+    def test_handle_validation_error_param_not_in_types(self):
+        """Test _handle_validation_error when parameter is not in param_types"""
+        from unittest.mock import MagicMock
+
+        mock_error = MagicMock()
+        mock_error.errors.return_value = [
+            {"loc": ["unknown_param"], "msg": "validation error message"}
+        ]
+        mock_error.__str__.return_value = "Error with unknown parameter"
+
+        param_types = {}
+
+        error = BaseRouter._handle_validation_error(mock_error, param_types)
+
+        assert isinstance(error, BadRequestError)
+        assert "Parameter validation failed" in error.message
+        assert "Error with unknown parameter" in error.details

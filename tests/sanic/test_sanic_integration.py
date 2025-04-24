@@ -162,3 +162,29 @@ class TestSanicIntegration:
         assert "text/html" in response.headers["content-type"]
         html_text = response.text
         assert "redoc" in html_text
+
+    @pytest.mark.asyncio
+    async def test_query_parameter_processing(self, client):
+        """Test handling of query parameters"""
+        # Test case 1: Single parameter with a single value
+        _, response = await client.get("/echo?param=value")
+        assert response.status == 200
+        assert response.json["param"] == "value"
+
+        # Test case 2: Single parameter with multiple values
+        _, response = await client.get("/echo?param2=value1&param2=value2")
+        assert response.status == 200
+        assert isinstance(response.json["param2"], list)
+        assert response.json["param2"] == ["value1", "value2"]
+
+        # Test case 3: Multiple parameters with mixed value counts
+        _, response = await client.get("/echo?param=value&param2=value1&param2=value2")
+        assert response.status == 200
+        assert response.json["param"] == "value"
+        assert isinstance(response.json["param2"], list)
+        assert response.json["param2"] == ["value1", "value2"]
+
+        # Test case 4: Parameter with special characters
+        _, response = await client.get("/echo?param=hello%20world")
+        assert response.status == 200
+        assert response.json["param"] == "hello world"

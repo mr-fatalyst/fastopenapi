@@ -40,6 +40,11 @@ def app(items_db):  # noqa: C901
         version="0.1.0",
     )
 
+    @router.get("/echo")
+    async def echo_params(param: str = "", param2: list[str] = ""):
+        """Echo back all received parameters"""
+        return {"param": param, "param2": param2}
+
     @router.get("/items", response_model=list[ItemResponse], tags=["items"])
     async def get_items():
         """Get all items"""
