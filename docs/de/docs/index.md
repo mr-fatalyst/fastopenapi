@@ -25,7 +25,7 @@
 
 ## Über das Projekt
 
-**FastOpenAPI** ist eine Python-Bibliothek zur Generierung und Integration von OpenAPI-Schemas mithilfe von Pydantic-Modellen in verschiedenen Webframeworks. Inspiriert von FastAPI bietet sie eine vergleichbare Entwicklererfahrung – aber für Frameworks wie AIOHTTP, Falcon, Flask, Quart, Sanic, Starlette und Tornado. Mit FastOpenAPI kannst du interaktive API-Dokumentation und automatische Validierung zu bestehenden Projekten hinzufügen, ohne das Framework wechseln zu müssen.
+**FastOpenAPI** ist eine Python-Bibliothek zur Generierung und Integration von OpenAPI-Schemas mithilfe von Pydantic-Modellen in verschiedenen Webframeworks. Inspiriert von FastAPI bietet sie eine vergleichbare Entwicklererfahrung – aber für Frameworks wie AIOHTTP, Falcon, Flask, Quart, Sanic, Starlette, Tornado und Django. Mit FastOpenAPI kannst du interaktive API-Dokumentation und automatische Validierung zu bestehenden Projekten hinzufügen, ohne das Framework wechseln zu müssen.
 
 FastOpenAPI befindet sich derzeit in aktiver Entwicklung (noch vor Version 1.0). Die Bibliothek ist schon jetzt einsatzfähig, aber Änderungen sind möglich. Feedback und Beiträge sind sehr willkommen.
 
@@ -33,7 +33,7 @@ FastOpenAPI befindet sich derzeit in aktiver Entwicklung (noch vor Version 1.0).
 
 - **Automatische OpenAPI-Generierung** – definiere deine Routen und Modelle, FastOpenAPI erstellt automatisch eine vollständige OpenAPI-Spezifikation.
 - **Unterstützung für Pydantic v2** – nutzt Pydantic zur Validierung und Serialisierung von Daten, sowohl für Anfragen als auch für Antworten.
-- **Multi-Framework-Unterstützung** – unterstützt AIOHTTP, Falcon, Flask, Quart, Sanic, Starlette und Tornado.
+- **Multi-Framework-Unterstützung** – unterstützt AIOHTTP, Falcon, Flask, Quart, Sanic, Starlette, Tornado und Django.
 - **FastAPI-ähnlicher Routing-Stil** – verwende `@router.get`, `@router.post` etc., ähnlich wie bei FastAPI.
 - **Interaktive Dokumentation** – Swagger UI (`/docs`) und ReDoc (`/redoc`) sind direkt integriert.
 - **Fehlerbehandlung und Validierung** – bei ungültigen Daten wird ein JSON-Fehler zurückgegeben. Enthält Standardfehlerklassen für 400, 404 usw.

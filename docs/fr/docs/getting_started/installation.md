@@ -38,5 +38,8 @@ pip install fastopenapi[starlette]
 ```bash
 pip install fastopenapi[tornado]
 ```
+```bash
+pip install fastopenapi[django]
+```
 
 ---

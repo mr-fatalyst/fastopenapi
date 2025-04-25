@@ -6,6 +6,9 @@ FastOpenAPI follows the [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ## [0.7.0] - Unreleased
 
+### Added
+- `DjangoRouter` for integration with the `Django` framework.
+
 ### Fixed
 - Fixed issue with parsing repeated query parameters in URL.
 

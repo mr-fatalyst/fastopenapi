@@ -16,7 +16,8 @@ fastopenapi/
     ├── quart.py
     ├── sanic.py
     ├── starlette.py
-    └── tornado.py
+    ├── tornado.py
+    └── django.py
 ```
 
 ---
@@ -159,6 +160,25 @@ router = TornadoRouter(app=app)
 @router.get("/status")
 def status():
     return {"running": True}
+```
+
+---
+
+### DjangoRouter
+
+Use for Django integration.
+
+```python
+from django.urls import path
+from fastopenapi.routers import DjangoRouter
+
+router = DjangoRouter(app=True)
+
+@router.get("/status")
+async def status():
+    return {"status": "ok"}
+
+urlpatterns = [path("", router.urls)]
 ```
 
 ---
