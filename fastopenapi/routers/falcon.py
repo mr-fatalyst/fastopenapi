@@ -1,9 +1,9 @@
 import inspect
-import json
 from collections.abc import Callable
 from http import HTTPStatus
 
 import falcon.asgi
+from pydantic_core import from_json
 
 from fastopenapi.base_router import BaseRouter
 
@@ -110,7 +110,7 @@ class FalconRouter(BaseRouter):
         try:
             body_bytes = await req.bounded_stream.read()
             if body_bytes:
-                return json.loads(body_bytes.decode("utf-8"))
+                return from_json(body_bytes.decode("utf-8"))
         except Exception:
             pass
         return {}

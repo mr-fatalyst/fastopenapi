@@ -2,10 +2,14 @@ import inspect
 import re
 from collections.abc import Callable
 
-from tornado.escape import json_decode, json_encode
+from pydantic_core import from_json, to_json
 from tornado.web import Application, RequestHandler, url
 
 from fastopenapi.base_router import BaseRouter
+
+
+def json_encode(data):
+    return to_json(data).decode("utf-8").replace("</", "<\\/")
 
 
 class TornadoDynamicHandler(RequestHandler):
@@ -26,7 +30,7 @@ class TornadoDynamicHandler(RequestHandler):
     async def prepare(self):
         if self.request.body:
             try:
-                self.json_body = json_decode(self.request.body)
+                self.json_body = from_json(self.request.body)
             except Exception:
                 self.json_body = {}
         else:

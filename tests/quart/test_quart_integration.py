@@ -1,6 +1,5 @@
-import json
-
 import pytest
+from pydantic_core import to_json
 
 
 class TestQuartIntegration:
@@ -60,7 +59,7 @@ class TestQuartIntegration:
         new_item = {"name": "New Item", "description": "New Description"}
         response = await client.post(
             "/items",
-            data=json.dumps(new_item),
+            data=to_json(new_item).decode("utf-8"),
             headers={"Content-Type": "application/json"},
         )
 
@@ -76,7 +75,7 @@ class TestQuartIntegration:
         new_item = {"name": None, "description": "New Description"}
         response = await client.post(
             "/items",
-            data=json.dumps(new_item),
+            data=to_json(new_item).decode("utf-8"),
             headers={"Content-Type": "application/json"},
         )
 
@@ -103,7 +102,7 @@ class TestQuartIntegration:
         update_data = {"name": "Updated Item", "description": "Updated Description"}
         response = await client.put(
             "/items/2",
-            data=json.dumps(update_data),
+            data=to_json(update_data).decode("utf-8"),
             headers={"Content-Type": "application/json"},
         )
 

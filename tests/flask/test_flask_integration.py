@@ -1,4 +1,4 @@
-import json
+from pydantic_core import from_json, to_json
 
 
 class TestFlaskIntegration:
@@ -8,7 +8,7 @@ class TestFlaskIntegration:
         response = client.get("/items")
 
         assert response.status_code == 200
-        result = json.loads(response.text)
+        result = from_json(response.text)
         assert len(result) == 2
         assert result[0]["name"] == "Item 1"
         assert result[1]["name"] == "Item 2"
@@ -18,7 +18,7 @@ class TestFlaskIntegration:
         response = client.get("/items-fail")
 
         assert response.status_code == 500
-        result = json.loads(response.text)
+        result = from_json(response.text)
         assert result["error"]["message"] == "TEST ERROR"
 
     def test_get_item(self, client):
@@ -26,7 +26,7 @@ class TestFlaskIntegration:
         response = client.get("/items/1")
 
         assert response.status_code == 200
-        result = json.loads(response.text)
+        result = from_json(response.text)
         assert result["id"] == 1
         assert result["name"] == "Item 1"
         assert result["description"] == "Description 1"
@@ -36,7 +36,7 @@ class TestFlaskIntegration:
         response = client.get("/items/abc")
 
         assert response.status_code == 400
-        result = json.loads(response.text)
+        result = from_json(response.text)
         assert result["error"]["message"] == (
             "Error parsing parameter 'item_id'. Must be a valid int"
         )
@@ -52,12 +52,12 @@ class TestFlaskIntegration:
         new_item = {"name": "New Item", "description": "New Description"}
         response = client.post(
             "/items",
-            data=json.dumps(new_item),
+            data=to_json(new_item).decode("utf-8"),
             headers={"Content-Type": "application/json"},
         )
 
         assert response.status_code == 201
-        result = json.loads(response.text)
+        result = from_json(response.text)
         assert result["id"] == 3
         assert result["name"] == "New Item"
         assert result["description"] == "New Description"
@@ -67,12 +67,12 @@ class TestFlaskIntegration:
         new_item = {"name": None, "description": "New Description"}
         response = client.post(
             "/items",
-            data=json.dumps(new_item),
+            data=to_json(new_item).decode("utf-8"),
             headers={"Content-Type": "application/json"},
         )
 
         assert response.status_code == 422
-        result = json.loads(response.text)
+        result = from_json(response.text)
         assert "Validation error for parameter" in result["error"]["message"]
 
     def test_create_item_invalid_json(self, client):
@@ -84,7 +84,7 @@ class TestFlaskIntegration:
         )
 
         assert response.status_code == 422
-        result = json.loads(response.text)
+        result = from_json(response.text)
         assert "Validation error for parameter" in result["error"]["message"]
 
     def test_update_item(self, client):
@@ -92,12 +92,12 @@ class TestFlaskIntegration:
         update_data = {"name": "Updated Item", "description": "Updated Description"}
         response = client.put(
             "/items/2",
-            data=json.dumps(update_data),
+            data=to_json(update_data).decode("utf-8"),
             headers={"Content-Type": "application/json"},
         )
 
         assert response.status_code == 200
-        result = json.loads(response.text)
+        result = from_json(response.text)
         assert result["id"] == 2
         assert result["name"] == "Updated Item"
         assert result["description"] == "Updated Description"
@@ -117,7 +117,7 @@ class TestFlaskIntegration:
         response = client.get("/openapi.json")
 
         assert response.status_code == 200
-        schema = json.loads(response.text)
+        schema = from_json(response.text)
         assert schema["info"]["title"] == "Test API"
         assert "/items" in schema["paths"]
         assert "/items/{item_id}" in schema["paths"]

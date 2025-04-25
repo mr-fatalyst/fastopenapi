@@ -6,11 +6,15 @@ FastOpenAPI follows the [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ## [0.7.0] - Unreleased
 
+### Changed
+- Replaced `json.dumps/json.loads` with pydantic_core `to_json/from_json`
+- `_serialize_response`: model list mapping now handled by Pydantic instead of manual recursion
+
 ### Fixed
-- Fixed issue with parsing repeated query parameters in URL.
+- Issue with parsing repeated query parameters in URL.
 
 ### Removed
-- Removed the `use_aliases` from `BaseRouter` and reverted changes from 0.6.0.
+- The `use_aliases` from `BaseRouter` and reverted changes from 0.6.0.
 
 ## [0.6.0] – 2025‑04‑16
 

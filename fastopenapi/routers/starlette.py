@@ -1,8 +1,8 @@
 import functools
 import inspect
-import json
 from collections.abc import Callable
 
+from pydantic_core import from_json
 from starlette.applications import Starlette
 from starlette.responses import HTMLResponse, JSONResponse
 from starlette.routing import Route
@@ -25,7 +25,7 @@ class StarletteRouter(BaseRouter):
         try:
             body_bytes = await request.body()
             if body_bytes:
-                body = json.loads(body_bytes.decode("utf-8"))
+                body = from_json(body_bytes.decode("utf-8"))
         except Exception:
             pass
         all_params = {**query_params, **request.path_params}

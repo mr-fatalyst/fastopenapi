@@ -1,6 +1,5 @@
-import json
-
 import pytest
+from pydantic_core import to_json
 
 
 class TestAioHttpIntegration:
@@ -61,7 +60,9 @@ class TestAioHttpIntegration:
         """Test creating an item"""
         new_item = {"name": "New Item", "description": "New Description"}
         headers = {"Content-Type": "application/json"}
-        resp = await client.post("/items", data=json.dumps(new_item), headers=headers)
+        resp = await client.post(
+            "/items", data=to_json(new_item).decode("utf-8"), headers=headers
+        )
         assert resp.status == 201
         data = await resp.json()
         assert data["id"] == 3
@@ -73,7 +74,9 @@ class TestAioHttpIntegration:
         """Test creating an item with invalid data"""
         new_item = {"name": None, "description": "New Description"}
         headers = {"Content-Type": "application/json"}
-        resp = await client.post("/items", data=json.dumps(new_item), headers=headers)
+        resp = await client.post(
+            "/items", data=to_json(new_item).decode("utf-8"), headers=headers
+        )
         assert resp.status == 422
         data = await resp.json()
         assert "Validation error for parameter" in data["error"]["message"]
@@ -93,7 +96,7 @@ class TestAioHttpIntegration:
         update_data = {"name": "Updated Item", "description": "Updated Description"}
         headers = {"Content-Type": "application/json"}
         resp = await client.put(
-            "/items/2", data=json.dumps(update_data), headers=headers
+            "/items/2", data=to_json(update_data).decode("utf-8"), headers=headers
         )
         assert resp.status == 200
         data = await resp.json()

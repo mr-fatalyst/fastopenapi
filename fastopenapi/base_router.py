@@ -405,6 +405,8 @@ class BaseRouter:
     def _serialize_response(cls, result: Any) -> Any:
         if isinstance(result, BaseModel):
             return result.model_dump(by_alias=True)
+        if isinstance(result, list) and result and isinstance(result[0], BaseModel):
+            return [item.model_dump(by_alias=True) for item in result]
         if isinstance(result, list):
             return [cls._serialize_response(item) for item in result]
         if isinstance(result, dict):
