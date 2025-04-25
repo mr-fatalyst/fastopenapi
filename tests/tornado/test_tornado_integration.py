@@ -1,6 +1,5 @@
-import json
-
 from pydantic import BaseModel
+from pydantic_core import from_json, to_json
 from tornado.testing import AsyncHTTPTestCase, gen_test
 from tornado.web import Application, HTTPError
 
@@ -110,7 +109,7 @@ class TestTornadoIntegration(AsyncHTTPTestCase):
         return app
 
     def parse_json(self, response):
-        return json.loads(response.body.decode())
+        return from_json(response.body.decode())
 
     @gen_test
     async def test_get_items(self):
@@ -174,7 +173,7 @@ class TestTornadoIntegration(AsyncHTTPTestCase):
     @gen_test
     async def test_create_item(self):
         new_item = {"name": "New Item", "description": "New Description"}
-        body = json.dumps(new_item).encode()
+        body = to_json(new_item).decode("utf-8")
         headers = {"Content-Type": "application/json"}
         response = await self.http_client.fetch(
             self.get_url("/items"),
@@ -191,7 +190,7 @@ class TestTornadoIntegration(AsyncHTTPTestCase):
     @gen_test
     async def test_create_item_incorrect(self):
         new_item = {"name": None, "description": "New Description"}
-        body = json.dumps(new_item).encode()
+        body = to_json(new_item).decode("utf-8")
         headers = {"Content-Type": "application/json"}
         response = await self.http_client.fetch(
             self.get_url("/items"),
@@ -223,7 +222,7 @@ class TestTornadoIntegration(AsyncHTTPTestCase):
     @gen_test
     async def test_update_item(self):
         update_data = {"name": "Updated Item"}
-        body = json.dumps(update_data).encode()
+        body = to_json(update_data).decode("utf-8")
         headers = {"Content-Type": "application/json"}
         response = await self.http_client.fetch(
             self.get_url("/items/2"),
@@ -240,7 +239,7 @@ class TestTornadoIntegration(AsyncHTTPTestCase):
     @gen_test
     async def test_update_full_item(self):
         update_data = {"name": "Updated Item", "description": "Updated Description"}
-        body = json.dumps(update_data).encode()
+        body = to_json(update_data).decode("utf-8")
         headers = {"Content-Type": "application/json"}
         response = await self.http_client.fetch(
             self.get_url("/items/2"),
