@@ -16,7 +16,8 @@ fastopenapi/
     ├── quart.py
     ├── sanic.py
     ├── starlette.py
-    └── tornado.py
+    ├── tornado.py
+    └── django.py
 ```
 
 ---
@@ -174,6 +175,25 @@ def status():
 
 ---
 
+### DjangoRouter
+
+Use for Django integration.
+
+```python
+from django.urls import path
+from fastopenapi.routers import DjangoRouter
+
+router = DjangoRouter(app=True)
+
+@router.get("/status")
+async def status():
+    return {"status": "ok"}
+
+urlpatterns = [path("", router.urls)]
+```
+
+---
+
 ### Example with Sub-router
 
 ```python
@@ -282,5 +302,8 @@ async def tornado_notfound():
     raise HTTPError(status_code=404, reason="Not Found")
 ```
 
----
+#### Django
+
+```python
+from django.http import Http404
 

@@ -18,6 +18,7 @@ En resumen: si estás comenzando un nuevo proyecto, puedes usar FastAPI. Si ya t
 - **Sanic**
 - **Starlette**
 - **Tornado**
+- **Django**
 
 FastOpenAPI es modular y puede extenderse fácilmente. También puedes crear tu propio `Router` (ver sección "Uso avanzado").
 

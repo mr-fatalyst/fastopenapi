@@ -12,7 +12,7 @@ url: 'https://fastopenapi.fatalyst.dev/'
 abstract: >-
   FastOpenAPI is a library for generating and integrating OpenAPI schemas
   using Pydantic v2 and various frameworks
-  (AioHttp, Falcon, Flask, Quart, Sanic, Starlette, Tornado).
+  (AioHttp, Falcon, Flask, Quart, Sanic, Starlette, Tornado, Django).
 keywords:
   - aiohttp
   - falcon
@@ -23,4 +23,5 @@ keywords:
   - tornado
   - pydantic
   - openapi
+  - django
 license: MIT

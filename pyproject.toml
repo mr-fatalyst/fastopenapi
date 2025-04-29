@@ -42,6 +42,7 @@ sanic = ["sanic (>=24.12.0,<25.0.0)"]
 starlette = ["starlette (>=0.46.0,<0.47.0)"]
 quart = ["quart (>=0.20.0, <0.21.0)"]
 tornado = ["tornado (>=6.4.0, <6.5.0)"]
+django = ["django (>=5.2,<6.0)"]
 
 [project.urls]
 Homepage = "https://fastopenapi.fatalyst.dev/"

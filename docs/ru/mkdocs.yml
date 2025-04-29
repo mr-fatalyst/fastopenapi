@@ -62,6 +62,7 @@ nav:
       - Sanic: frameworks/sanic.md
       - Starlette: frameworks/starlette.md
       - Tornado: frameworks/tornado.md
+      - Django: frameworks/django.md
   - Дополнительно:
       - Продвинутое использование: advanced/advanced_usage.md
       - Справочник API: advanced/api_reference.md

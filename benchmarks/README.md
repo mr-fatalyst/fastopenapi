@@ -15,6 +15,7 @@ Each implementation runs in a separate instance, and the benchmark measures resp
   - [Sanic](sanic/SANIC.md)
   - [Starlette](starlette/STARLETTE.md)
   - [Tornado](tornado/TORNADO.md)
+  - [Django](django/DJANGO.md)
 
 ### 📖 How It Works
 - The script runs **10,000 requests per endpoint**. You can set your own value.

@@ -17,6 +17,7 @@ Below are answers to common questions about FastOpenAPI. If you have a question 
 - **Sanic** (async Python web framework)
 - **Starlette** (lightweight ASGI framework)
 - **Tornado** (Python web framework and networking library)
+- **Django** (Python web framework)
 These cover a wide range of popular Python frameworks. The architecture allows adding more, so future versions might include others. If you have a need for an unsupported framework, you could attempt to create a custom router (see Advanced Usage) or suggest it to the maintainers.
 
 #### **Q: What versions of Python and Pydantic are required?**  
