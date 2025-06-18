@@ -4,14 +4,17 @@ All notable changes to FastOpenAPI are documented in this file.
 
 FastOpenAPI follows the [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) format.
 
+## [0.8.0] - Unreleased
+
+### Added
+- `DjangoRouter` for integration with the `Django` framework.
+
+
 ## [0.7.0] - 2025-04-27
 
 ### Changed
 - Replaced `json.dumps/json.loads` with pydantic_core `to_json/from_json`
 - `_serialize_response`: model list mapping now handled by Pydantic instead of manual recursion
-
-### Added
-- `DjangoRouter` for integration with the `Django` framework.
 
 ### Fixed
 - Issue with parsing repeated query parameters in URL.

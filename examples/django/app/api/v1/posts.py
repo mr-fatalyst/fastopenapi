@@ -40,14 +40,14 @@ def get_post(post_id: int) -> PostSchema:
 @router.get(
     "/posts/", tags=["Posts"], response_errors=[500], response_model=list[PostSchema]
 )
-async def get_posts(body: FilterPostSchema) -> list[PostSchema]:
+def get_posts(body: FilterPostSchema) -> list[PostSchema]:
     return post_service.get_posts(body)
 
 
 @router.delete(
     "/posts/{post_id}", tags=["Posts"], status_code=204, response_errors=[400, 404, 500]
 )
-async def delete_post(post_id: int) -> None:
+def delete_post(post_id: int) -> None:
     post = post_service.delete_post(post_id)
     if not post:
         raise ResourceNotFoundError("Post not found")

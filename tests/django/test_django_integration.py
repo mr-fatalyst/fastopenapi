@@ -110,7 +110,7 @@ class TestDjangoIntegration:
 
         assert response.status_code == 200
         assert "text/html" in response.headers["content-type"]
-        assert "swagger-ui" in response.text
+        assert "swagger-ui" in response.content.decode("utf-8")
 
     def test_redoc_ui_endpoint(self, client):
         """Test ReDoc UI endpoint"""
@@ -118,7 +118,7 @@ class TestDjangoIntegration:
 
         assert response.status_code == 200
         assert "text/html" in response.headers["content-type"]
-        assert "redoc" in response.text
+        assert "redoc" in response.content.decode("utf-8")
 
     def test_query_parameters_handling(self, client):
         """Test handling of query parameters"""

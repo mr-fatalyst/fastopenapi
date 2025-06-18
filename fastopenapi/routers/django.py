@@ -1,4 +1,3 @@
-import json
 import re
 from collections.abc import Callable
 from http import HTTPStatus
@@ -7,6 +6,7 @@ from django.http import Http404, HttpResponse, JsonResponse
 from django.urls import path as django_path
 from django.views import View
 from django.views.decorators.csrf import csrf_exempt
+from pydantic_core import from_json, to_json
 
 from fastopenapi.base_router import BaseRouter
 from fastopenapi.error_handler import ResourceNotFoundError
@@ -24,13 +24,14 @@ class DjangoRouter(BaseRouter):
     def _create_or_update_view(self, path: str, method: str, endpoint: Callable):
         view = self._views.get(path)
         if not view:
-            view = type("DynamicView", (View,), {})
+            view = type(
+                "DynamicView", (View,), {"dispatch": csrf_exempt(View.dispatch)}
+            )
             self._views[path] = view
         method_name = method.lower()
 
         outer = self
 
-        @csrf_exempt
         def handle(self, req, **path_params):
             return outer._handle_request(endpoint, req, **path_params)
 
@@ -61,7 +62,7 @@ class DjangoRouter(BaseRouter):
         result = self._serialize_response(result)
         response = HttpResponse(status=status_code)
         if result:
-            json.dump(result, response)
+            response.content = to_json(result).decode("utf-8")
             response.headers["Content-Type"] = "application/json"
         return response
 
@@ -69,7 +70,7 @@ class DjangoRouter(BaseRouter):
         try:
             body_bytes = req.read()
             if body_bytes:
-                return json.loads(body_bytes.decode("utf-8"))
+                return from_json(body_bytes.decode("utf-8"))
         except Exception:
             pass
         return {}
