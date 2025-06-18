@@ -2,66 +2,70 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
     <url>
          <loc>https://fastopenapi.fatalyst.dev/</loc>
-         <lastmod>2025-04-27</lastmod>
+         <lastmod>2025-06-18</lastmod>
     </url>
     <url>
          <loc>https://fastopenapi.fatalyst.dev/changelog/</loc>
-         <lastmod>2025-04-27</lastmod>
+         <lastmod>2025-06-18</lastmod>
     </url>
     <url>
          <loc>https://fastopenapi.fatalyst.dev/contributing/</loc>
-         <lastmod>2025-04-27</lastmod>
+         <lastmod>2025-06-18</lastmod>
     </url>
     <url>
          <loc>https://fastopenapi.fatalyst.dev/faq/</loc>
-         <lastmod>2025-04-27</lastmod>
+         <lastmod>2025-06-18</lastmod>
     </url>
     <url>
          <loc>https://fastopenapi.fatalyst.dev/advanced/advanced_usage/</loc>
-         <lastmod>2025-04-27</lastmod>
+         <lastmod>2025-06-18</lastmod>
     </url>
     <url>
          <loc>https://fastopenapi.fatalyst.dev/advanced/api_reference/</loc>
-         <lastmod>2025-04-27</lastmod>
+         <lastmod>2025-06-18</lastmod>
     </url>
     <url>
          <loc>https://fastopenapi.fatalyst.dev/frameworks/aiohttp/</loc>
-         <lastmod>2025-04-27</lastmod>
+         <lastmod>2025-06-18</lastmod>
+    </url>
+    <url>
+         <loc>https://fastopenapi.fatalyst.dev/frameworks/django/</loc>
+         <lastmod>2025-06-18</lastmod>
     </url>
     <url>
          <loc>https://fastopenapi.fatalyst.dev/frameworks/falcon/</loc>
-         <lastmod>2025-04-27</lastmod>
+         <lastmod>2025-06-18</lastmod>
     </url>
     <url>
          <loc>https://fastopenapi.fatalyst.dev/frameworks/flask/</loc>
-         <lastmod>2025-04-27</lastmod>
+         <lastmod>2025-06-18</lastmod>
     </url>
     <url>
          <loc>https://fastopenapi.fatalyst.dev/frameworks/quart/</loc>
-         <lastmod>2025-04-27</lastmod>
+         <lastmod>2025-06-18</lastmod>
     </url>
     <url>
          <loc>https://fastopenapi.fatalyst.dev/frameworks/sanic/</loc>
-         <lastmod>2025-04-27</lastmod>
+         <lastmod>2025-06-18</lastmod>
     </url>
     <url>
          <loc>https://fastopenapi.fatalyst.dev/frameworks/starlette/</loc>
-         <lastmod>2025-04-27</lastmod>
+         <lastmod>2025-06-18</lastmod>
     </url>
     <url>
          <loc>https://fastopenapi.fatalyst.dev/frameworks/tornado/</loc>
-         <lastmod>2025-04-27</lastmod>
+         <lastmod>2025-06-18</lastmod>
     </url>
     <url>
          <loc>https://fastopenapi.fatalyst.dev/getting_started/installation/</loc>
-         <lastmod>2025-04-27</lastmod>
+         <lastmod>2025-06-18</lastmod>
     </url>
     <url>
          <loc>https://fastopenapi.fatalyst.dev/getting_started/quickstart/</loc>
-         <lastmod>2025-04-27</lastmod>
+         <lastmod>2025-06-18</lastmod>
     </url>
     <url>
          <loc>https://fastopenapi.fatalyst.dev/getting_started/usage/</loc>
-         <lastmod>2025-04-27</lastmod>
+         <lastmod>2025-06-18</lastmod>
     </url>
 </urlset>

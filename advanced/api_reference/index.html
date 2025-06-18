@@ -20,7 +20,7 @@
       
       
       <link rel="icon" href="../../img/favicon.png">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.6.12">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.6.14">
     
     
       
@@ -28,7 +28,7 @@
       
     
     
-      <link rel="stylesheet" href="../../assets/stylesheets/main.2afb09e1.min.css">
+      <link rel="stylesheet" href="../../assets/stylesheets/main.342714a4.min.css">
       
         
         <link rel="stylesheet" href="../../assets/stylesheets/palette.06af60db.min.css">
@@ -625,6 +625,8 @@
       
         
       
+        
+      
     
     
     
@@ -810,6 +812,29 @@
   
   <span class="md-ellipsis">
     Tornado
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../frameworks/django/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Django
     
   </span>
   
@@ -1074,6 +1099,15 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#djangorouter" class="md-nav__link">
+    <span class="md-ellipsis">
+      DjangoRouter
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#example-with-sub-router" class="md-nav__link">
     <span class="md-ellipsis">
       Example with Sub-router
@@ -1174,6 +1208,15 @@
   <a href="#tornado" class="md-nav__link">
     <span class="md-ellipsis">
       Tornado
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#django" class="md-nav__link">
+    <span class="md-ellipsis">
+      Django
     </span>
   </a>
   
@@ -1413,6 +1456,15 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#djangorouter" class="md-nav__link">
+    <span class="md-ellipsis">
+      DjangoRouter
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#example-with-sub-router" class="md-nav__link">
     <span class="md-ellipsis">
       Example with Sub-router
@@ -1518,6 +1570,15 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#django" class="md-nav__link">
+    <span class="md-ellipsis">
+      Django
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -1560,7 +1621,8 @@
     ├── quart.py
     ├── sanic.py
     ├── starlette.py
-    └── tornado.py
+    ├── tornado.py
+    └── django.py
 </code></pre>
 <hr />
 <h2 id="baserouter">BaseRouter</h2>
@@ -1676,6 +1738,20 @@ def status():
     return {&quot;running&quot;: True}
 </code></pre>
 <hr />
+<h3 id="djangorouter">DjangoRouter</h3>
+<p>Use for Django integration.</p>
+<pre><code class="language-python">from django.urls import path
+from fastopenapi.routers import DjangoRouter
+
+router = DjangoRouter(app=True)
+
+@router.get(&quot;/status&quot;)
+async def status():
+    return {&quot;status&quot;: &quot;ok&quot;}
+
+urlpatterns = [path(&quot;&quot;, router.urls)]
+</code></pre>
+<hr />
 <h3 id="example-with-sub-router">Example with Sub-router</h3>
 <pre><code class="language-python">api_v1 = &lt;Framework&gt;Router()
 
@@ -1753,7 +1829,9 @@ async def starlette_notfound():
 async def tornado_notfound():
     raise HTTPError(status_code=404, reason=&quot;Not Found&quot;)
 </code></pre>
-<hr />
+<h4 id="django">Django</h4>
+<p>```python
+from django.http import Http404</p>
 
 
 
@@ -1886,10 +1964,10 @@ async def tornado_notfound():
     
     
       
-      <script id="__config" type="application/json">{"base": "../..", "features": ["content.code.annotate", "content.code.copy", "content.footnote.tooltips", "content.tabs.link", "content.tooltips", "navigation.footer", "navigation.indexes", "navigation.instant", "navigation.instant.prefetch", "navigation.instant.progress", "navigation.path", "navigation.tabs", "navigation.tabs.sticky", "navigation.top", "navigation.tracking", "search.highlight", "search.share", "search.suggest", "toc.follow"], "search": "../../assets/javascripts/workers/search.f8cc74c7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+      <script id="__config" type="application/json">{"base": "../..", "features": ["content.code.annotate", "content.code.copy", "content.footnote.tooltips", "content.tabs.link", "content.tooltips", "navigation.footer", "navigation.indexes", "navigation.instant", "navigation.instant.prefetch", "navigation.instant.progress", "navigation.path", "navigation.tabs", "navigation.tabs.sticky", "navigation.top", "navigation.tracking", "search.highlight", "search.share", "search.suggest", "toc.follow"], "search": "../../assets/javascripts/workers/search.d50fe291.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
-      <script src="../../assets/javascripts/bundle.c8b220af.min.js"></script>
+      <script src="../../assets/javascripts/bundle.13a4f30d.min.js"></script>
       
     
   </body>
