@@ -18,6 +18,7 @@ Kurz: Verwende FastAPI, wenn du ein neues Projekt startest. Nutze FastOpenAPI, w
 - **Sanic** (schnelles asynchrones Framework)
 - **Starlette** (leichtgewichtiges ASGI-Framework)
 - **Tornado** (Webframework und Netzwerkbibliothek)
+- **Django** (Webframework)
 
 FastOpenAPI ist modular und leicht erweiterbar, sodass in Zukunft weitere Adapter folgen können. Du kannst auch einen eigenen `Router` schreiben (siehe Abschnitt "Advanced Usage").
 

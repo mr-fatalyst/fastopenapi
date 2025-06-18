@@ -4,6 +4,12 @@ All notable changes to FastOpenAPI are documented in this file.
 
 FastOpenAPI follows the [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) format.
 
+## [0.8.0] - Unreleased
+
+### Added
+- `DjangoRouter` for integration with the `Django` framework.
+
+
 ## [0.7.0] - 2025-04-27
 
 ### Changed

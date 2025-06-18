@@ -25,7 +25,7 @@
 
 ## À propos du projet
 
-**FastOpenAPI** est une bibliothèque Python permettant de générer et d’intégrer des schémas OpenAPI à partir de modèles Pydantic dans divers frameworks web. Inspirée par FastAPI, elle propose une expérience similaire, mais applicable à des frameworks comme AIOHTTP, Falcon, Flask, Quart, Sanic, Starlette et Tornado.  
+**FastOpenAPI** est une bibliothèque Python permettant de générer et d’intégrer des schémas OpenAPI à partir de modèles Pydantic dans divers frameworks web. Inspirée par FastAPI, elle propose une expérience similaire, mais applicable à des frameworks comme AIOHTTP, Falcon, Flask, Quart, Sanic, Starlette, Tornado et Django.
 Avec FastOpenAPI, vous pouvez ajouter une documentation interactive et une validation automatique à vos projets existants sans changer de framework.
 
 FastOpenAPI est encore en développement actif (pré-version 1.0), mais elle est déjà suffisamment stable pour être utilisée. Toute contribution est la bienvenue !
@@ -34,7 +34,7 @@ FastOpenAPI est encore en développement actif (pré-version 1.0), mais elle est
 
 - **Génération automatique d’OpenAPI** – définissez vos routes et vos modèles, FastOpenAPI génère automatiquement un schéma complet.
 - **Compatible avec Pydantic v2** – validation et sérialisation robustes pour les entrées et les réponses.
-- **Multi-framework** – support pour AIOHTTP, Falcon, Flask, Quart, Sanic, Starlette et Tornado.
+- **Multi-framework** – support pour AIOHTTP, Falcon, Flask, Quart, Sanic, Starlette, Tornado et Django.
 - **Syntaxe proche de FastAPI** – décorateurs comme `@router.get`, `@router.post`, etc.
 - **Documentation interactive intégrée** – Swagger UI (`/docs`) et ReDoc (`/redoc`) inclus.
 - **Validation et gestion des erreurs** – erreurs automatiquement retournées en JSON, avec classes standard comme `BadRequestError`, `ResourceNotFoundError`.
