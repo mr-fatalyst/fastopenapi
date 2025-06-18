@@ -50,6 +50,9 @@ pip install fastopenapi[starlette]
 ```bash
 pip install fastopenapi[tornado]
 ```
+```bash
+pip install fastopenapi[django]
+```
 
 ---
 
@@ -275,6 +278,43 @@ pip install fastopenapi[tornado]
     ```
   </details>
 
+- ![Django](https://img.shields.io/badge/-Django-2980B9?style=flat&logo=python&logoColor=white)
+  <details>
+    <summary>Click to expand the Django Example</summary>
+
+    ```python
+    from django.conf import settings
+    from django.core.management import call_command
+    from django.core.wsgi import get_wsgi_application
+    from django.urls import path
+    from pydantic import BaseModel
+
+    from fastopenapi.routers import DjangoRouter
+
+    settings.configure(DEBUG=True, SECRET_KEY="__CHANGEME__", ROOT_URLCONF=__name__)
+    application = get_wsgi_application()
+
+    router = DjangoRouter(app=True)
+
+
+    class HelloResponse(BaseModel):
+        message: str
+
+
+    @router.get("/hello", tags=["Hello"], status_code=200, response_model=HelloResponse)
+    def hello(name: str):
+        """Say hello from django"""
+        return HelloResponse(message=f"Hello, {name}! It's Django!")
+
+
+    urlpatterns = [path("", router.urls)]
+
+    if __name__ == "__main__":
+        call_command("runserver")
+
+    ```
+  </details>
+
 ### Step 2. Run the server
 
 Launch the application:
@@ -299,7 +339,7 @@ http://127.0.0.1:8000/redoc
 ## ⚙️ Features
 - **Generate OpenAPI schemas** with Pydantic v2.
 - **Data validation** using Pydantic models.
-- **Supports multiple frameworks:** AIOHTTP, Falcon, Flask, Quart, Sanic, Starlette, Tornado.
+- **Supports multiple frameworks:** AIOHTTP, Falcon, Flask, Quart, Sanic, Starlette, Tornado, Django.
 - **Proxy routing provides FastAPI-style routing**
 
 ---

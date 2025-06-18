@@ -21,6 +21,7 @@ class TestFastOpenAPIRouters:
             "fastopenapi.routers.sanic",
             "fastopenapi.routers.starlette",
             "fastopenapi.routers.tornado",
+            "fastopenapi.routers.django",
         }
 
         def fake_import(name, globals=None, locals=None, fromlist=(), level=0):
@@ -41,6 +42,7 @@ class TestFastOpenAPIRouters:
         assert routers.SanicRouter is MissingRouter
         assert routers.StarletteRouter is MissingRouter
         assert routers.TornadoRouter is MissingRouter
+        assert routers.DjangoRouter is MissingRouter
 
         with pytest.raises(ImportError, match="This framework is not installed."):
             routers.FalconRouter()
@@ -56,5 +58,6 @@ class TestFastOpenAPIRouters:
             "SanicRouter",
             "StarletteRouter",
             "TornadoRouter",
+            "DjangoRouter",
         ]
         assert routers.__all__ == expected

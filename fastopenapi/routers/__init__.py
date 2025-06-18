@@ -38,6 +38,11 @@ try:
 except ModuleNotFoundError:
     TornadoRouter = MissingRouter
 
+try:
+    from fastopenapi.routers.django import DjangoRouter
+except ModuleNotFoundError:
+    DjangoRouter = MissingRouter
+
 __all__ = [
     "AioHttpRouter",
     "FalconRouter",
@@ -46,4 +51,5 @@ __all__ = [
     "SanicRouter",
     "StarletteRouter",
     "TornadoRouter",
+    "DjangoRouter",
 ]
