@@ -69,3 +69,5 @@ trio = "^0.29.0"
 pytest-asyncio = "^0.25.3"
 coverage = "^7.6.12"
 mkdocs-material = "^9.6.11"
+# Temporary fix https://github.com/sanic-org/tracerite/issues/20
+tracerite = "1.1.1"
