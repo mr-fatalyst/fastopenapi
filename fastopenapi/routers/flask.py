@@ -1,57 +1,110 @@
 import re
 from collections.abc import Callable
 
-from flask import Response, jsonify, request
+from flask import Response as FlaskResponse
+from flask import jsonify, request
 
-from fastopenapi.base_router import BaseRouter
+from fastopenapi.core.types import RequestData, Response, UploadFile
+from fastopenapi.openapi.ui import render_redoc_ui, render_swagger_ui
+from fastopenapi.routers.base import BaseAdapter
 
 
-class FlaskRouter(BaseRouter):
+class FlaskRouter(BaseAdapter):
+    """Flask adapter for FastOpenAPI"""
+
     def add_route(self, path: str, method: str, endpoint: Callable):
+        """Add route to Flask application"""
         super().add_route(path, method, endpoint)
+
         if self.app is not None:
             flask_path = re.sub(r"{(\w+)}", r"<\1>", path)
 
             def view_func(**path_params):
-                json_data = request.get_json(silent=True) or {}
-                query_params = {}
-                for key in request.args:
-                    values = request.args.getlist(key)
-                    query_params[key] = values[0] if len(values) == 1 else values
-                all_params = {**query_params, **path_params}
-                body = json_data
-                try:
-                    kwargs = self.resolve_endpoint_params(endpoint, all_params, body)
-                except Exception as e:
-                    error_response = self.handle_exception(e)
-                    return jsonify(error_response), getattr(e, "status_code", 422)
+                # Create synthetic request object with path params
+                synthetic_request = type(
+                    "Request",
+                    (),
+                    {
+                        "path_params": path_params,
+                        "args": request.args,
+                        "json": request.get_json(silent=True),
+                        "headers": request.headers,
+                        "cookies": request.cookies,
+                        "form": request.form,
+                        "files": request.files,
+                    },
+                )()
 
-                try:
-                    result = endpoint(**kwargs)
-                except Exception as e:
-                    error_response = self.handle_exception(e)
-                    return jsonify(error_response), getattr(e, "code", 500)
-
-                meta = getattr(endpoint, "__route_meta__", {})
-                status_code = meta.get("status_code", 200)
-                result = self._serialize_response(result)
-                return jsonify(result), status_code
+                return self.handle_request(endpoint, synthetic_request)
 
             self.app.add_url_rule(
                 flask_path, endpoint.__name__, view_func, methods=[method.upper()]
             )
 
+    def extract_request_data(self, request) -> RequestData:
+        """Extract data from Flask request"""
+        # Query parameters
+        query_params = {}
+        for key in request.args:
+            values = request.args.getlist(key)
+            query_params[key] = values[0] if len(values) == 1 else values
+
+        # Headers (normalize to lowercase)
+        headers = {k.lower(): v for k, v in request.headers.items()}
+
+        # Cookies
+        cookies = dict(request.cookies)
+
+        # Body
+        body = request.json or {}
+
+        # Form data
+        form_data = dict(request.form) if hasattr(request, "form") else {}
+
+        # Files
+        files = {}
+        if hasattr(request, "files"):
+            for name, file in request.files.items():
+                files[name] = UploadFile(
+                    filename=file.filename,
+                    content_type=file.content_type,
+                    file=file.stream,
+                )
+
+        return RequestData(
+            path_params=getattr(request, "path_params", {}),
+            query_params=query_params,
+            headers=headers,
+            cookies=cookies,
+            body=body,
+            form_data=form_data,
+            files=files,
+        )
+
+    def build_framework_response(self, response: Response) -> FlaskResponse:
+        """Build Flask response"""
+        flask_response = jsonify(response.content)
+        flask_response.status_code = response.status_code
+
+        # Add custom headers
+        for key, value in response.headers.items():
+            flask_response.headers[key] = value
+
+        return flask_response
+
     def _register_docs_endpoints(self):
+        """Register documentation endpoints"""
+
         @self.app.route(self.openapi_url, methods=["GET"])
         def openapi_view():
             return jsonify(self.openapi)
 
         @self.app.route(self.docs_url, methods=["GET"])
         def docs_view():
-            html = self.render_swagger_ui(self.openapi_url)
-            return Response(html, mimetype="text/html")
+            html = render_swagger_ui(self.openapi_url)
+            return FlaskResponse(html, mimetype="text/html")
 
         @self.app.route(self.redoc_url, methods=["GET"])
         def redoc_view():
-            html = self.render_redoc_ui(self.openapi_url)
-            return Response(html, mimetype="text/html")
+            html = render_redoc_ui(self.openapi_url)
+            return FlaskResponse(html, mimetype="text/html")

@@ -4,23 +4,63 @@ from collections.abc import Callable
 
 from aiohttp import web
 
-from fastopenapi.base_router import BaseRouter
+from fastopenapi.core.types import RequestData, Response, UploadFile
+from fastopenapi.errors.handler import format_exception_response
+from fastopenapi.openapi.ui import render_redoc_ui, render_swagger_ui
+from fastopenapi.routers.base import BaseAdapter
 
 
-class AioHttpRouter(BaseRouter):
+class AioHttpRouter(BaseAdapter):
+    """AioHttp adapter for FastOpenAPI"""
+
     def __init__(self, app: web.Application = None, **kwargs):
-        self._routes_aiohttp = []
         super().__init__(app, **kwargs)
 
-    @classmethod
-    async def _aiohttp_view(cls, request: web.Request, router, endpoint: Callable):
-        """
-        Handle request routing and parameter resolution for AioHttp
-        """
+    def add_route(self, path: str, method: str, endpoint: Callable):
+        """Add route to AioHttp application"""
+        super().add_route(path, method, endpoint)
+
+        if self.app is not None:
+            view = functools.partial(self._aiohttp_view, router=self, endpoint=endpoint)
+            self.app.router.add_route(method.upper(), path, view)
+
+    @staticmethod
+    async def _aiohttp_view(request: web.Request, router, endpoint: Callable):
+        """Handle AioHttp request"""
+        try:
+            request_data = await router.extract_request_data_async(request)
+            kwargs = router.resolver.resolve(endpoint, request_data)
+
+            # Call endpoint
+            if inspect.iscoroutinefunction(endpoint):
+                result = await endpoint(**kwargs)
+            else:
+                result = endpoint(**kwargs)
+
+            response = router.response_builder.build(result, endpoint.__route_meta__)
+            return router.build_framework_response(response)
+
+        except Exception as e:
+            error_response = format_exception_response(e)
+            return web.json_response(
+                error_response, status=getattr(e, "status_code", 500)
+            )
+
+    async def extract_request_data_async(self, request: web.Request) -> RequestData:
+        """Extract data from AioHttp request (async)"""
+        # Query parameters
         query_params = {}
         for key in request.query:
             values = request.query.getall(key)
             query_params[key] = values[0] if len(values) == 1 else values
+
+        # Headers (normalize to lowercase)
+        headers = {k.lower(): v for k, v in request.headers.items()}
+
+        # Cookies
+        cookies = dict(request.cookies)
+
+        # Body
         body = {}
         try:
             body_bytes = await request.read()
@@ -29,58 +69,56 @@ class AioHttpRouter(BaseRouter):
         except Exception:
             pass
 
-        all_params = {**query_params, **request.match_info}
-        try:
-            kwargs = router.resolve_endpoint_params(endpoint, all_params, body)
-        except Exception as e:
-            error_response = cls.handle_exception(e)
-            return web.json_response(
-                error_response, status=getattr(e, "status_code", 422)
-            )
+        # Form data and files
+        form_data = {}
+        files = {}
+        if request.content_type == "multipart/form-data":
+            reader = await request.multipart()
+            async for part in reader:
+                if part.filename:
+                    # This is a file
+                    content = await part.read()
+                    files[part.name] = UploadFile(
+                        filename=part.filename,
+                        content_type=part.headers.get("Content-Type", ""),
+                        file=content,  # Store as bytes for simplicity
+                    )
+                else:
+                    # Regular form field
+                    form_data[part.name] = await part.text()
 
-        try:
-            if inspect.iscoroutinefunction(endpoint):
-                result = await endpoint(**kwargs)
-            else:
-                result = endpoint(**kwargs)
-        except Exception as e:
-            error_response = cls.handle_exception(e)
-            return web.json_response(
-                error_response, status=getattr(e, "status_code", 500)
-            )
-
-        meta = getattr(endpoint, "__route_meta__", {})
-        status_code = meta.get("status_code", 200)
-        result = router._serialize_response(result)
-        return web.json_response(result, status=status_code)
-
-    def add_route(self, path: str, method: str, endpoint: Callable):
-        """
-        Add a route to the AioHttp application
-        """
-        super().add_route(path, method, endpoint)
-        view = functools.partial(
-            AioHttpRouter._aiohttp_view, router=self, endpoint=endpoint
+        return RequestData(
+            path_params=dict(request.match_info),
+            query_params=query_params,
+            headers=headers,
+            cookies=cookies,
+            body=body,
+            form_data=form_data,
+            files=files,
         )
-        if self.app is not None:
-            self.app.router.add_route(method.upper(), path, view)
-        else:
-            self._routes_aiohttp.append((path, method, view))
+
+    def extract_request_data(self, request) -> RequestData:
+        """Not used in async adapter"""
+        raise NotImplementedError("Use extract_request_data_async")
+
+    def build_framework_response(self, response: Response) -> web.Response:
+        """Build AioHttp response"""
+        return web.json_response(
+            response.content, status=response.status_code, headers=response.headers
+        )
 
     def _register_docs_endpoints(self):
-        """
-        Register OpenAPI, Swagger, and Redoc documentation endpoints
-        """
+        """Register documentation endpoints"""
 
         async def openapi_view(request):
             return web.json_response(self.openapi)
 
         async def docs_view(request):
-            html = self.render_swagger_ui(self.openapi_url)
+            html = render_swagger_ui(self.openapi_url)
             return web.Response(text=html, content_type="text/html")
 
         async def redoc_view(request):
-            html = self.render_redoc_ui(self.openapi_url)
+            html = render_redoc_ui(self.openapi_url)
             return web.Response(text=html, content_type="text/html")
 
         if self.app is not None:

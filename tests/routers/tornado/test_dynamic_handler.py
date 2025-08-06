@@ -59,7 +59,7 @@ class TestTornadoDynamicHandler:
     async def test_handle_http_exception(self, mock_handler):
         http_error = tornado.web.HTTPError(404, "Not found")
 
-        await mock_handler.handle_http_exception(http_error)
+        mock_handler._handle_request_exception(http_error)
 
         mock_handler.set_status.assert_called_once_with(404)
         mock_handler.finish.assert_called_once()
