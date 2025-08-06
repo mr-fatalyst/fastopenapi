@@ -278,7 +278,7 @@ pip install fastopenapi[django]
     ```
   </details>
 
-- ![Django](https://img.shields.io/badge/-Django-2980B9?style=flat&logo=python&logoColor=white)
+- ![Django](https://img.shields.io/badge/-Django-092E20?style=flat&logo=django&logoColor=white)
   <details>
     <summary>Click to expand the Django Example</summary>
 
@@ -373,6 +373,22 @@ Fast but not perfect benchmarks. Check the [`benchmarks`](https://github.com/mr-
 ## 🛠️ Contributing
 
 If you have suggestions or find a bug, please open an issue or create a pull request on GitHub.
+
+---
+
+## 🤝 Acknowledgements
+
+<p align="center">
+  <a href="https://www.jetbrains.com/">
+    <img src="https://resources.jetbrains.com/storage/products/company/brand/logos/jetbrains.png" alt="JetBrains logo" width="120"/>
+  </a>
+</p>
+<p align="center">
+  <sub>
+    Supported by <a href="https://www.jetbrains.com/">JetBrains</a> under the
+    <a href="https://www.jetbrains.com/community/opensource/#support">Open Source Support Program</a>.
+  </sub>
+</p>
 
 ---
 
