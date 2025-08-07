@@ -6,7 +6,6 @@ from pydantic_core import from_json, to_json
 from tornado.web import Application, RequestHandler, url
 
 from fastopenapi.core.types import RequestData, Response, UploadFile
-from fastopenapi.errors.handler import format_exception_response
 from fastopenapi.openapi.ui import render_redoc_ui, render_swagger_ui
 from fastopenapi.routers.base import BaseAdapter
 
@@ -40,45 +39,40 @@ class TornadoDynamicHandler(RequestHandler):
             self.send_error(405)
             return
 
-        try:
-            # Extract request data
-            request_data = self.router.extract_request_data(
-                self.request, self.path_kwargs
+        # Create synthetic request
+        synthetic_request = type(
+            "Request",
+            (),
+            {
+                "path_kwargs": self.path_kwargs,
+                "request": self.request,
+                "json_body": getattr(self, "json_body", {}),
+            },
+        )()
+
+        # Check if endpoint is async and use appropriate handler
+        if inspect.iscoroutinefunction(self.endpoint):
+            result_response = await self.router.handle_request_async(
+                self.endpoint, synthetic_request
             )
-            request_data.body = getattr(self, "json_body", {})
-
-            # Resolve parameters
-            kwargs = self.router.resolver.resolve(self.endpoint, request_data)
-
-            # Call endpoint
-            if inspect.iscoroutinefunction(self.endpoint):
-                result = await self.endpoint(**kwargs)
-            else:
-                result = self.endpoint(**kwargs)
-
-            # Build response
-            response_obj = self.router.response_builder.build(
-                result, self.endpoint.__route_meta__
+        else:
+            result_response = self.router.handle_request_sync(
+                self.endpoint, synthetic_request
             )
 
-            # Set response
-            self.set_status(response_obj.status_code)
+        # Handle Response object
+        if isinstance(result_response, Response):
+            self.set_status(result_response.status_code)
             self.set_header("Content-Type", "application/json")
 
             # Set custom headers
-            for key, value in response_obj.headers.items():
+            for key, value in result_response.headers.items():
                 self.set_header(key, value)
 
-            if response_obj.status_code == 204:
+            if result_response.status_code == 204:
                 await self.finish()
             else:
-                await self.finish(json_encode(response_obj.content))
-
-        except Exception as e:
-            error_response = format_exception_response(e)
-            self.set_status(getattr(e, "status_code", 500))
-            self.set_header("Content-Type", "application/json")
-            await self.finish(json_encode(error_response))
+                await self.finish(json_encode(result_response.content))
 
     async def get(self, *args, **kwargs):
         await self.handle_request()
@@ -139,8 +133,11 @@ class TornadoRouter(BaseAdapter):
                     rule.target_kwargs["endpoints"] = self._endpoint_map[tornado_path]
                     break
 
-    def extract_request_data(self, request, path_kwargs=None) -> RequestData:
+    def extract_request_data(self, synthetic_request) -> RequestData:
         """Extract data from Tornado request"""
+        request = synthetic_request.request
+        path_kwargs = synthetic_request.path_kwargs
+
         # Query parameters
         query_params = {}
         for key in request.query_arguments:
@@ -154,6 +151,9 @@ class TornadoRouter(BaseAdapter):
         cookies = {}
         for name, value in request.cookies.items():
             cookies[name] = value.value
+
+        # Body
+        body = getattr(synthetic_request, "json_body", {})
 
         # Form data and files
         form_data = {}
@@ -180,13 +180,14 @@ class TornadoRouter(BaseAdapter):
             query_params=query_params,
             headers=headers,
             cookies=cookies,
-            body=None,  # Set separately in handler
+            body=body,
             form_data=form_data,
             files=files,
         )
 
     def build_framework_response(self, response: Response):
-        """Not needed for Tornado (handled in handler)"""
+        """Build Tornado response - handled directly in handler"""
+        return response
 
     def _register_docs_endpoints(self):
         """Register documentation endpoints"""

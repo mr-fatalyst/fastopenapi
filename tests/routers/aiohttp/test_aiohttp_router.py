@@ -1,4 +1,4 @@
-import functools
+from collections.abc import Awaitable
 
 from aiohttp import web
 from pydantic import BaseModel
@@ -71,15 +71,12 @@ class TestAioHttpRouter:
         router.add_route("/test", "GET", dummy_endpoint)
         # Verify that the route is not registered in app.router
         # but is saved in the internal list
-        assert len(router._routes_aiohttp) == 1
-        path, method, view = router._routes_aiohttp[0]
-        assert path == "/test"
-        assert method.upper() == "GET"
-        # Verify that view is a functools.partial with the correct parameters
-        assert isinstance(view, functools.partial)
-        # Optionally verify that the partial contains the correct router and endpoint
-        assert view.keywords.get("router") is router
-        assert view.keywords.get("endpoint") is dummy_endpoint
+        assert len(router._routes) == 1
+        route_info = router._routes[0]
+        assert route_info.path == "/test"
+        assert route_info.method.upper() == "GET"
+        # Verify that endpoint is awaitable
+        assert isinstance(route_info.endpoint, Awaitable)
 
     def test_register_docs_endpoints_app_none(self):
         """

@@ -8,7 +8,6 @@ from starlette.responses import HTMLResponse, JSONResponse
 from starlette.routing import Route
 
 from fastopenapi.core.types import RequestData, Response, UploadFile
-from fastopenapi.errors.handler import format_exception_response
 from fastopenapi.openapi.ui import render_redoc_ui, render_swagger_ui
 from fastopenapi.routers.base import BaseAdapter
 
@@ -35,24 +34,11 @@ class StarletteRouter(BaseAdapter):
     @staticmethod
     async def _starlette_view(request, router, endpoint):
         """Handle Starlette request"""
-        try:
-            request_data = await router.extract_request_data_async(request)
-            kwargs = router.resolver.resolve(endpoint, request_data)
-
-            # Call endpoint
-            if inspect.iscoroutinefunction(endpoint):
-                result = await endpoint(**kwargs)
-            else:
-                result = endpoint(**kwargs)
-
-            response = router.response_builder.build(result, endpoint.__route_meta__)
-            return router.build_framework_response(response)
-
-        except Exception as e:
-            error_response = format_exception_response(e)
-            return JSONResponse(
-                error_response, status_code=getattr(e, "status_code", 500)
-            )
+        # Check if endpoint is async and use appropriate handler
+        if inspect.iscoroutinefunction(endpoint):
+            return await router.handle_request_async(endpoint, request)
+        else:
+            return router.handle_request_sync(endpoint, request)
 
     async def extract_request_data_async(self, request) -> RequestData:
         """Extract data from Starlette request (async)"""
@@ -104,8 +90,28 @@ class StarletteRouter(BaseAdapter):
         )
 
     def extract_request_data(self, request) -> RequestData:
-        """Not used in async adapter"""
-        raise NotImplementedError("Use extract_request_data_async")
+        """Sync extraction for sync endpoints - simplified version"""
+        # Query parameters
+        query_params = {}
+        for key in request.query_params:
+            values = request.query_params.getlist(key)
+            query_params[key] = values[0] if len(values) == 1 else values
+
+        # Headers (normalize to lowercase)
+        headers = {k.lower(): v for k, v in request.headers.items()}
+
+        # Cookies
+        cookies = dict(request.cookies)
+
+        return RequestData(
+            path_params=dict(request.path_params),
+            query_params=query_params,
+            headers=headers,
+            cookies=cookies,
+            body={},  # Body requires async reading
+            form_data={},
+            files={},
+        )
 
     def build_framework_response(self, response: Response) -> JSONResponse:
         """Build Starlette response"""

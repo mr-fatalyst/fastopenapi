@@ -1,3 +1,4 @@
+import inspect
 import re
 from collections.abc import Callable
 
@@ -35,7 +36,21 @@ class FlaskRouter(BaseAdapter):
                     },
                 )()
 
-                return self.handle_request(endpoint, synthetic_request)
+                # Check if endpoint is async
+                if inspect.iscoroutinefunction(endpoint):
+                    error_response = {
+                        "error": {
+                            "type": "unsupported_endpoint",
+                            "message": f"Async endpoint '{endpoint.__name__}' "
+                            f"cannot be used with Flask. Use Quart for "
+                            f"async support.",
+                            "status": 500,
+                        }
+                    }
+                    return jsonify(error_response), 500
+
+                # Use sync handler
+                return self.handle_request_sync(endpoint, synthetic_request)
 
             self.app.add_url_rule(
                 flask_path, endpoint.__name__, view_func, methods=[method.upper()]

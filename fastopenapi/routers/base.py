@@ -1,4 +1,3 @@
-import inspect
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from typing import Any
@@ -26,34 +25,46 @@ class BaseAdapter(BaseRouter, ABC):
     def build_framework_response(self, response: Response) -> Any:
         """Build framework-specific response object"""
 
-    def handle_request(self, endpoint: Callable, request: Any) -> Any:
-        """Common request handling logic"""
+    def handle_request_sync(self, endpoint: Callable, request: Any) -> Any:
+        """
+        Handle synchronous request.
+        Used for sync endpoints in any framework.
+        """
         try:
-            # Extract request data
             request_data = self.extract_request_data(request)
-
-            # Resolve parameters
             kwargs = self.resolver.resolve(endpoint, request_data)
-
-            # Call endpoint
-            if inspect.iscoroutinefunction(endpoint):
-                import asyncio
-
-                result = asyncio.run(endpoint(**kwargs))
-            else:
-                result = endpoint(**kwargs)
-
-            # Build response
+            result = endpoint(**kwargs)
             response = self.response_builder.build(result, endpoint.__route_meta__)
-
-            # Convert to framework response
             return self.build_framework_response(response)
-
         except Exception as e:
             error_response = format_exception_response(e)
             return self.build_framework_response(
                 Response(
                     content=error_response,
                     status_code=error_response["error"]["status"],
+                )
+            )
+
+    async def handle_request_async(self, endpoint: Callable, request: Any) -> Any:
+        """
+        Handle asynchronous request.
+        Used for async endpoints in async-capable frameworks.
+        """
+        try:
+            # Extract request data (might be async for some frameworks)
+            if hasattr(self, "extract_request_data_async"):
+                request_data = await self.extract_request_data_async(request)
+            else:
+                request_data = self.extract_request_data(request)
+
+            kwargs = self.resolver.resolve(endpoint, request_data)
+            result = await endpoint(**kwargs)
+            response = self.response_builder.build(result, endpoint.__route_meta__)
+            return self.build_framework_response(response)
+        except Exception as e:
+            error_response = format_exception_response(e)
+            return self.build_framework_response(
+                Response(
+                    content=error_response, status_code=getattr(e, "status_code", 500)
                 )
             )

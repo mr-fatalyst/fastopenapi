@@ -5,7 +5,6 @@ from collections.abc import Callable
 from aiohttp import web
 
 from fastopenapi.core.types import RequestData, Response, UploadFile
-from fastopenapi.errors.handler import format_exception_response
 from fastopenapi.openapi.ui import render_redoc_ui, render_swagger_ui
 from fastopenapi.routers.base import BaseAdapter
 
@@ -27,24 +26,11 @@ class AioHttpRouter(BaseAdapter):
     @staticmethod
     async def _aiohttp_view(request: web.Request, router, endpoint: Callable):
         """Handle AioHttp request"""
-        try:
-            request_data = await router.extract_request_data_async(request)
-            kwargs = router.resolver.resolve(endpoint, request_data)
-
-            # Call endpoint
-            if inspect.iscoroutinefunction(endpoint):
-                result = await endpoint(**kwargs)
-            else:
-                result = endpoint(**kwargs)
-
-            response = router.response_builder.build(result, endpoint.__route_meta__)
-            return router.build_framework_response(response)
-
-        except Exception as e:
-            error_response = format_exception_response(e)
-            return web.json_response(
-                error_response, status=getattr(e, "status_code", 500)
-            )
+        # Check if endpoint is async and use appropriate handler
+        if inspect.iscoroutinefunction(endpoint):
+            return await router.handle_request_async(endpoint, request)
+        else:
+            return router.handle_request_sync(endpoint, request)
 
     async def extract_request_data_async(self, request: web.Request) -> RequestData:
         """Extract data from AioHttp request (async)"""
@@ -97,9 +83,29 @@ class AioHttpRouter(BaseAdapter):
             files=files,
         )
 
-    def extract_request_data(self, request) -> RequestData:
-        """Not used in async adapter"""
-        raise NotImplementedError("Use extract_request_data_async")
+    def extract_request_data(self, request: web.Request) -> RequestData:
+        """Sync extraction for sync endpoints - simplified version"""
+        # Query parameters
+        query_params = {}
+        for key in request.query:
+            values = request.query.getall(key)
+            query_params[key] = values[0] if len(values) == 1 else values
+
+        # Headers (normalize to lowercase)
+        headers = {k.lower(): v for k, v in request.headers.items()}
+
+        # Cookies
+        cookies = dict(request.cookies)
+
+        return RequestData(
+            path_params=dict(request.match_info),
+            query_params=query_params,
+            headers=headers,
+            cookies=cookies,
+            body={},  # Body requires async reading
+            form_data={},
+            files={},
+        )
 
     def build_framework_response(self, response: Response) -> web.Response:
         """Build AioHttp response"""

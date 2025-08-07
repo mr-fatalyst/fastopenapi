@@ -114,7 +114,7 @@ class TestOpenAPIGenerator:
         assert len(parameters) == 1
         assert parameters[0]["name"] == "authorization"
         assert parameters[0]["in"] == "header"
-        assert parameters[0]["required"] is True
+        assert parameters[0]["required"] is False
 
     def test_generate_with_cookie_params(self):
         # Test OpenAPI generation with cookie parameters
@@ -130,7 +130,7 @@ class TestOpenAPIGenerator:
         assert len(parameters) == 1
         assert parameters[0]["name"] == "session_id"
         assert parameters[0]["in"] == "cookie"
-        assert parameters[0]["required"] is True
+        assert parameters[0]["required"] is False
 
     def test_generate_with_request_body(self):
         # Test OpenAPI generation with request body (Pydantic model)

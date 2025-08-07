@@ -1,3 +1,4 @@
+import inspect
 import re
 from collections.abc import Callable
 
@@ -5,7 +6,6 @@ from quart import Response as QuartResponse
 from quart import jsonify, request
 
 from fastopenapi.core.types import RequestData, Response, UploadFile
-from fastopenapi.errors.handler import format_exception_response
 from fastopenapi.openapi.ui import render_redoc_ui, render_swagger_ui
 from fastopenapi.routers.base import BaseAdapter
 
@@ -28,27 +28,16 @@ class QuartRouter(BaseAdapter):
                         "path_params": path_params,
                     },
                 )()
-                return await self.handle_quart_request(endpoint, synthetic_request)
+
+                # Check if endpoint is async and use appropriate handler
+                if inspect.iscoroutinefunction(endpoint):
+                    return await self.handle_request_async(endpoint, synthetic_request)
+                else:
+                    return self.handle_request_sync(endpoint, synthetic_request)
 
             self.app.add_url_rule(
                 quart_path, endpoint.__name__, view_func, methods=[method.upper()]
             )
-
-    async def handle_quart_request(self, endpoint: Callable, synthetic_request):
-        """Handle Quart request"""
-        try:
-            request_data = await self.extract_request_data_async(synthetic_request)
-            kwargs = self.resolver.resolve(endpoint, request_data)
-
-            # Quart endpoints are always async
-            result = await endpoint(**kwargs)
-
-            response = self.response_builder.build(result, endpoint.__route_meta__)
-            return self.build_framework_response(response)
-
-        except Exception as e:
-            error_response = format_exception_response(e)
-            return jsonify(error_response), getattr(e, "status_code", 500)
 
     async def extract_request_data_async(self, synthetic_request) -> RequestData:
         """Extract data from Quart request (async)"""
@@ -91,9 +80,29 @@ class QuartRouter(BaseAdapter):
             files=files,
         )
 
-    def extract_request_data(self, request) -> RequestData:
-        """Not used in async adapter"""
-        raise NotImplementedError("Use extract_request_data_async")
+    def extract_request_data(self, synthetic_request) -> RequestData:
+        """Sync extraction for sync endpoints - simplified version"""
+        # Query parameters
+        query_params = {}
+        for key in request.args:
+            values = request.args.getlist(key)
+            query_params[key] = values[0] if len(values) == 1 else values
+
+        # Headers (normalize to lowercase)
+        headers = {k.lower(): v for k, v in request.headers.items()}
+
+        # Cookies
+        cookies = dict(request.cookies)
+
+        return RequestData(
+            path_params=getattr(synthetic_request, "path_params", {}),
+            query_params=query_params,
+            headers=headers,
+            cookies=cookies,
+            body={},  # Body requires async reading
+            form_data={},
+            files={},
+        )
 
     def build_framework_response(self, response: Response):
         """Build Quart response"""

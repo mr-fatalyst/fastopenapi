@@ -6,7 +6,6 @@ import falcon.asgi
 from pydantic_core import from_json
 
 from fastopenapi.core.types import RequestData, Response
-from fastopenapi.errors.handler import format_exception_response
 from fastopenapi.openapi.ui import render_redoc_ui, render_swagger_ui
 from fastopenapi.routers.base import BaseAdapter
 
@@ -60,14 +59,6 @@ class FalconRouter(BaseAdapter):
         method_name = METHODS_MAPPER.get(method, f"on_{method.lower()}")
 
         async def handle(req, resp, **path_params):
-            await self.handle_falcon_request(endpoint, req, resp, **path_params)
-
-        setattr(resource, method_name, handle)
-        return resource
-
-    async def handle_falcon_request(self, endpoint, req, resp, **path_params):
-        """Handle Falcon request"""
-        try:
             # Create synthetic request
             synthetic_request = type(
                 "Request",
@@ -81,29 +72,23 @@ class FalconRouter(BaseAdapter):
                 },
             )()
 
-            request_data = await self.extract_request_data_async(synthetic_request)
-            kwargs = self.resolver.resolve(endpoint, request_data)
-
-            # Call endpoint
+            # Check if endpoint is async and use appropriate handler
             if inspect.iscoroutinefunction(endpoint):
-                result = await endpoint(**kwargs)
+                result_response = await self.handle_request_async(
+                    endpoint, synthetic_request
+                )
             else:
-                result = endpoint(**kwargs)
+                result_response = self.handle_request_sync(endpoint, synthetic_request)
 
-            response_obj = self.response_builder.build(result, endpoint.__route_meta__)
+            # Falcon needs special handling - set response directly
+            if isinstance(result_response, Response):
+                resp.status = self._get_falcon_status(result_response.status_code)
+                resp.media = result_response.content
+                for key, value in result_response.headers.items():
+                    resp.set_header(key, value)
 
-            # Set response
-            resp.status = self._get_falcon_status(response_obj.status_code)
-            resp.media = response_obj.content
-
-            # Set headers
-            for key, value in response_obj.headers.items():
-                resp.set_header(key, value)
-
-        except Exception as e:
-            error_response = format_exception_response(e)
-            resp.status = self._get_falcon_status(getattr(e, "status_code", 500))
-            resp.media = error_response
+        setattr(resource, method_name, handle)
+        return resource
 
     async def extract_request_data_async(self, request) -> RequestData:
         """Extract data from Falcon request (async)"""
@@ -133,7 +118,6 @@ class FalconRouter(BaseAdapter):
             pass
 
         # Form data and files - Falcon doesn't have built-in multipart support
-        # You'd need to use a library like python-multipart for this
         form_data = {}
         files = {}
 
@@ -148,11 +132,36 @@ class FalconRouter(BaseAdapter):
         )
 
     def extract_request_data(self, request) -> RequestData:
-        """Not used in async adapter"""
-        raise NotImplementedError("Use extract_request_data_async")
+        """Sync extraction for sync endpoints - simplified version"""
+        # Query parameters
+        query_params = {}
+        for key in request.params.keys():
+            values = (
+                request.params.getall(key)
+                if hasattr(request.params, "getall")
+                else [request.params.get(key)]
+            )
+            query_params[key] = values[0] if len(values) == 1 else values
+
+        # Headers (normalize to lowercase)
+        headers = {k.lower(): v for k, v in request.headers.items()}
+
+        # Cookies
+        cookies = dict(request.cookies)
+
+        return RequestData(
+            path_params=getattr(request, "path_params", {}),
+            query_params=query_params,
+            headers=headers,
+            cookies=cookies,
+            body={},  # Body requires async reading
+            form_data={},
+            files={},
+        )
 
     def build_framework_response(self, response: Response):
-        """Not needed for Falcon (handled in handle_falcon_request)"""
+        """Build Falcon response - handled directly in handler"""
+        return response
 
     def _get_falcon_status(self, status_code: int) -> str:
         """Get Falcon status constant"""

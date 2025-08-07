@@ -4,7 +4,7 @@ from collections.abc import Callable
 from enum import Enum
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from pydantic import ValidationError as PydanticValidationError
 from pydantic import create_model
 
@@ -183,10 +183,15 @@ class ParameterResolver:
 
         # Get or create model
         if cache_key not in self._param_model_cache:
-            self._param_model_cache[cache_key] = create_model(
-                "ParamsModel", **model_fields
-            )
 
+            class _ParamsBase(BaseModel):
+                model_config = ConfigDict(arbitrary_types_allowed=True)
+
+            self._param_model_cache[cache_key] = create_model(
+                "ParamsModel",
+                __base__=_ParamsBase,
+                **model_fields,
+            )
         try:
             validated = self._param_model_cache[cache_key](**model_values)
             return validated.model_dump()

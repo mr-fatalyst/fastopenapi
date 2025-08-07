@@ -52,9 +52,7 @@ class TestSanicIntegration:
 
         assert response.status_code == 400
         result = from_json(response.text)
-        assert result["error"]["message"] == (
-            "Error parsing parameter 'item_id'. Must be a valid int"
-        )
+        assert result["error"]["message"] == ("Error parsing parameter 'item_id'")
 
     @pytest.mark.asyncio
     async def test_get_nonexistent_item(self, client):

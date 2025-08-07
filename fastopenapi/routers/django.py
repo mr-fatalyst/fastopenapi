@@ -1,3 +1,4 @@
+import inspect
 import re
 from collections.abc import Callable
 from http import HTTPStatus
@@ -38,45 +39,59 @@ class DjangoRouter(BaseAdapter):
         method_name = method.lower()
         outer = self
 
-        def handle(self, req, **path_params):
-            # Create synthetic request object
-            synthetic_request = type(
-                "Request",
-                (),
-                {
-                    "path_params": path_params,
-                    "GET": req.GET,
-                    "body": req.body,
-                    "headers": req.headers,
-                    "COOKIES": req.COOKIES,
-                    "POST": req.POST,
-                    "FILES": req.FILES,
-                },
-            )()
-            return outer.handle_django_request(endpoint, synthetic_request)
+        # Check if endpoint is async and create appropriate handler
+        if inspect.iscoroutinefunction(endpoint):
+            # Async endpoint - create async view
+            async def handle(self, req, **path_params):
+                synthetic_request = type(
+                    "Request",
+                    (),
+                    {
+                        "path_params": path_params,
+                        "GET": req.GET,
+                        "body": req.body,
+                        "headers": req.headers,
+                        "COOKIES": req.COOKIES,
+                        "POST": req.POST,
+                        "FILES": req.FILES,
+                    },
+                )()
+
+                try:
+                    return await outer.handle_request_async(endpoint, synthetic_request)
+                except Http404 as e:
+                    error_response = ResourceNotFoundError(
+                        " ".join(e.args)
+                    ).to_response()
+                    return JsonResponse(error_response, status=HTTPStatus.NOT_FOUND)
+
+        else:
+            # Sync endpoint - create sync view
+            def handle(self, req, **path_params):
+                synthetic_request = type(
+                    "Request",
+                    (),
+                    {
+                        "path_params": path_params,
+                        "GET": req.GET,
+                        "body": req.body,
+                        "headers": req.headers,
+                        "COOKIES": req.COOKIES,
+                        "POST": req.POST,
+                        "FILES": req.FILES,
+                    },
+                )()
+
+                try:
+                    return outer.handle_request_sync(endpoint, synthetic_request)
+                except Http404 as e:
+                    error_response = ResourceNotFoundError(
+                        " ".join(e.args)
+                    ).to_response()
+                    return JsonResponse(error_response, status=HTTPStatus.NOT_FOUND)
 
         setattr(view, method_name, handle)
         return view
-
-    def handle_django_request(self, endpoint: Callable, request) -> HttpResponse:
-        """Handle Django-specific request"""
-        try:
-            request_data = self.extract_request_data(request)
-            kwargs = self.resolver.resolve(endpoint, request_data)
-
-            result = endpoint(**kwargs)
-
-            response = self.response_builder.build(result, endpoint.__route_meta__)
-            return self.build_framework_response(response)
-
-        except Http404 as e:
-            error_response = ResourceNotFoundError(" ".join(e.args)).to_response()
-            return JsonResponse(error_response, status=HTTPStatus.NOT_FOUND)
-        except Exception as e:
-            from fastopenapi.errors.handler import format_exception_response
-
-            error_response = format_exception_response(e)
-            return JsonResponse(error_response, status=getattr(e, "status_code", 500))
 
     def extract_request_data(self, request) -> RequestData:
         """Extract data from Django request"""

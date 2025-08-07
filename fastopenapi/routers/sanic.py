@@ -5,7 +5,6 @@ from collections.abc import Callable
 from sanic import response
 
 from fastopenapi.core.types import RequestData, Response, UploadFile
-from fastopenapi.errors.handler import format_exception_response
 from fastopenapi.openapi.ui import render_redoc_ui, render_swagger_ui
 from fastopenapi.routers.base import BaseAdapter
 
@@ -36,31 +35,17 @@ class SanicRouter(BaseAdapter):
                     "files": request.files,
                 },
             )()
-            return await self.handle_sanic_request(endpoint, synthetic_request)
+
+            # Check if endpoint is async and use appropriate handler
+            if inspect.iscoroutinefunction(endpoint):
+                return await self.handle_request_async(endpoint, synthetic_request)
+            else:
+                return self.handle_request_sync(endpoint, synthetic_request)
 
         route_name = f"{endpoint.__name__}_{method.lower()}_{path.replace('/', '_')}"
         self.app.add_route(
             view_func, sanic_path, methods=[method.upper()], name=route_name
         )
-
-    async def handle_sanic_request(self, endpoint: Callable, request):
-        """Handle Sanic request"""
-        try:
-            request_data = self.extract_request_data(request)
-            kwargs = self.resolver.resolve(endpoint, request_data)
-
-            # Call endpoint
-            if inspect.iscoroutinefunction(endpoint):
-                result = await endpoint(**kwargs)
-            else:
-                result = endpoint(**kwargs)
-
-            response_obj = self.response_builder.build(result, endpoint.__route_meta__)
-            return self.build_framework_response(response_obj)
-
-        except Exception as e:
-            error_response = format_exception_response(e)
-            return response.json(error_response, status=getattr(e, "status_code", 500))
 
     def extract_request_data(self, request) -> RequestData:
         """Extract data from Sanic request"""
