@@ -31,9 +31,10 @@ class TestSanicRouter:
         routes = router.get_routes()
 
         assert len(routes) == 1
-        assert routes[0][0] == "/test"
-        assert routes[0][1] == "GET"
-        assert routes[0][2] == test_endpoint
+        route = routes[0]
+        assert route.path == "/test"
+        assert route.method == "GET"
+        assert route.endpoint == test_endpoint
 
         # Check if the route exists in the Sanic app
         route_found = False
@@ -57,8 +58,10 @@ class TestSanicRouter:
 
         routes = main_router.get_routes()
         assert len(routes) == 1
-        assert routes[0][0] == "/api/sub"
-        assert routes[0][1] == "GET"
+        route = routes[0]
+        assert route.path == "/api/sub"
+        assert route.method == "GET"
+        assert route.endpoint == sub_endpoint
 
         # Check if the route exists in the Sanic app
         route_found = False

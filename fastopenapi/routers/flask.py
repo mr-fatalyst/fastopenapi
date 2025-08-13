@@ -1,11 +1,9 @@
-import inspect
-import re
 from collections.abc import Callable
 
 from flask import Response as FlaskResponse
 from flask import jsonify, request
 
-from fastopenapi.core.types import RequestData, Response, UploadFile
+from fastopenapi.core.types import Response
 from fastopenapi.openapi.ui import render_redoc_ui, render_swagger_ui
 from fastopenapi.routers.base import BaseAdapter
 
@@ -18,10 +16,9 @@ class FlaskRouter(BaseAdapter):
         super().add_route(path, method, endpoint)
 
         if self.app is not None:
-            flask_path = re.sub(r"{(\w+)}", r"<\1>", path)
+            flask_path = self._convert_path_for_framework(path, "flask")
 
             def view_func(**path_params):
-                # Create synthetic request object with path params
                 synthetic_request = type(
                     "Request",
                     (),
@@ -36,72 +33,67 @@ class FlaskRouter(BaseAdapter):
                     },
                 )()
 
-                # Check if endpoint is async
-                if inspect.iscoroutinefunction(endpoint):
+                if self.is_async_endpoint(endpoint):
                     error_response = {
                         "error": {
                             "type": "unsupported_endpoint",
                             "message": f"Async endpoint '{endpoint.__name__}' "
-                            f"cannot be used with Flask. Use Quart for "
-                            f"async support.",
+                            f"cannot be used with Flask. Use Quart for async support.",
                             "status": 500,
                         }
                     }
                     return jsonify(error_response), 500
 
-                # Use sync handler
                 return self.handle_request_sync(endpoint, synthetic_request)
 
             self.app.add_url_rule(
                 flask_path, endpoint.__name__, view_func, methods=[method.upper()]
             )
 
-    def extract_request_data(self, request) -> RequestData:
-        """Extract data from Flask request"""
-        # Query parameters
+    def _get_path_params(self, request) -> dict:
+        return getattr(request, "path_params", {})
+
+    def _get_query_params(self, request) -> dict:
         query_params = {}
         for key in request.args:
             values = request.args.getlist(key)
             query_params[key] = values[0] if len(values) == 1 else values
+        return query_params
 
-        # Headers (normalize to lowercase)
-        headers = {k.lower(): v for k, v in request.headers.items()}
+    def _get_headers(self, request) -> dict:
+        return dict(request.headers)
 
-        # Cookies
-        cookies = dict(request.cookies)
+    def _get_cookies(self, request) -> dict:
+        return dict(request.cookies)
 
-        # Body
-        body = request.json or {}
+    def _get_body_sync(self, request) -> dict:
+        return request.json or {}
 
-        # Form data
-        form_data = dict(request.form) if hasattr(request, "form") else {}
+    async def _get_body_async(self, request) -> dict:
+        # Flask doesn't support async
+        return self._get_body_sync(request)
 
-        # Files
+    def _get_form_data_sync(self, request) -> dict:
+        return dict(request.form) if hasattr(request, "form") else {}
+
+    async def _get_form_and_files_async(self, request) -> tuple[dict, dict]:
+        # Flask doesn't support async
+        return self._get_form_data_sync(request), self._get_files_sync(request)
+
+    def _get_files_sync(self, request) -> dict:
         files = {}
         if hasattr(request, "files"):
             for name, file in request.files.items():
-                files[name] = UploadFile(
-                    filename=file.filename,
-                    content_type=file.content_type,
-                    file=file.stream,
-                )
-
-        return RequestData(
-            path_params=getattr(request, "path_params", {}),
-            query_params=query_params,
-            headers=headers,
-            cookies=cookies,
-            body=body,
-            form_data=form_data,
-            files=files,
-        )
+                # Read file content into temporary file
+                content = file.stream.read()
+                files[name] = self._save_upload_file_sync(content, file.filename)
+        return files
 
     def build_framework_response(self, response: Response) -> FlaskResponse:
         """Build Flask response"""
         flask_response = jsonify(response.content)
         flask_response.status_code = response.status_code
 
-        # Add custom headers
         for key, value in response.headers.items():
             flask_response.headers[key] = value
 

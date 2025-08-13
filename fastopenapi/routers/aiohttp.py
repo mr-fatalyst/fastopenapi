@@ -1,10 +1,9 @@
 import functools
-import inspect
 from collections.abc import Callable
 
 from aiohttp import web
 
-from fastopenapi.core.types import RequestData, Response, UploadFile
+from fastopenapi.core.types import Response, UploadFile
 from fastopenapi.openapi.ui import render_redoc_ui, render_swagger_ui
 from fastopenapi.routers.base import BaseAdapter
 
@@ -26,86 +25,77 @@ class AioHttpRouter(BaseAdapter):
     @staticmethod
     async def _aiohttp_view(request: web.Request, router, endpoint: Callable):
         """Handle AioHttp request"""
-        # Check if endpoint is async and use appropriate handler
-        if inspect.iscoroutinefunction(endpoint):
+        if router.is_async_endpoint(endpoint):
             return await router.handle_request_async(endpoint, request)
         else:
             return router.handle_request_sync(endpoint, request)
 
-    async def extract_request_data_async(self, request: web.Request) -> RequestData:
-        """Extract data from AioHttp request (async)"""
-        # Query parameters
+    def _get_path_params(self, request: web.Request) -> dict:
+        return dict(request.match_info)
+
+    def _get_query_params(self, request: web.Request) -> dict:
         query_params = {}
         for key in request.query:
             values = request.query.getall(key)
             query_params[key] = values[0] if len(values) == 1 else values
+        return query_params
 
-        # Headers (normalize to lowercase)
-        headers = {k.lower(): v for k, v in request.headers.items()}
+    def _get_headers(self, request: web.Request) -> dict:
+        return dict(request.headers)
 
-        # Cookies
-        cookies = dict(request.cookies)
+    def _get_cookies(self, request: web.Request) -> dict:
+        return dict(request.cookies)
 
-        # Body
-        body = {}
+    def _get_body_sync(self, request: web.Request) -> dict:
+        # Sync endpoints in aiohttp can't read body
+        return {}
+
+    async def _get_body_async(self, request: web.Request) -> dict:
         try:
             body_bytes = await request.read()
             if body_bytes:
-                body = await request.json()
+                return await request.json()
         except Exception:
             pass
+        return {}
 
-        # Form data and files
+    def _get_form_data_sync(self, request: web.Request) -> dict:
+        # Sync endpoints in aiohttp can't read form data
+        return {}
+
+    def _get_files_sync(self, request: web.Request) -> dict:
+        # Sync endpoints in aiohttp can't read files
+        return {}
+
+    async def _get_form_and_files_async(
+        self, request: web.Request
+    ) -> tuple[dict, dict]:
         form_data = {}
         files = {}
+
         if request.content_type == "multipart/form-data":
             reader = await request.multipart()
             async for part in reader:
                 if part.filename:
-                    # This is a file
-                    content = await part.read()
+                    # Stream file to temporary file instead of loading into memory
+                    import tempfile
+
+                    temp_file = tempfile.NamedTemporaryFile(delete=False)
+
+                    # Stream chunks to avoid memory issues
+                    async for chunk in part:
+                        temp_file.write(chunk)
+
+                    temp_file.seek(0)
                     files[part.name] = UploadFile(
                         filename=part.filename,
                         content_type=part.headers.get("Content-Type", ""),
-                        file=content,  # Store as bytes for simplicity
+                        file=temp_file,
                     )
                 else:
-                    # Regular form field
                     form_data[part.name] = await part.text()
 
-        return RequestData(
-            path_params=dict(request.match_info),
-            query_params=query_params,
-            headers=headers,
-            cookies=cookies,
-            body=body,
-            form_data=form_data,
-            files=files,
-        )
-
-    def extract_request_data(self, request: web.Request) -> RequestData:
-        """Sync extraction for sync endpoints - simplified version"""
-        # Query parameters
-        query_params = {}
-        for key in request.query:
-            values = request.query.getall(key)
-            query_params[key] = values[0] if len(values) == 1 else values
-
-        # Headers (normalize to lowercase)
-        headers = {k.lower(): v for k, v in request.headers.items()}
-
-        # Cookies
-        cookies = dict(request.cookies)
-
-        return RequestData(
-            path_params=dict(request.match_info),
-            query_params=query_params,
-            headers=headers,
-            cookies=cookies,
-            body={},  # Body requires async reading
-            form_data={},
-            files={},
-        )
+        return form_data, files
 
     def build_framework_response(self, response: Response) -> web.Response:
         """Build AioHttp response"""

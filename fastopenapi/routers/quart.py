@@ -1,11 +1,9 @@
-import inspect
-import re
 from collections.abc import Callable
 
 from quart import Response as QuartResponse
 from quart import jsonify, request
 
-from fastopenapi.core.types import RequestData, Response, UploadFile
+from fastopenapi.core.types import Response, UploadFile
 from fastopenapi.openapi.ui import render_redoc_ui, render_swagger_ui
 from fastopenapi.routers.base import BaseAdapter
 
@@ -18,7 +16,9 @@ class QuartRouter(BaseAdapter):
         super().add_route(path, method, endpoint)
 
         if self.app is not None:
-            quart_path = re.sub(r"{(\w+)}", r"<\1>", path)
+            quart_path = self._convert_path_for_framework(
+                path, "flask"
+            )  # Same as Flask
 
             async def view_func(**path_params):
                 synthetic_request = type(
@@ -26,11 +26,16 @@ class QuartRouter(BaseAdapter):
                     (),
                     {
                         "path_params": path_params,
+                        "args": request.args,
+                        "json": request.get_json(silent=True),
+                        "headers": request.headers,
+                        "cookies": request.cookies,
+                        "form": request.form,
+                        "files": request.files,
                     },
                 )()
 
-                # Check if endpoint is async and use appropriate handler
-                if inspect.iscoroutinefunction(endpoint):
+                if self.is_async_endpoint(endpoint):
                     return await self.handle_request_async(endpoint, synthetic_request)
                 else:
                     return self.handle_request_sync(endpoint, synthetic_request)
@@ -39,75 +44,63 @@ class QuartRouter(BaseAdapter):
                 quart_path, endpoint.__name__, view_func, methods=[method.upper()]
             )
 
-    async def extract_request_data_async(self, synthetic_request) -> RequestData:
-        """Extract data from Quart request (async)"""
-        # Query parameters
+    def _get_path_params(self, request) -> dict:
+        return getattr(request, "path_params", {})
+
+    def _get_query_params(self, request) -> dict:
         query_params = {}
         for key in request.args:
             values = request.args.getlist(key)
             query_params[key] = values[0] if len(values) == 1 else values
+        return query_params
 
-        # Headers (normalize to lowercase)
-        headers = {k.lower(): v for k, v in request.headers.items()}
+    def _get_headers(self, request) -> dict:
+        return dict(request.headers)
 
-        # Cookies
-        cookies = dict(request.cookies)
+    def _get_cookies(self, request) -> dict:
+        return dict(request.cookies)
 
-        # Body
-        body = await request.get_json(silent=True) or {}
+    def _get_body_sync(self, request) -> dict:
+        # Sync endpoints in Quart have limited support
+        return {}
 
-        # Form data
+    async def _get_body_async(self, request) -> dict:
+        return await request.json or {}
+
+    def _get_form_data_sync(self, request) -> dict:
+        # Sync endpoints in Quart have limited support
+        return {}
+
+    async def _get_form_and_files_async(self, request) -> tuple[dict, dict]:
         form_data = {}
+        files = {}
+
         form = await request.form
         for key in form:
             form_data[key] = form[key]
 
-        # Files
-        files = {}
         files_data = await request.files
         for name, file in files_data.items():
+            # Stream to temporary file
+            import tempfile
+
+            temp_file = tempfile.NamedTemporaryFile(delete=False)
+            await file.save(temp_file.name)
+            temp_file.seek(0)
+
             files[name] = UploadFile(
-                filename=file.filename, content_type=file.content_type, file=file.stream
+                filename=file.filename, content_type=file.content_type, file=temp_file
             )
 
-        return RequestData(
-            path_params=getattr(synthetic_request, "path_params", {}),
-            query_params=query_params,
-            headers=headers,
-            cookies=cookies,
-            body=body,
-            form_data=form_data,
-            files=files,
-        )
+        return form_data, files
 
-    def extract_request_data(self, synthetic_request) -> RequestData:
-        """Sync extraction for sync endpoints - simplified version"""
-        # Query parameters
-        query_params = {}
-        for key in request.args:
-            values = request.args.getlist(key)
-            query_params[key] = values[0] if len(values) == 1 else values
-
-        # Headers (normalize to lowercase)
-        headers = {k.lower(): v for k, v in request.headers.items()}
-
-        # Cookies
-        cookies = dict(request.cookies)
-
-        return RequestData(
-            path_params=getattr(synthetic_request, "path_params", {}),
-            query_params=query_params,
-            headers=headers,
-            cookies=cookies,
-            body={},  # Body requires async reading
-            form_data={},
-            files={},
-        )
+    def _get_files_sync(self, request) -> dict:
+        # Sync endpoints in Quart have limited support
+        return {}
 
     def build_framework_response(self, response: Response):
         """Build Quart response"""
         quart_response = jsonify(response.content)
-        # Return tuple format for Quart
         return quart_response, response.status_code, response.headers
 
     def _register_docs_endpoints(self):

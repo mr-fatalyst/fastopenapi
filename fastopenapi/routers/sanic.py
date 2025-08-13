@@ -1,10 +1,8 @@
-import inspect
-import re
 from collections.abc import Callable
 
 from sanic import response
 
-from fastopenapi.core.types import RequestData, Response, UploadFile
+from fastopenapi.core.types import Response
 from fastopenapi.openapi.ui import render_redoc_ui, render_swagger_ui
 from fastopenapi.routers.base import BaseAdapter
 
@@ -19,25 +17,16 @@ class SanicRouter(BaseAdapter):
         if self.app is None:
             return
 
-        sanic_path = re.sub(r"{(\w+)}", r"<\1>", path)
+        sanic_path = self._convert_path_for_framework(path, "sanic")
 
         async def view_func(request, **path_params):
             synthetic_request = type(
                 "Request",
                 (),
-                {
-                    "path_params": path_params,
-                    "args": request.args,
-                    "json": request.json,
-                    "headers": request.headers,
-                    "cookies": request.cookies,
-                    "form": request.form,
-                    "files": request.files,
-                },
+                {"path_params": path_params, "_request": request},
             )()
 
-            # Check if endpoint is async and use appropriate handler
-            if inspect.iscoroutinefunction(endpoint):
+            if self.is_async_endpoint(endpoint):
                 return await self.handle_request_async(endpoint, synthetic_request)
             else:
                 return self.handle_request_sync(endpoint, synthetic_request)
@@ -47,50 +36,52 @@ class SanicRouter(BaseAdapter):
             view_func, sanic_path, methods=[method.upper()], name=route_name
         )
 
-    def extract_request_data(self, request) -> RequestData:
-        """Extract data from Sanic request"""
-        # Query parameters
+    def _get_path_params(self, request) -> dict:
+        return getattr(request, "path_params", {})
+
+    def _get_query_params(self, request) -> dict:
         query_params = {}
-        for k, v in request.args.items():
-            values = request.args.getlist(k)
+        req = request._request
+        for k, v in req.args.items():
+            values = req.args.getlist(k)
             query_params[k] = values[0] if len(values) == 1 else values
+        return query_params
 
-        # Headers (normalize to lowercase)
-        headers = {k.lower(): v for k, v in request.headers.items()}
+    def _get_headers(self, request) -> dict:
+        return dict(request._request.headers)
 
-        # Cookies
-        cookies = dict(request.cookies)
+    def _get_cookies(self, request) -> dict:
+        return dict(request._request.cookies)
 
-        # Body
-        body = request.json or {}
+    def _get_body_sync(self, request) -> dict:
+        return request._request.json or {}
 
-        # Form data
+    async def _get_body_async(self, request) -> dict:
+        return request._request.json or {}
+
+    def _get_form_data_sync(self, request) -> dict:
         form_data = {}
-        if hasattr(request, "form"):
-            for key in request.form:
-                form_data[key] = request.form.get(key)
+        if hasattr(request._request, "form"):
+            for key in request._request.form:
+                form_data[key] = request._request.form.get(key)
+        return form_data
 
-        # Files
+    async def _get_form_and_files_async(self, request) -> tuple[dict, dict]:
+        form_data = self._get_form_data_sync(request)
+        files = self._get_files_sync(request)
+        return form_data, files
+
+    def _get_files_sync(self, request) -> dict:
         files = {}
-        if hasattr(request, "files"):
-            for name, file_list in request.files.items():
+        if hasattr(request._request, "files"):
+            for name, file_list in request._request.files.items():
                 if file_list:
-                    file = file_list[0]  # Take first file if multiple
-                    files[name] = UploadFile(
-                        filename=file.name,
-                        content_type=file.type,
-                        file=file.body,  # Sanic stores file content as bytes
+                    file = file_list[0]
+                    # Save to temporary file
+                    files[name] = self._save_upload_file_sync(
+                        file.body, file.name  # Sanic stores file content as bytes
                     )
-
-        return RequestData(
-            path_params=getattr(request, "path_params", {}),
-            query_params=query_params,
-            headers=headers,
-            cookies=cookies,
-            body=body,
-            form_data=form_data,
-            files=files,
-        )
+        return files
 
     def build_framework_response(self, response_obj: Response):
         """Build Sanic response"""

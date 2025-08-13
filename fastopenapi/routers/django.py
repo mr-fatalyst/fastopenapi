@@ -1,4 +1,3 @@
-import inspect
 import re
 from collections.abc import Callable
 from http import HTTPStatus
@@ -9,7 +8,7 @@ from django.views import View
 from django.views.decorators.csrf import csrf_exempt
 from pydantic_core import from_json, to_json
 
-from fastopenapi.core.types import RequestData, Response, UploadFile
+from fastopenapi.core.types import Response, UploadFile
 from fastopenapi.errors.exceptions import ResourceNotFoundError
 from fastopenapi.openapi.ui import render_redoc_ui, render_swagger_ui
 from fastopenapi.routers.base import BaseAdapter
@@ -39,9 +38,8 @@ class DjangoRouter(BaseAdapter):
         method_name = method.lower()
         outer = self
 
-        # Check if endpoint is async and create appropriate handler
-        if inspect.iscoroutinefunction(endpoint):
-            # Async endpoint - create async view
+        if self.is_async_endpoint(endpoint):
+
             async def handle(self, req, **path_params):
                 synthetic_request = type(
                     "Request",
@@ -66,7 +64,7 @@ class DjangoRouter(BaseAdapter):
                     return JsonResponse(error_response, status=HTTPStatus.NOT_FOUND)
 
         else:
-            # Sync endpoint - create sync view
+
             def handle(self, req, **path_params):
                 synthetic_request = type(
                     "Request",
@@ -93,48 +91,55 @@ class DjangoRouter(BaseAdapter):
         setattr(view, method_name, handle)
         return view
 
-    def extract_request_data(self, request) -> RequestData:
-        """Extract data from Django request"""
-        # Query parameters
+    def _get_path_params(self, request) -> dict:
+        return getattr(request, "path_params", {})
+
+    def _get_query_params(self, request) -> dict:
         query_params = {}
         for key in request.GET.keys():
             values = request.GET.getlist(key)
             query_params[key] = values[0] if len(values) == 1 else values
+        return query_params
 
-        # Headers (normalize to lowercase)
-        headers = {k.lower(): v for k, v in request.headers.items()}
+    def _get_headers(self, request) -> dict:
+        return dict(request.headers)
 
-        # Cookies
-        cookies = dict(request.COOKIES)
+    def _get_cookies(self, request) -> dict:
+        return dict(request.COOKIES)
 
-        # Body
-        body = {}
+    def _get_body_sync(self, request) -> dict:
         if hasattr(request, "body") and request.body:
             try:
-                body = from_json(request.body.decode("utf-8"))
+                return from_json(request.body.decode("utf-8"))
             except Exception:
                 pass
+        return {}
 
-        # Form data
-        form_data = dict(request.POST) if hasattr(request, "POST") else {}
+    async def _get_body_async(self, request) -> dict:
+        return self._get_body_sync(request)
 
-        # Files
+    def _get_form_data_sync(self, request) -> dict:
+        return dict(request.POST) if hasattr(request, "POST") else {}
+
+    async def _get_form_and_files_async(self, request) -> tuple[dict, dict]:
+        return self._get_form_data_sync(request), self._get_files_sync(request)
+
+    def _get_files_sync(self, request) -> dict:
         files = {}
         if hasattr(request, "FILES"):
             for name, file in request.FILES.items():
-                files[name] = UploadFile(
-                    filename=file.name, content_type=file.content_type, file=file
-                )
+                # Read file content into temporary file
+                import tempfile
 
-        return RequestData(
-            path_params=getattr(request, "path_params", {}),
-            query_params=query_params,
-            headers=headers,
-            cookies=cookies,
-            body=body,
-            form_data=form_data,
-            files=files,
-        )
+                temp_file = tempfile.NamedTemporaryFile(delete=False)
+                for chunk in file.chunks():
+                    temp_file.write(chunk)
+                temp_file.seek(0)
+
+                files[name] = UploadFile(
+                    filename=file.name, content_type=file.content_type, file=temp_file
+                )
+        return files
 
     def build_framework_response(self, response: Response) -> HttpResponse:
         """Build Django response"""
@@ -147,7 +152,6 @@ class DjangoRouter(BaseAdapter):
                 content_type="application/json",
             )
 
-        # Add custom headers
         for key, value in response.headers.items():
             http_response[key] = value
 

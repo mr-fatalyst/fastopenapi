@@ -1,11 +1,10 @@
-import inspect
 from collections.abc import Callable
 from http import HTTPStatus
 
 import falcon.asgi
 from pydantic_core import from_json
 
-from fastopenapi.core.types import RequestData, Response
+from fastopenapi.core.types import Response
 from fastopenapi.openapi.ui import render_redoc_ui, render_swagger_ui
 from fastopenapi.routers.base import BaseAdapter
 
@@ -59,28 +58,24 @@ class FalconRouter(BaseAdapter):
         method_name = METHODS_MAPPER.get(method, f"on_{method.lower()}")
 
         async def handle(req, resp, **path_params):
-            # Create synthetic request
             synthetic_request = type(
                 "Request",
                 (),
                 {
                     "path_params": path_params,
-                    "params": req.params,
-                    "bounded_stream": req.bounded_stream,
-                    "headers": req.headers,
-                    "cookies": req.cookies,
+                    "_req": req,
+                    "_resp": resp,
                 },
             )()
 
-            # Check if endpoint is async and use appropriate handler
-            if inspect.iscoroutinefunction(endpoint):
+            if self.is_async_endpoint(endpoint):
                 result_response = await self.handle_request_async(
                     endpoint, synthetic_request
                 )
             else:
                 result_response = self.handle_request_sync(endpoint, synthetic_request)
 
-            # Falcon needs special handling - set response directly
+            # Falcon needs special handling
             if isinstance(result_response, Response):
                 resp.status = self._get_falcon_status(result_response.status_code)
                 resp.media = result_response.content
@@ -90,74 +85,48 @@ class FalconRouter(BaseAdapter):
         setattr(resource, method_name, handle)
         return resource
 
-    async def extract_request_data_async(self, request) -> RequestData:
-        """Extract data from Falcon request (async)"""
-        # Query parameters
+    def _get_path_params(self, request) -> dict:
+        return getattr(request, "path_params", {})
+
+    def _get_query_params(self, request) -> dict:
         query_params = {}
-        for key in request.params.keys():
+        for key in request._req.params.keys():
             values = (
-                request.params.getall(key)
-                if hasattr(request.params, "getall")
-                else [request.params.get(key)]
+                request._req.params.getall(key)
+                if hasattr(request._req.params, "getall")
+                else [request._req.params.get(key)]
             )
             query_params[key] = values[0] if len(values) == 1 else values
+        return query_params
 
-        # Headers (normalize to lowercase)
-        headers = {k.lower(): v for k, v in request.headers.items()}
+    def _get_headers(self, request) -> dict:
+        return dict(request._req.headers)
 
-        # Cookies
-        cookies = dict(request.cookies)
+    def _get_cookies(self, request) -> dict:
+        return dict(request._req.cookies)
 
-        # Body
-        body = {}
+    def _get_body_sync(self, request) -> dict:
+        # Sync endpoints in Falcon ASGI can't read body
+        return {}
+
+    async def _get_body_async(self, request) -> dict:
         try:
-            body_bytes = await request.bounded_stream.read()
+            body_bytes = await request._req.bounded_stream.read()
             if body_bytes:
-                body = from_json(body_bytes.decode("utf-8"))
+                return from_json(body_bytes.decode("utf-8"))
         except Exception:
             pass
+        return {}
 
-        # Form data and files - Falcon doesn't have built-in multipart support
-        form_data = {}
-        files = {}
+    def _get_form_data_sync(self, request) -> dict:
+        return {}
 
-        return RequestData(
-            path_params=getattr(request, "path_params", {}),
-            query_params=query_params,
-            headers=headers,
-            cookies=cookies,
-            body=body,
-            form_data=form_data,
-            files=files,
-        )
+    async def _get_form_and_files_async(self, request) -> tuple[dict, dict]:
+        # Falcon doesn't have built-in multipart support
+        return {}, {}
 
-    def extract_request_data(self, request) -> RequestData:
-        """Sync extraction for sync endpoints - simplified version"""
-        # Query parameters
-        query_params = {}
-        for key in request.params.keys():
-            values = (
-                request.params.getall(key)
-                if hasattr(request.params, "getall")
-                else [request.params.get(key)]
-            )
-            query_params[key] = values[0] if len(values) == 1 else values
-
-        # Headers (normalize to lowercase)
-        headers = {k.lower(): v for k, v in request.headers.items()}
-
-        # Cookies
-        cookies = dict(request.cookies)
-
-        return RequestData(
-            path_params=getattr(request, "path_params", {}),
-            query_params=query_params,
-            headers=headers,
-            cookies=cookies,
-            body={},  # Body requires async reading
-            form_data={},
-            files={},
-        )
+    def _get_files_sync(self, request) -> dict:
+        return {}
 
     def build_framework_response(self, response: Response):
         """Build Falcon response - handled directly in handler"""

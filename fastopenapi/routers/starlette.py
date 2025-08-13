@@ -1,5 +1,4 @@
 import functools
-import inspect
 from collections.abc import Callable
 
 from pydantic_core import from_json
@@ -7,7 +6,7 @@ from starlette.applications import Starlette
 from starlette.responses import HTMLResponse, JSONResponse
 from starlette.routing import Route
 
-from fastopenapi.core.types import RequestData, Response, UploadFile
+from fastopenapi.core.types import Response, UploadFile
 from fastopenapi.openapi.ui import render_redoc_ui, render_swagger_ui
 from fastopenapi.routers.base import BaseAdapter
 
@@ -34,84 +33,75 @@ class StarletteRouter(BaseAdapter):
     @staticmethod
     async def _starlette_view(request, router, endpoint):
         """Handle Starlette request"""
-        # Check if endpoint is async and use appropriate handler
-        if inspect.iscoroutinefunction(endpoint):
+        if router.is_async_endpoint(endpoint):
             return await router.handle_request_async(endpoint, request)
         else:
             return router.handle_request_sync(endpoint, request)
 
-    async def extract_request_data_async(self, request) -> RequestData:
-        """Extract data from Starlette request (async)"""
-        # Query parameters
+    def _get_path_params(self, request) -> dict:
+        return dict(request.path_params)
+
+    def _get_query_params(self, request) -> dict:
         query_params = {}
         for key in request.query_params:
             values = request.query_params.getlist(key)
             query_params[key] = values[0] if len(values) == 1 else values
+        return query_params
 
-        # Headers (normalize to lowercase)
-        headers = {k.lower(): v for k, v in request.headers.items()}
+    def _get_headers(self, request) -> dict:
+        return dict(request.headers)
 
-        # Cookies
-        cookies = dict(request.cookies)
+    def _get_cookies(self, request) -> dict:
+        return dict(request.cookies)
 
-        # Body
-        body = {}
+    def _get_body_sync(self, request) -> dict:
+        # Sync endpoints in Starlette can't read body
+        return {}
+
+    async def _get_body_async(self, request) -> dict:
         try:
             body_bytes = await request.body()
             if body_bytes:
-                body = from_json(body_bytes.decode("utf-8"))
+                return from_json(body_bytes.decode("utf-8"))
         except Exception:
             pass
+        return {}
 
-        # Form data and files
+    def _get_form_data_sync(self, request) -> dict:
+        # Sync endpoints in Starlette can't read form data
+        return {}
+
+    def _get_files_sync(self, request) -> dict:
+        # Sync endpoints in Starlette can't read files
+        return {}
+
+    async def _get_form_and_files_async(self, request) -> tuple[dict, dict]:
         form_data = {}
         files = {}
+
         if request.headers.get("content-type", "").startswith("multipart/form-data"):
             form = await request.form()
             for key, value in form.items():
                 if hasattr(value, "filename"):
-                    # This is a file
+                    # Stream file content to temporary file
+                    import tempfile
+
+                    temp_file = tempfile.NamedTemporaryFile(delete=False)
+
+                    # Read in chunks to avoid memory issues
+                    while chunk := await value.read(1024 * 1024):  # 1MB chunks
+                        temp_file.write(chunk)
+
+                    temp_file.seek(0)
                     files[key] = UploadFile(
                         filename=value.filename,
                         content_type=value.content_type,
-                        file=value.file,
+                        file=temp_file,
                     )
                 else:
                     form_data[key] = value
 
-        return RequestData(
-            path_params=dict(request.path_params),
-            query_params=query_params,
-            headers=headers,
-            cookies=cookies,
-            body=body,
-            form_data=form_data,
-            files=files,
-        )
-
-    def extract_request_data(self, request) -> RequestData:
-        """Sync extraction for sync endpoints - simplified version"""
-        # Query parameters
-        query_params = {}
-        for key in request.query_params:
-            values = request.query_params.getlist(key)
-            query_params[key] = values[0] if len(values) == 1 else values
-
-        # Headers (normalize to lowercase)
-        headers = {k.lower(): v for k, v in request.headers.items()}
-
-        # Cookies
-        cookies = dict(request.cookies)
-
-        return RequestData(
-            path_params=dict(request.path_params),
-            query_params=query_params,
-            headers=headers,
-            cookies=cookies,
-            body={},  # Body requires async reading
-            form_data={},
-            files={},
-        )
+        return form_data, files
 
     def build_framework_response(self, response: Response) -> JSONResponse:
         """Build Starlette response"""

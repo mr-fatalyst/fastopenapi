@@ -1,11 +1,9 @@
-import inspect
-import re
 from collections.abc import Callable
 
 from pydantic_core import from_json, to_json
 from tornado.web import Application, RequestHandler, url
 
-from fastopenapi.core.types import RequestData, Response, UploadFile
+from fastopenapi.core.types import Response
 from fastopenapi.openapi.ui import render_redoc_ui, render_swagger_ui
 from fastopenapi.routers.base import BaseAdapter
 
@@ -39,19 +37,17 @@ class TornadoDynamicHandler(RequestHandler):
             self.send_error(405)
             return
 
-        # Create synthetic request
         synthetic_request = type(
             "Request",
             (),
             {
                 "path_kwargs": self.path_kwargs,
-                "request": self.request,
+                "_request": self.request,
                 "json_body": getattr(self, "json_body", {}),
             },
         )()
 
-        # Check if endpoint is async and use appropriate handler
-        if inspect.iscoroutinefunction(self.endpoint):
+        if self.router.is_async_endpoint(self.endpoint):
             result_response = await self.router.handle_request_async(
                 self.endpoint, synthetic_request
             )
@@ -60,12 +56,10 @@ class TornadoDynamicHandler(RequestHandler):
                 self.endpoint, synthetic_request
             )
 
-        # Handle Response object
         if isinstance(result_response, Response):
             self.set_status(result_response.status_code)
             self.set_header("Content-Type", "application/json")
 
-            # Set custom headers
             for key, value in result_response.headers.items():
                 self.set_header(key, value)
 
@@ -109,7 +103,7 @@ class TornadoRouter(BaseAdapter):
         """Add route to Tornado application"""
         super().add_route(path, method, endpoint)
 
-        tornado_path = re.sub(r"{(\w+)}", r"(?P<\1>[^/]+)", path)
+        tornado_path = self._convert_path_for_framework(path, "tornado")
 
         if tornado_path not in self._endpoint_map:
             self._endpoint_map[tornado_path] = {}
@@ -127,63 +121,61 @@ class TornadoRouter(BaseAdapter):
             if self.app is not None:
                 self.app.add_handlers(r".*", [spec])
         else:
-            # Update existing route
             for rule in self.routes:
                 if rule.matcher.regex.pattern == f"{tornado_path}$":
                     rule.target_kwargs["endpoints"] = self._endpoint_map[tornado_path]
                     break
 
-    def extract_request_data(self, synthetic_request) -> RequestData:
-        """Extract data from Tornado request"""
-        request = synthetic_request.request
-        path_kwargs = synthetic_request.path_kwargs
+    def _get_path_params(self, request) -> dict:
+        return request.path_kwargs or {}
 
-        # Query parameters
+    def _get_query_params(self, request) -> dict:
         query_params = {}
-        for key in request.query_arguments:
-            values = [v.decode("utf-8") for v in request.query_arguments[key]]
+        for key in request._request.query_arguments:
+            values = [v.decode("utf-8") for v in request._request.query_arguments[key]]
             query_params[key] = values[0] if len(values) == 1 else values
+        return query_params
 
-        # Headers (normalize to lowercase)
-        headers = {k.lower(): v for k, v in request.headers.items()}
+    def _get_headers(self, request) -> dict:
+        return dict(request._request.headers)
 
-        # Cookies
+    def _get_cookies(self, request) -> dict:
         cookies = {}
-        for name, value in request.cookies.items():
+        for name, value in request._request.cookies.items():
             cookies[name] = value.value
+        return cookies
 
-        # Body
-        body = getattr(synthetic_request, "json_body", {})
+    def _get_body_sync(self, request) -> dict:
+        return getattr(request, "json_body", {})
 
-        # Form data and files
+    async def _get_body_async(self, request) -> dict:
+        return getattr(request, "json_body", {})
+
+    def _get_form_data_sync(self, request) -> dict:
         form_data = {}
-        files = {}
-        if request.body_arguments:
-            for key, values in request.body_arguments.items():
+        if request._request.body_arguments:
+            for key, values in request._request.body_arguments.items():
                 decoded_values = [v.decode("utf-8") for v in values]
                 form_data[key] = (
                     decoded_values[0] if len(decoded_values) == 1 else decoded_values
                 )
+        return form_data
 
-        if request.files:
-            for name, file_list in request.files.items():
+    async def _get_form_and_files_async(self, request) -> tuple[dict, dict]:
+        form_data = self._get_form_data_sync(request)
+        files = self._get_files_sync(request)
+        return form_data, files
+
+    def _get_files_sync(self, request) -> dict:
+        files = {}
+        if request._request.files:
+            for name, file_list in request._request.files.items():
                 if file_list:
                     file = file_list[0]
-                    files[name] = UploadFile(
-                        filename=file["filename"],
-                        content_type=file.get("content_type", ""),
-                        file=file["body"],
+                    files[name] = self._save_upload_file_sync(
+                        file["body"], file["filename"]
                     )
-
-        return RequestData(
-            path_params=path_kwargs or {},
-            query_params=query_params,
-            headers=headers,
-            cookies=cookies,
-            body=body,
-            form_data=form_data,
-            files=files,
-        )
+        return files
 
     def build_framework_response(self, response: Response):
         """Build Tornado response - handled directly in handler"""

@@ -33,8 +33,10 @@ class TestQuartRouter:
         routes = router.get_routes()
 
         assert len(routes) == 1
-        assert routes[0] == ("/test", "GET", test_endpoint)
-        assert "/test" in {i for i, _, _ in router._routes}
+        route = routes[0]
+        assert route.path == "/test"
+        assert route.method == "GET"
+        assert route.endpoint == test_endpoint
         assert "test_endpoint" in router.app.view_functions
 
     def test_include_router(self):
@@ -51,8 +53,10 @@ class TestQuartRouter:
 
         routes = main_router.get_routes()
         assert len(routes) == 1
-        assert routes[0][0] == "/api/sub"
-        assert routes[0][1] == "GET"
+        route = routes[0]
+        assert route.path == "/api/sub"
+        assert route.method == "GET"
+        assert route.endpoint == sub_endpoint
 
     def test_openapi_generation(self):
         """Test OpenAPI schema generation"""

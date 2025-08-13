@@ -1,21 +1,28 @@
 import inspect
 import re
+import threading
 import typing
+from functools import lru_cache
 
 from pydantic import BaseModel
 
 from fastopenapi.core.constants import PYTHON_TYPE_MAPPING
 from fastopenapi.core.types import Cookie, Form, Header, UploadFile
 
+# Thread-safe compiled regex patterns
+PATH_PARAM_PATTERN = re.compile(r"<(?:[^:>]+:)?([^>]+)>")
+OPENAPI_PATH_PATTERN = re.compile(r"{(\w+)}")
+
 
 class OpenAPIGenerator:
     """Generate OpenAPI schema from routes"""
 
-    _model_schema_cache: dict[str, dict] = {}
-
     def __init__(self, router):
         self.router = router
         self.definitions = {}
+        # Instance-level cache with thread lock
+        self._model_schema_cache = {}
+        self._cache_lock = threading.Lock()
 
     def generate(self) -> dict:
         """Generate complete OpenAPI schema"""
@@ -44,9 +51,10 @@ class OpenAPIGenerator:
             "components": {"schemas": self.definitions},
         }
 
+    @lru_cache(maxsize=128)
     def _convert_path(self, path: str) -> str:
-        """Convert path format to OpenAPI format"""
-        return re.sub(r"<(?:\w+:)?(\w+)>", r"{\1}", path)
+        """Convert path format to OpenAPI format with caching"""
+        return PATH_PARAM_PATTERN.sub(r"{\1}", path)
 
     def _build_operation(self, route) -> dict:
         """Build operation object for a route"""
@@ -75,11 +83,9 @@ class OpenAPIGenerator:
         parameters = []
         request_body = None
 
-        # Extract path parameters
-        path_params = {
-            match.group(1)
-            for match in re.finditer(r"{(\w+)}", self._convert_path(route.path))
-        }
+        # Extract path parameters using pre-compiled pattern
+        openapi_path = self._convert_path(route.path)
+        path_params = set(OPENAPI_PATH_PATTERN.findall(openapi_path))
 
         for param_name, param in sig.parameters.items():
             # Handle Pydantic models
@@ -222,26 +228,27 @@ class OpenAPIGenerator:
         return parameters
 
     def _get_model_schema(self, model: type[BaseModel]) -> dict:
-        """Get OpenAPI schema for a Pydantic model"""
+        """Get OpenAPI schema for a Pydantic model with thread-safe caching"""
         model_name = model.__name__
         cache_key = f"{model.__module__}.{model_name}"
 
-        if cache_key not in self._model_schema_cache:
-            model_schema = model.model_json_schema(
-                mode="serialization",
-                ref_template="#/components/schemas/{model}",
-            )
+        with self._cache_lock:
+            if cache_key not in self._model_schema_cache:
+                model_schema = model.model_json_schema(
+                    mode="serialization",
+                    ref_template="#/components/schemas/{model}",
+                )
 
-            # Process nested definitions
-            for key in ("definitions", "$defs"):
-                if key in model_schema:
-                    self.definitions.update(model_schema[key])
-                    del model_schema[key]
+                # Process nested definitions
+                for key in ("definitions", "$defs"):
+                    if key in model_schema:
+                        self.definitions.update(model_schema[key])
+                        del model_schema[key]
 
-            self._model_schema_cache[cache_key] = model_schema
+                self._model_schema_cache[cache_key] = model_schema
 
-        if model_name not in self.definitions:
-            self.definitions[model_name] = self._model_schema_cache[cache_key]
+            if model_name not in self.definitions:
+                self.definitions[model_name] = self._model_schema_cache[cache_key]
 
         return {"$ref": f"#/components/schemas/{model_name}"}
 

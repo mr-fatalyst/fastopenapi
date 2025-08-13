@@ -61,5 +61,6 @@ class TestTornadoDynamicHandler:
 
         mock_handler._handle_request_exception(http_error)
 
-        mock_handler.set_status.assert_called_once_with(404)
-        mock_handler.finish.assert_called_once()
+        mock_handler.set_status.assert_called_once_with(404, reason=None)
+        args, kwargs = mock_handler.set_status.call_args
+        assert args == (404,)
