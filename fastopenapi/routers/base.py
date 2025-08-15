@@ -8,7 +8,7 @@ from typing import Any
 
 from fastopenapi.core.router import BaseRouter
 from fastopenapi.core.types import RequestData, Response, UploadFile
-from fastopenapi.errors.handler import format_exception_response
+from fastopenapi.errors.exceptions import APIError
 from fastopenapi.resolution.resolver import ParameterResolver
 from fastopenapi.response.builder import ResponseBuilder
 
@@ -25,6 +25,8 @@ class BaseAdapter(BaseRouter, ABC):
         "default": (r"{(\w+)}", r"{\1}"),
     }
 
+    EXCEPTION_MAPPER = {}
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.resolver = ParameterResolver()
@@ -39,11 +41,11 @@ class BaseAdapter(BaseRouter, ABC):
             response = self.response_builder.build(result, endpoint.__route_meta__)
             return self.build_framework_response(response)
         except Exception as e:
-            error_response = format_exception_response(e)
+            api_error = APIError.from_exception(e, self.EXCEPTION_MAPPER)
             return self.build_framework_response(
                 Response(
-                    content=error_response,
-                    status_code=error_response["error"]["status"],
+                    content=api_error.to_response(),
+                    status_code=api_error.status_code,
                 )
             )
 
@@ -56,11 +58,11 @@ class BaseAdapter(BaseRouter, ABC):
             response = self.response_builder.build(result, endpoint.__route_meta__)
             return self.build_framework_response(response)
         except Exception as e:
-            error_response = format_exception_response(e)
+            api_error = APIError.from_exception(e, self.EXCEPTION_MAPPER)
             return self.build_framework_response(
                 Response(
-                    content=error_response,
-                    status_code=error_response["error"]["status"],
+                    content=api_error.to_response(),
+                    status_code=api_error.status_code,
                 )
             )
 
@@ -142,8 +144,6 @@ class BaseAdapter(BaseRouter, ABC):
             filename=filename, content_type="application/octet-stream", file=temp_file
         )
 
-    # === Abstract methods for framework-specific implementation ===
-
     @abstractmethod
     def _get_path_params(self, request: Any) -> dict:
         """Extract path parameters"""
@@ -183,3 +183,6 @@ class BaseAdapter(BaseRouter, ABC):
     @abstractmethod
     def build_framework_response(self, response: Response) -> Any:
         """Build framework-specific response object"""
+
+    def _get_synthetic_request(self, *args, **kwargs):
+        pass

@@ -9,7 +9,6 @@ from fastopenapi.errors.exceptions import (
     ServiceUnavailableError,
     ValidationError,
 )
-from fastopenapi.errors.handler import format_exception_response
 from fastopenapi.errors.types import ErrorType
 
 __all__ = [
@@ -23,5 +22,4 @@ __all__ = [
     "ResourceConflictError",
     "InternalServerError",
     "ServiceUnavailableError",
-    "format_exception_response",
 ]

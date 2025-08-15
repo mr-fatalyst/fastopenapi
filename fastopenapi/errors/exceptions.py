@@ -3,6 +3,18 @@ from typing import Any
 
 from fastopenapi.errors.types import ErrorType
 
+# Mapping common HTTP status codes to ErrorTypes
+STATUS_TO_ERROR_TYPE = {
+    HTTPStatus.BAD_REQUEST: ErrorType.BAD_REQUEST,
+    HTTPStatus.UNAUTHORIZED: ErrorType.AUTHENTICATION_ERROR,
+    HTTPStatus.FORBIDDEN: ErrorType.AUTHORIZATION_ERROR,
+    HTTPStatus.NOT_FOUND: ErrorType.RESOURCE_NOT_FOUND,
+    HTTPStatus.CONFLICT: ErrorType.RESOURCE_CONFLICT,
+    HTTPStatus.UNPROCESSABLE_ENTITY: ErrorType.VALIDATION_ERROR,
+    HTTPStatus.INTERNAL_SERVER_ERROR: ErrorType.INTERNAL_SERVER_ERROR,
+    HTTPStatus.SERVICE_UNAVAILABLE: ErrorType.SERVICE_UNAVAILABLE,
+}
+
 
 class APIError(Exception):
     """Base exception class for all API errors"""
@@ -32,6 +44,43 @@ class APIError(Exception):
         if self.details:
             error_dict["error"]["details"] = self.details
         return error_dict
+
+    @classmethod
+    def from_exception(
+        cls,
+        exc: Exception,
+        mapper: dict[type[Exception], type["APIError"]] | None = None,
+    ) -> "APIError":
+        """Convert any exception to a standardized error response"""
+        if isinstance(exc, APIError):
+            return exc
+
+        mapper = mapper or {}
+        entry = mapper.get(type(exc))
+        if entry:
+            return entry(str(exc))
+
+        status = HTTPStatus.INTERNAL_SERVER_ERROR
+        for attr in ("status_code", "code"):
+            if hasattr(exc, attr):
+                try:
+                    status = HTTPStatus(int(getattr(exc, attr)))
+                    break
+                except Exception:
+                    pass
+
+        message = str(exc)
+        for attr in ("message", "title", "name", "reason", "detail"):
+            if hasattr(exc, attr):
+                message = str(getattr(exc, attr))
+                break
+
+        err_type = STATUS_TO_ERROR_TYPE.get(status, ErrorType.INTERNAL_SERVER_ERROR)
+
+        api_error = APIError(message=message)
+        api_error.status_code = status
+        api_error.error_type = err_type
+        return api_error
 
 
 class BadRequestError(APIError):

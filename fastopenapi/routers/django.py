@@ -1,7 +1,7 @@
 import re
 from collections.abc import Callable
-from http import HTTPStatus
 
+from django.core.exceptions import BadRequest, PermissionDenied
 from django.http import Http404, HttpResponse, JsonResponse
 from django.urls import path as django_path
 from django.views import View
@@ -9,13 +9,23 @@ from django.views.decorators.csrf import csrf_exempt
 from pydantic_core import from_json, to_json
 
 from fastopenapi.core.types import Response, UploadFile
-from fastopenapi.errors.exceptions import ResourceNotFoundError
+from fastopenapi.errors.exceptions import (
+    AuthorizationError,
+    BadRequestError,
+    ResourceNotFoundError,
+)
 from fastopenapi.openapi.ui import render_redoc_ui, render_swagger_ui
 from fastopenapi.routers.base import BaseAdapter
 
 
 class DjangoRouter(BaseAdapter):
     """Django adapter for FastOpenAPI"""
+
+    EXCEPTION_MAPPER = {
+        Http404: ResourceNotFoundError,
+        PermissionDenied: AuthorizationError,
+        BadRequest: BadRequestError,
+    }
 
     def __init__(self, app=None, **kwargs):
         self._views = {}
@@ -25,6 +35,21 @@ class DjangoRouter(BaseAdapter):
         """Add route to Django URL patterns"""
         super().add_route(path, method, endpoint)
         self._create_or_update_view(path, method, endpoint)
+
+    def _get_synthetic_request(self, req, **path_params):
+        return type(
+            "Request",
+            (),
+            {
+                "path_params": path_params,
+                "GET": req.GET,
+                "body": req.body,
+                "headers": req.headers,
+                "COOKIES": req.COOKIES,
+                "POST": req.POST,
+                "FILES": req.FILES,
+            },
+        )()
 
     def _create_or_update_view(self, path: str, method: str, endpoint: Callable):
         """Create or update Django view for the path"""
@@ -41,52 +66,14 @@ class DjangoRouter(BaseAdapter):
         if self.is_async_endpoint(endpoint):
 
             async def handle(self, req, **path_params):
-                synthetic_request = type(
-                    "Request",
-                    (),
-                    {
-                        "path_params": path_params,
-                        "GET": req.GET,
-                        "body": req.body,
-                        "headers": req.headers,
-                        "COOKIES": req.COOKIES,
-                        "POST": req.POST,
-                        "FILES": req.FILES,
-                    },
-                )()
-
-                try:
-                    return await outer.handle_request_async(endpoint, synthetic_request)
-                except Http404 as e:
-                    error_response = ResourceNotFoundError(
-                        " ".join(e.args)
-                    ).to_response()
-                    return JsonResponse(error_response, status=HTTPStatus.NOT_FOUND)
+                synthetic_request = outer._get_synthetic_request(req, **path_params)
+                return await outer.handle_request_async(endpoint, synthetic_request)
 
         else:
 
             def handle(self, req, **path_params):
-                synthetic_request = type(
-                    "Request",
-                    (),
-                    {
-                        "path_params": path_params,
-                        "GET": req.GET,
-                        "body": req.body,
-                        "headers": req.headers,
-                        "COOKIES": req.COOKIES,
-                        "POST": req.POST,
-                        "FILES": req.FILES,
-                    },
-                )()
-
-                try:
-                    return outer.handle_request_sync(endpoint, synthetic_request)
-                except Http404 as e:
-                    error_response = ResourceNotFoundError(
-                        " ".join(e.args)
-                    ).to_response()
-                    return JsonResponse(error_response, status=HTTPStatus.NOT_FOUND)
+                synthetic_request = outer._get_synthetic_request(req, **path_params)
+                return outer.handle_request_sync(endpoint, synthetic_request)
 
         setattr(view, method_name, handle)
         return view
