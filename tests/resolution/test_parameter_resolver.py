@@ -1,7 +1,7 @@
 import pytest
 from pydantic import BaseModel, computed_field
 
-from fastopenapi.core.types import Cookie, Form, Header, UploadFile
+from fastopenapi.core.params import Cookie, File, Form, Header
 from fastopenapi.errors.exceptions import BadRequestError, ValidationError
 from fastopenapi.resolution.resolver import ParameterResolver
 
@@ -136,12 +136,10 @@ class TestParameterResolver:
         # Test resolving file upload
         from fastopenapi.core.types import RequestData
 
-        def endpoint(file: UploadFile):
+        def endpoint(file: File):
             return file
 
-        mock_file = UploadFile(
-            filename="test.txt", content_type="text/plain", file=b"content"
-        )
+        mock_file = b"12345"
 
         request_data = RequestData(files={"file": mock_file})
 

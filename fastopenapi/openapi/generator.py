@@ -1,3 +1,7 @@
+"""
+Updated generator.py with security support for FastOpenAPI
+"""
+
 import inspect
 import re
 import threading
@@ -6,8 +10,8 @@ from functools import lru_cache
 
 from pydantic import BaseModel
 
-from fastopenapi.core.constants import PYTHON_TYPE_MAPPING
-from fastopenapi.core.types import Cookie, Form, Header, UploadFile
+from fastopenapi.core.constants import PYTHON_TYPE_MAPPING, ParameterSource
+from fastopenapi.core.params import File, Form, Header
 
 # Thread-safe compiled regex patterns
 PATH_PARAM_PATTERN = re.compile(r"<(?:[^:>]+:)?([^>]+)>")
@@ -15,7 +19,7 @@ OPENAPI_PATH_PATTERN = re.compile(r"{(\w+)}")
 
 
 class OpenAPIGenerator:
-    """Generate OpenAPI schema from routes"""
+    """Generate OpenAPI schema from routes with security support"""
 
     def __init__(self, router):
         self.router = router
@@ -23,6 +27,8 @@ class OpenAPIGenerator:
         # Instance-level cache with thread lock
         self._model_schema_cache = {}
         self._cache_lock = threading.Lock()
+        # Security schemes
+        self._security_schemes = {}
 
     def generate(self) -> dict:
         """Generate complete OpenAPI schema"""
@@ -40,7 +46,8 @@ class OpenAPIGenerator:
 
             paths[openapi_path][route.method.lower()] = operation
 
-        return {
+        # Build base schema
+        schema = {
             "openapi": self.router.openapi_version,
             "info": {
                 "title": self.router.title,
@@ -50,6 +57,16 @@ class OpenAPIGenerator:
             "paths": paths,
             "components": {"schemas": self.definitions},
         }
+
+        # Add security schemes if defined
+        if hasattr(self.router, "_security_schemes") and self.router._security_schemes:
+            schema["components"]["securitySchemes"] = self.router._security_schemes
+
+        # Add global security if defined
+        if hasattr(self.router, "_global_security") and self.router._global_security:
+            schema["security"] = self.router._global_security
+
+        return schema
 
     @lru_cache(maxsize=128)
     def _convert_path(self, path: str) -> str:
@@ -75,6 +92,17 @@ class OpenAPIGenerator:
         if route.meta.get("deprecated"):
             operation["deprecated"] = True
 
+        # Add security requirements if specified
+        if route.meta.get("security"):
+            operation["security"] = route.meta["security"]
+
+        # Add operation ID for better client generation
+        operation["operationId"] = f"{route.method.lower()}_{route.endpoint.__name__}"
+
+        # Add description if provided
+        if route.meta.get("description"):
+            operation["description"] = route.meta["description"]
+
         return operation
 
     def _build_parameters_and_body(self, route) -> tuple[list, dict]:
@@ -88,6 +116,24 @@ class OpenAPIGenerator:
         path_params = set(OPENAPI_PATH_PATTERN.findall(openapi_path))
 
         for param_name, param in sig.parameters.items():
+            # Skip authorization parameters if they're
+            # Header type with Authorization alias
+            if (
+                isinstance(param.default, Header)
+                and param.default.alias == "Authorization"
+            ):
+                # Add as header parameter but mark as security
+                parameters.append(
+                    {
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": param.default is inspect.Parameter.empty,
+                        "schema": {"type": "string"},
+                        "description": "Bearer token for authentication",
+                    }
+                )
+                continue
+
             # Handle Pydantic models
             if self._is_pydantic_model(param.annotation):
                 if route.method == "GET":
@@ -102,7 +148,7 @@ class OpenAPIGenerator:
                         "required": param.default is inspect.Parameter.empty,
                     }
             # Handle file uploads
-            elif param.annotation == UploadFile:
+            elif param.annotation == File:
                 if not request_body:
                     request_body = {
                         "content": {
@@ -132,13 +178,26 @@ class OpenAPIGenerator:
     ) -> dict:
         """Build parameter info"""
         # Determine location
-        if param_name in path_params:
+        if hasattr(param.default, "in_"):
+            location_mapping = {
+                ParameterSource.QUERY: "query",
+                ParameterSource.HEADER: "header",
+                ParameterSource.COOKIE: "cookie",
+                ParameterSource.PATH: "path",
+            }
+            location = location_mapping.get(param.default.in_, "query")
+
+            if hasattr(param.default, "alias") and param.default.alias:
+                param_name = param.default.alias
+            elif (
+                location == "header"
+                and hasattr(param.default, "convert_underscores")
+                and param.default.convert_underscores
+            ):
+                param_name = param_name.replace("_", "-")
+
+        elif param_name in path_params:
             location = "path"
-        elif isinstance(param.default, Header):
-            location = "header"
-            param_name = param.default.alias or param_name.replace("_", "-")
-        elif isinstance(param.default, Cookie):
-            location = "cookie"
         elif isinstance(param.default, Form):
             return None  # Form data handled in request body
         else:
@@ -150,12 +209,20 @@ class OpenAPIGenerator:
         # Determine if required
         is_required = param.default is inspect.Parameter.empty or location == "path"
 
-        return {
+        param_info = {
             "name": param_name,
             "in": location,
             "required": is_required,
             "schema": schema,
         }
+
+        # Add description for common parameters
+        if param_name.lower() in ["page", "limit", "offset"]:
+            param_info["description"] = f"Pagination {param_name}"
+        elif param_name.lower() in ["sort", "order", "sort_by"]:
+            param_info["description"] = f"Sorting {param_name}"
+
+        return param_info
 
     def _build_parameter_schema(self, annotation) -> dict:
         """Build OpenAPI schema for a parameter"""
@@ -166,6 +233,15 @@ class OpenAPIGenerator:
             if args and args[0] in PYTHON_TYPE_MAPPING:
                 item_type = PYTHON_TYPE_MAPPING[args[0]]
             return {"type": "array", "items": {"type": item_type}}
+
+        # Handle Optional types
+        if origin is typing.Union:
+            args = typing.get_args(annotation)
+            if type(None) in args:
+                # It's Optional[T]
+                non_none_args = [arg for arg in args if arg is not type(None)]
+                if non_none_args:
+                    return self._build_parameter_schema(non_none_args[0])
 
         return {"type": PYTHON_TYPE_MAPPING.get(annotation, "string")}
 
@@ -194,7 +270,26 @@ class OpenAPIGenerator:
                     "application/json": {"schema": schema}
                 }
 
-        # Add error responses
+        # Add common error responses for secured endpoints
+        if route.meta.get("security"):
+            responses["401"] = {
+                "description": "Unauthorized",
+                "content": {
+                    "application/json": {
+                        "schema": {"$ref": "#/components/schemas/ErrorSchema"}
+                    }
+                },
+            }
+            responses["403"] = {
+                "description": "Forbidden",
+                "content": {
+                    "application/json": {
+                        "schema": {"$ref": "#/components/schemas/ErrorSchema"}
+                    }
+                },
+            }
+
+        # Add custom error responses
         if route.meta.get("response_errors"):
             for error_code in route.meta["response_errors"]:
                 responses[str(error_code)] = {
@@ -264,6 +359,33 @@ class OpenAPIGenerator:
                         "message": {"type": "string"},
                         "status": {"type": "integer"},
                         "details": {"type": "string"},
+                    },
+                    "required": ["type", "message", "status"],
+                }
+            },
+            "required": ["error"],
+        }
+
+        # Add more detailed error schemas
+        self.definitions["ValidationErrorSchema"] = {
+            "type": "object",
+            "properties": {
+                "error": {
+                    "type": "object",
+                    "properties": {
+                        "type": {"type": "string", "enum": ["validation_error"]},
+                        "message": {"type": "string"},
+                        "status": {"type": "integer", "enum": [422]},
+                        "details": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "field": {"type": "string"},
+                                    "message": {"type": "string"},
+                                },
+                            },
+                        },
                     },
                     "required": ["type", "message", "status"],
                 }

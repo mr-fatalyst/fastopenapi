@@ -3,7 +3,7 @@ from collections.abc import Callable
 
 from aiohttp import web
 
-from fastopenapi.core.types import Response, UploadFile
+from fastopenapi.core.types import Response
 from fastopenapi.openapi.ui import render_redoc_ui, render_swagger_ui
 from fastopenapi.routers.base import BaseAdapter
 
@@ -67,35 +67,15 @@ class AioHttpRouter(BaseAdapter):
         # Sync endpoints in aiohttp can't read files
         return {}
 
-    async def _get_form_and_files_async(
-        self, request: web.Request
-    ) -> tuple[dict, dict]:
+    async def _get_form_async(self, request: web.Request) -> dict:
         form_data = {}
-        files = {}
 
         if request.content_type == "multipart/form-data":
             reader = await request.multipart()
             async for part in reader:
-                if part.filename:
-                    # Stream file to temporary file instead of loading into memory
-                    import tempfile
+                form_data[part.name] = await part.text()
 
-                    temp_file = tempfile.NamedTemporaryFile(delete=False)
-
-                    # Stream chunks to avoid memory issues
-                    async for chunk in part:
-                        temp_file.write(chunk)
-
-                    temp_file.seek(0)
-                    files[part.name] = UploadFile(
-                        filename=part.filename,
-                        content_type=part.headers.get("Content-Type", ""),
-                        file=temp_file,
-                    )
-                else:
-                    form_data[part.name] = await part.text()
-
-        return form_data, files
+        return form_data
 
     def build_framework_response(self, response: Response) -> web.Response:
         """Build AioHttp response"""

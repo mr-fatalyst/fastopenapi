@@ -161,20 +161,19 @@ class TornadoRouter(BaseAdapter):
                 )
         return form_data
 
-    async def _get_form_and_files_async(self, request) -> tuple[dict, dict]:
+    async def _get_form_async(self, request) -> dict:
         form_data = self._get_form_data_sync(request)
-        files = self._get_files_sync(request)
-        return form_data, files
+        return form_data
 
     def _get_files_sync(self, request) -> dict:
         files = {}
-        if request._request.files:
-            for name, file_list in request._request.files.items():
-                if file_list:
-                    file = file_list[0]
-                    files[name] = self._save_upload_file_sync(
-                        file["body"], file["filename"]
-                    )
+        # if request._request.files:
+        #     for name, file_list in request._request.files.items():
+        #         if file_list:
+        #             file = file_list[0]
+        #             files[name] = self._save_upload_file_sync(
+        #                 file["body"], file["filename"]
+        #             )
         return files
 
     def build_framework_response(self, response: Response):

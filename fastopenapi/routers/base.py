@@ -1,13 +1,12 @@
 import inspect
 import json
 import re
-import tempfile
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from typing import Any
 
 from fastopenapi.core.router import BaseRouter
-from fastopenapi.core.types import RequestData, Response, UploadFile
+from fastopenapi.core.types import RequestData, Response
 from fastopenapi.errors.exceptions import APIError
 from fastopenapi.resolution.resolver import ParameterResolver
 from fastopenapi.response.builder import ResponseBuilder
@@ -81,7 +80,9 @@ class BaseAdapter(BaseRouter, ABC):
     async def extract_request_data_async(self, request: Any) -> RequestData:
         """Asynchronous request data extraction"""
         body = await self._get_body_async(request)
-        form_data, files = await self._get_form_and_files_async(request)
+        form_data = await self._get_form_async(request)
+        # TODO Think about files
+        files = self._get_files_sync(request)
 
         return RequestData(
             path_params=self._get_path_params(request),
@@ -124,26 +125,6 @@ class BaseAdapter(BaseRouter, ABC):
         """Check if endpoint is async"""
         return inspect.iscoroutinefunction(endpoint)
 
-    async def _save_upload_file_async(
-        self, content: bytes, filename: str
-    ) -> UploadFile:
-        """Save uploaded file content to temporary file (async-safe)"""
-        temp_file = tempfile.NamedTemporaryFile(delete=False)
-        temp_file.write(content)
-        temp_file.seek(0)
-        return UploadFile(
-            filename=filename, content_type="application/octet-stream", file=temp_file
-        )
-
-    def _save_upload_file_sync(self, content: bytes, filename: str) -> UploadFile:
-        """Save uploaded file content to temporary file (sync)"""
-        temp_file = tempfile.NamedTemporaryFile(delete=False)
-        temp_file.write(content)
-        temp_file.seek(0)
-        return UploadFile(
-            filename=filename, content_type="application/octet-stream", file=temp_file
-        )
-
     @abstractmethod
     def _get_path_params(self, request: Any) -> dict:
         """Extract path parameters"""
@@ -173,8 +154,8 @@ class BaseAdapter(BaseRouter, ABC):
         """Extract form data synchronously"""
 
     @abstractmethod
-    async def _get_form_and_files_async(self, request: Any) -> tuple[dict, dict]:
-        """Extract form data and files asynchronously"""
+    async def _get_form_async(self, request: Any) -> dict:
+        """Extract form data asynchronously"""
 
     @abstractmethod
     def _get_files_sync(self, request: Any) -> dict:

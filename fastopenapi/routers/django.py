@@ -8,7 +8,7 @@ from django.views import View
 from django.views.decorators.csrf import csrf_exempt
 from pydantic_core import from_json, to_json
 
-from fastopenapi.core.types import Response, UploadFile
+from fastopenapi.core.types import Response
 from fastopenapi.errors.exceptions import (
     AuthorizationError,
     BadRequestError,
@@ -108,24 +108,24 @@ class DjangoRouter(BaseAdapter):
     def _get_form_data_sync(self, request) -> dict:
         return dict(request.POST) if hasattr(request, "POST") else {}
 
-    async def _get_form_and_files_async(self, request) -> tuple[dict, dict]:
-        return self._get_form_data_sync(request), self._get_files_sync(request)
+    async def _get_form_async(self, request) -> dict:
+        return self._get_form_data_sync(request)
 
     def _get_files_sync(self, request) -> dict:
         files = {}
-        if hasattr(request, "FILES"):
-            for name, file in request.FILES.items():
-                # Read file content into temporary file
-                import tempfile
-
-                temp_file = tempfile.NamedTemporaryFile(delete=False)
-                for chunk in file.chunks():
-                    temp_file.write(chunk)
-                temp_file.seek(0)
-
-                files[name] = UploadFile(
-                    filename=file.name, content_type=file.content_type, file=temp_file
-                )
+        # if hasattr(request, "FILES"):
+        #     for name, file in request.FILES.items():
+        #         # Read file content into temporary file
+        #         import tempfile
+        #
+        #         temp_file = tempfile.NamedTemporaryFile(delete=False)
+        #         for chunk in file.chunks():
+        #             temp_file.write(chunk)
+        #         temp_file.seek(0)
+        #
+        #         files[name] = UploadFile(
+        #             filename=file.name, content_type=file.content_type, file=temp_file
+        #         )
         return files
 
     def build_framework_response(self, response: Response) -> HttpResponse:

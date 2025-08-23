@@ -6,7 +6,7 @@ from starlette.applications import Starlette
 from starlette.responses import HTMLResponse, JSONResponse
 from starlette.routing import Route
 
-from fastopenapi.core.types import Response, UploadFile
+from fastopenapi.core.types import Response
 from fastopenapi.openapi.ui import render_redoc_ui, render_swagger_ui
 from fastopenapi.routers.base import BaseAdapter
 
@@ -75,33 +75,15 @@ class StarletteRouter(BaseAdapter):
         # Sync endpoints in Starlette can't read files
         return {}
 
-    async def _get_form_and_files_async(self, request) -> tuple[dict, dict]:
+    async def _get_form_async(self, request) -> dict:
         form_data = {}
-        files = {}
 
         if request.headers.get("content-type", "").startswith("multipart/form-data"):
             form = await request.form()
             for key, value in form.items():
-                if hasattr(value, "filename"):
-                    # Stream file content to temporary file
-                    import tempfile
+                form_data[key] = value
 
-                    temp_file = tempfile.NamedTemporaryFile(delete=False)
-
-                    # Read in chunks to avoid memory issues
-                    while chunk := await value.read(1024 * 1024):  # 1MB chunks
-                        temp_file.write(chunk)
-
-                    temp_file.seek(0)
-                    files[key] = UploadFile(
-                        filename=value.filename,
-                        content_type=value.content_type,
-                        file=temp_file,
-                    )
-                else:
-                    form_data[key] = value
-
-        return form_data, files
+        return form_data
 
     def build_framework_response(self, response: Response) -> JSONResponse:
         """Build Starlette response"""

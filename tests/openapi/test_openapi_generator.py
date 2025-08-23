@@ -1,7 +1,7 @@
 from pydantic import BaseModel, computed_field
 
+from fastopenapi.core.params import Cookie, File, Header
 from fastopenapi.core.router import BaseRouter
-from fastopenapi.core.types import Cookie, Header, UploadFile
 from fastopenapi.openapi.generator import OpenAPIGenerator
 
 
@@ -156,7 +156,7 @@ class TestOpenAPIGenerator:
         # Test OpenAPI generation with file upload
 
         @self.router.post("/upload")
-        def upload_file(file: UploadFile):
+        def upload_file(file: File()):
             pass
 
         schema = self.generator.generate()

@@ -76,17 +76,17 @@ class FlaskRouter(BaseAdapter):
     def _get_form_data_sync(self, request) -> dict:
         return dict(request.form) if hasattr(request, "form") else {}
 
-    async def _get_form_and_files_async(self, request) -> tuple[dict, dict]:
+    async def _get_form_async(self, request) -> dict:
         # Flask doesn't support async
-        return self._get_form_data_sync(request), self._get_files_sync(request)
+        return self._get_form_data_sync(request)
 
     def _get_files_sync(self, request) -> dict:
         files = {}
-        if hasattr(request, "files"):
-            for name, file in request.files.items():
-                # Read file content into temporary file
-                content = file.stream.read()
-                files[name] = self._save_upload_file_sync(content, file.filename)
+        # if hasattr(request, "files"):
+        #     for name, file in request.files.items():
+        #         # Read file content into temporary file
+        #         content = file.stream.read()
+        #         files[name] = self._save_upload_file_sync(content, file.filename)
         return files
 
     def build_framework_response(self, response: Response) -> FlaskResponse:

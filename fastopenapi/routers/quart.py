@@ -3,7 +3,7 @@ from collections.abc import Callable
 from quart import Response as QuartResponse
 from quart import jsonify, request
 
-from fastopenapi.core.types import Response, UploadFile
+from fastopenapi.core.types import Response
 from fastopenapi.openapi.ui import render_redoc_ui, render_swagger_ui
 from fastopenapi.routers.base import BaseAdapter
 
@@ -71,28 +71,14 @@ class QuartRouter(BaseAdapter):
         # Sync endpoints in Quart have limited support
         return {}
 
-    async def _get_form_and_files_async(self, request) -> tuple[dict, dict]:
+    async def _get_form_async(self, request) -> dict:
         form_data = {}
-        files = {}
 
         form = await request.form
         for key in form:
             form_data[key] = form[key]
 
-        files_data = await request.files
-        for name, file in files_data.items():
-            # Stream to temporary file
-            import tempfile
-
-            temp_file = tempfile.NamedTemporaryFile(delete=False)
-            await file.save(temp_file.name)
-            temp_file.seek(0)
-
-            files[name] = UploadFile(
-                filename=file.filename, content_type=file.content_type, file=temp_file
-            )
-
-        return form_data, files
+        return form_data
 
     def _get_files_sync(self, request) -> dict:
         # Sync endpoints in Quart have limited support

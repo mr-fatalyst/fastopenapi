@@ -66,21 +66,20 @@ class SanicRouter(BaseAdapter):
                 form_data[key] = request._request.form.get(key)
         return form_data
 
-    async def _get_form_and_files_async(self, request) -> tuple[dict, dict]:
+    async def _get_form_async(self, request) -> tuple[dict, dict]:
         form_data = self._get_form_data_sync(request)
-        files = self._get_files_sync(request)
-        return form_data, files
+        return form_data
 
     def _get_files_sync(self, request) -> dict:
         files = {}
-        if hasattr(request._request, "files"):
-            for name, file_list in request._request.files.items():
-                if file_list:
-                    file = file_list[0]
-                    # Save to temporary file
-                    files[name] = self._save_upload_file_sync(
-                        file.body, file.name  # Sanic stores file content as bytes
-                    )
+        # if hasattr(request._request, "files"):
+        #     for name, file_list in request._request.files.items():
+        #         if file_list:
+        #             file = file_list[0]
+        #             # Save to temporary file
+        #             files[name] = self._save_upload_file_sync(
+        #                 file.body, file.name  # Sanic stores file content as bytes
+        #             )
         return files
 
     def build_framework_response(self, response_obj: Response):

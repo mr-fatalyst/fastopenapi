@@ -1,27 +1,17 @@
 import inspect
 import typing
 from collections.abc import Callable
-from enum import Enum
+from types import MappingProxyType
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 from pydantic import ValidationError as PydanticValidationError
 from pydantic import create_model
 
-from fastopenapi.core.types import Cookie, Form, Header, RequestData, UploadFile
+from fastopenapi.core.constants import ParameterSource
+from fastopenapi.core.params import Cookie, File, Form, Header
+from fastopenapi.core.types import RequestData
 from fastopenapi.errors.exceptions import BadRequestError, ValidationError
-
-
-class ParameterSource(Enum):
-    """Source of parameter extraction"""
-
-    PATH = "path"
-    QUERY = "query"
-    HEADER = "header"
-    COOKIE = "cookie"
-    BODY = "body"
-    FORM = "form"
-    FILE = "file"
 
 
 class ParameterResolver:
@@ -29,17 +19,28 @@ class ParameterResolver:
 
     # Cache for dynamic models
     _param_model_cache: dict[frozenset, type[BaseModel]] = {}
+    # Cache endpoint signature
+    _signature_cache: dict[Callable, MappingProxyType] = {}
+
+    def _get_signature(self, endpoint) -> typing.ItemsView:
+        cached_params = self._signature_cache.get(endpoint)
+        if cached_params:
+            return cached_params.items()
+        else:
+            sig = inspect.signature(endpoint)
+            self._signature_cache[endpoint] = sig.parameters
+        return self._signature_cache[endpoint].items()
 
     def resolve(self, endpoint: Callable, request_data: RequestData) -> dict[str, Any]:
         """Resolve all parameters for an endpoint"""
-        sig = inspect.signature(endpoint)
+        params = self._get_signature(endpoint)
         kwargs = {}
 
         # For collecting fields for dynamic validation
         model_fields = {}
         model_values = {}
 
-        for name, param in sig.parameters.items():
+        for name, param in params:
             source = self._determine_source(name, param, request_data.path_params)
 
             # Handle Pydantic models
@@ -93,14 +94,15 @@ class ParameterResolver:
         self, name: str, param: inspect.Parameter, path_params: dict
     ) -> ParameterSource:
         """Determine where to extract parameter from"""
-        # Check for explicit markers
-        if isinstance(param.default, Header):
+        if hasattr(param.default, "in_"):
+            return param.default.in_
+        elif isinstance(param.default, Header):
             return ParameterSource.HEADER
         elif isinstance(param.default, Cookie):
             return ParameterSource.COOKIE
         elif isinstance(param.default, Form):
             return ParameterSource.FORM
-        elif param.annotation == UploadFile:
+        elif param.annotation == File:
             return ParameterSource.FILE
         elif name in path_params:
             return ParameterSource.PATH

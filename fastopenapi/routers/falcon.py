@@ -121,7 +121,7 @@ class FalconRouter(BaseAdapter):
     def _get_form_data_sync(self, request) -> dict:
         return {}
 
-    async def _get_form_and_files_async(self, request) -> tuple[dict, dict]:
+    async def _get_form_async(self, request) -> tuple[dict, dict]:
         # Falcon doesn't have built-in multipart support
         return {}, {}
 

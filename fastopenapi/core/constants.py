@@ -1,4 +1,5 @@
-# URLs for documentation UI
+from enum import Enum
+
 SWAGGER_URL = "https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.20.0/"
 REDOC_URL = "https://cdn.jsdelivr.net/npm/redoc@next/bundles/redoc.standalone.js"
 
@@ -12,3 +13,15 @@ PYTHON_TYPE_MAPPING = {
     bool: "boolean",
     str: "string",
 }
+
+
+class ParameterSource(Enum):
+    """Source of parameter extraction"""
+
+    PATH = "path"
+    QUERY = "query"
+    HEADER = "header"
+    COOKIE = "cookie"
+    BODY = "body"
+    FORM = "form"
+    FILE = "file"
