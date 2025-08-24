@@ -4,7 +4,7 @@ import pytest
 import tornado.web
 from pydantic_core import to_json
 
-from fastopenapi.routers.tornado import TornadoDynamicHandler
+from fastopenapi.routers.tornado.handler import TornadoDynamicHandler
 
 
 class TestTornadoDynamicHandler:

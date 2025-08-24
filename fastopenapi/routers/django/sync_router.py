@@ -1,3 +1,4 @@
+import inspect
 import re
 from collections.abc import Callable
 
@@ -6,7 +7,7 @@ from django.http import Http404, HttpResponse, JsonResponse
 from django.urls import path as django_path
 from django.views import View
 from django.views.decorators.csrf import csrf_exempt
-from pydantic_core import from_json, to_json
+from pydantic_core import to_json
 
 from fastopenapi.core.types import Response
 from fastopenapi.errors.exceptions import (
@@ -15,17 +16,22 @@ from fastopenapi.errors.exceptions import (
     ResourceNotFoundError,
 )
 from fastopenapi.openapi.ui import render_redoc_ui, render_swagger_ui
-from fastopenapi.routers.base import BaseAdapter
+from fastopenapi.routers.base import BaseAdapter, RequestEnvelope
+from fastopenapi.routers.django.extractors import DjangoRequestDataExtractor
 
 
 class DjangoRouter(BaseAdapter):
     """Django adapter for FastOpenAPI"""
+
+    PATH_CONVERSIONS = (r"{(\w+)}", r"<\1>")
 
     EXCEPTION_MAPPER = {
         Http404: ResourceNotFoundError,
         PermissionDenied: AuthorizationError,
         BadRequest: BadRequestError,
     }
+
+    extractor_cls = DjangoRequestDataExtractor
 
     def __init__(self, app=None, **kwargs):
         self._views = {}
@@ -35,21 +41,6 @@ class DjangoRouter(BaseAdapter):
         """Add route to Django URL patterns"""
         super().add_route(path, method, endpoint)
         self._create_or_update_view(path, method, endpoint)
-
-    def _get_synthetic_request(self, req, **path_params):
-        return type(
-            "Request",
-            (),
-            {
-                "path_params": path_params,
-                "GET": req.GET,
-                "body": req.body,
-                "headers": req.headers,
-                "COOKIES": req.COOKIES,
-                "POST": req.POST,
-                "FILES": req.FILES,
-            },
-        )()
 
     def _create_or_update_view(self, path: str, method: str, endpoint: Callable):
         """Create or update Django view for the path"""
@@ -63,70 +54,18 @@ class DjangoRouter(BaseAdapter):
         method_name = method.lower()
         outer = self
 
-        if self.is_async_endpoint(endpoint):
-
-            async def handle(self, req, **path_params):
-                synthetic_request = outer._get_synthetic_request(req, **path_params)
-                return await outer.handle_request_async(endpoint, synthetic_request)
-
-        else:
-
-            def handle(self, req, **path_params):
-                synthetic_request = outer._get_synthetic_request(req, **path_params)
-                return outer.handle_request_sync(endpoint, synthetic_request)
+        def handle(self, req, **path_params):
+            env = RequestEnvelope(request=req, path_params=path_params)
+            if inspect.iscoroutinefunction(endpoint):
+                raise Exception(
+                    f"Async endpoint '{endpoint.__name__}' "
+                    f"cannot be used with sync router. "
+                    f"Use DjangoAsyncRouter for async support."
+                )
+            return outer.handle_request(endpoint, env)
 
         setattr(view, method_name, handle)
         return view
-
-    def _get_path_params(self, request) -> dict:
-        return getattr(request, "path_params", {})
-
-    def _get_query_params(self, request) -> dict:
-        query_params = {}
-        for key in request.GET.keys():
-            values = request.GET.getlist(key)
-            query_params[key] = values[0] if len(values) == 1 else values
-        return query_params
-
-    def _get_headers(self, request) -> dict:
-        return dict(request.headers)
-
-    def _get_cookies(self, request) -> dict:
-        return dict(request.COOKIES)
-
-    def _get_body_sync(self, request) -> dict:
-        if hasattr(request, "body") and request.body:
-            try:
-                return from_json(request.body.decode("utf-8"))
-            except Exception:
-                pass
-        return {}
-
-    async def _get_body_async(self, request) -> dict:
-        return self._get_body_sync(request)
-
-    def _get_form_data_sync(self, request) -> dict:
-        return dict(request.POST) if hasattr(request, "POST") else {}
-
-    async def _get_form_async(self, request) -> dict:
-        return self._get_form_data_sync(request)
-
-    def _get_files_sync(self, request) -> dict:
-        files = {}
-        # if hasattr(request, "FILES"):
-        #     for name, file in request.FILES.items():
-        #         # Read file content into temporary file
-        #         import tempfile
-        #
-        #         temp_file = tempfile.NamedTemporaryFile(delete=False)
-        #         for chunk in file.chunks():
-        #             temp_file.write(chunk)
-        #         temp_file.seek(0)
-        #
-        #         files[name] = UploadFile(
-        #             filename=file.name, content_type=file.content_type, file=temp_file
-        #         )
-        return files
 
     def build_framework_response(self, response: Response) -> HttpResponse:
         """Build Django response"""

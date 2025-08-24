@@ -3,7 +3,7 @@ import pytest
 from falcon.testing import ASGIConductor, TestClient
 from pydantic import BaseModel
 
-from fastopenapi.routers import FalconRouter
+from fastopenapi.routers import FalconAsyncRouter
 
 
 class Item(BaseModel):
@@ -34,7 +34,7 @@ def items_db():
 @pytest.fixture
 def app(items_db):  # noqa: C901
     app = falcon.asgi.App()
-    router = FalconRouter(
+    router = FalconAsyncRouter(
         app=app,
         title="Test API",
         description="Test API for FalconRouter",

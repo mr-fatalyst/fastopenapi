@@ -1,9 +1,11 @@
 import inspect
-import json
 import re
 from abc import ABC, abstractmethod
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Any
+
+from pydantic_core import from_json
 
 from fastopenapi.core.router import BaseRouter
 from fastopenapi.core.types import RequestData, Response
@@ -12,87 +14,56 @@ from fastopenapi.resolution.resolver import ParameterResolver
 from fastopenapi.response.builder import ResponseBuilder
 
 
-class BaseAdapter(BaseRouter, ABC):
-    """Base adapter for framework integration with common logic extraction"""
+@dataclass(slots=True, frozen=True)
+class RequestEnvelope:
+    """Unified wrapper for requests."""
 
-    # Path conversion patterns
-    PATH_CONVERSIONS = {
-        "flask": (r"{(\w+)}", r"<\1>"),
-        "django": (r"{(\w+)}", r"<\1>"),
-        "sanic": (r"{(\w+)}", r"<\1>"),
-        "tornado": (r"{(\w+)}", r"(?P<\1>[^/]+)"),
-        "default": (r"{(\w+)}", r"{\1}"),
-    }
+    path_params: dict[str, str]
+    request: Any | None
 
-    EXCEPTION_MAPPER = {}
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.resolver = ParameterResolver()
-        self.response_builder = ResponseBuilder()
+class BaseRequestDataExtractor(ABC):
+    """Base request data extractor with common logic extraction"""
 
-    def handle_request_sync(self, endpoint: Callable, request: Any) -> Any:
-        """Handle synchronous request"""
-        try:
-            request_data = self.extract_request_data(request)
-            kwargs = self.resolver.resolve(endpoint, request_data)
-            result = endpoint(**kwargs)
-            response = self.response_builder.build(result, endpoint.__route_meta__)
-            return self.build_framework_response(response)
-        except Exception as e:
-            api_error = APIError.from_exception(e, self.EXCEPTION_MAPPER)
-            return self.build_framework_response(
-                Response(
-                    content=api_error.to_response(),
-                    status_code=api_error.status_code,
-                )
-            )
+    @classmethod
+    @abstractmethod
+    def _get_path_params(cls, request: Any) -> dict:
+        """Extract path parameters"""
 
-    async def handle_request_async(self, endpoint: Callable, request: Any) -> Any:
-        """Handle asynchronous request"""
-        try:
-            request_data = await self.extract_request_data_async(request)
-            kwargs = self.resolver.resolve(endpoint, request_data)
-            result = await endpoint(**kwargs)
-            response = self.response_builder.build(result, endpoint.__route_meta__)
-            return self.build_framework_response(response)
-        except Exception as e:
-            api_error = APIError.from_exception(e, self.EXCEPTION_MAPPER)
-            return self.build_framework_response(
-                Response(
-                    content=api_error.to_response(),
-                    status_code=api_error.status_code,
-                )
-            )
+    @classmethod
+    @abstractmethod
+    def _get_query_params(cls, request: Any) -> dict:
+        """Extract query parameters"""
 
-    def extract_request_data(self, request: Any) -> RequestData:
-        """Synchronous request data extraction"""
-        return RequestData(
-            path_params=self._get_path_params(request),
-            query_params=self._get_query_params(request),
-            headers=self._normalize_headers(self._get_headers(request)),
-            cookies=self._get_cookies(request),
-            body=self._safe_json_parse(self._get_body_sync(request)),
-            form_data=self._get_form_data_sync(request),
-            files=self._get_files_sync(request),
-        )
+    @classmethod
+    @abstractmethod
+    def _get_headers(cls, request: Any) -> dict:
+        """Extract headers"""
 
-    async def extract_request_data_async(self, request: Any) -> RequestData:
-        """Asynchronous request data extraction"""
-        body = await self._get_body_async(request)
-        form_data = await self._get_form_async(request)
-        # TODO Think about files
-        files = self._get_files_sync(request)
+    @classmethod
+    @abstractmethod
+    def _get_cookies(cls, request: Any) -> dict:
+        """Extract cookies"""
 
-        return RequestData(
-            path_params=self._get_path_params(request),
-            query_params=self._get_query_params(request),
-            headers=self._normalize_headers(self._get_headers(request)),
-            cookies=self._get_cookies(request),
-            body=self._safe_json_parse(body) or body,
-            form_data=form_data,
-            files=files,
-        )
+    @classmethod
+    @abstractmethod
+    def _get_body(cls, request: Any) -> bytes | str | dict:
+        """Extract body"""
+
+    @classmethod
+    @abstractmethod
+    def _get_form_data(cls, request: Any) -> dict:
+        """Extract form data"""
+
+    @classmethod
+    @abstractmethod
+    def _get_files(cls, request: Any) -> dict:
+        """Extract files"""
+
+    @staticmethod
+    def _normalize_headers(headers: dict) -> dict:
+        """Normalize headers to lowercase"""
+        return {k.lower(): v for k, v in headers.items()} if headers else {}
 
     @staticmethod
     def _safe_json_parse(data: Any) -> dict | None:
@@ -103,67 +74,122 @@ class BaseAdapter(BaseRouter, ABC):
             if isinstance(data, (bytes, bytearray)):
                 data = data.decode("utf-8")
             if isinstance(data, str):
-                return json.loads(data)
+                return from_json(data)
             return data
         except Exception:
             return None
 
-    @staticmethod
-    def _normalize_headers(headers: dict) -> dict:
-        """Normalize headers to lowercase"""
-        return {k.lower(): v for k, v in headers.items()} if headers else {}
-
-    def _convert_path_for_framework(self, path: str, framework: str = "default") -> str:
-        """Convert path format for specific framework"""
-        pattern, replacement = self.PATH_CONVERSIONS.get(
-            framework, self.PATH_CONVERSIONS["default"]
+    @classmethod
+    def extract_request_data(cls, env: RequestEnvelope) -> RequestData:
+        """Synchronous request data extraction"""
+        _path_params = env.path_params
+        request = env.request
+        if _path_params is None:
+            _path_params = cls._get_path_params(request)
+        return RequestData(
+            path_params=_path_params,
+            query_params=cls._get_query_params(request),
+            headers=cls._normalize_headers(cls._get_headers(request)),
+            cookies=cls._get_cookies(request),
+            body=cls._get_body(request),
+            form_data=cls._get_form_data(request),
+            files=cls._get_files(request),
         )
-        return re.sub(pattern, replacement, path)
 
-    @staticmethod
-    def is_async_endpoint(endpoint: Callable) -> bool:
-        """Check if endpoint is async"""
-        return inspect.iscoroutinefunction(endpoint)
 
+class BaseAsyncRequestDataExtractor(BaseRequestDataExtractor, ABC):
+    """Base async request data extractor with common logic extraction"""
+
+    @classmethod
     @abstractmethod
-    def _get_path_params(self, request: Any) -> dict:
-        """Extract path parameters"""
+    async def _get_body(cls, request: Any) -> bytes | str | dict:
+        """Extract body"""
 
+    @classmethod
     @abstractmethod
-    def _get_query_params(self, request: Any) -> dict:
-        """Extract query parameters"""
+    async def _get_form_data(cls, request: Any) -> dict:
+        """Extract form data"""
 
+    @classmethod
     @abstractmethod
-    def _get_headers(self, request: Any) -> dict:
-        """Extract headers"""
+    async def _get_files(cls, request: Any) -> dict:
+        """Extract files"""
 
-    @abstractmethod
-    def _get_cookies(self, request: Any) -> dict:
-        """Extract cookies"""
+    @classmethod
+    async def extract_request_data(cls, env: RequestEnvelope) -> RequestData:
+        """Asynchronous request data extraction"""
+        _path_params = env.path_params
+        request = env.request
+        if _path_params is None:
+            _path_params = cls._get_path_params(request)
+        return RequestData(
+            path_params=_path_params,
+            query_params=cls._get_query_params(request),
+            headers=cls._normalize_headers(cls._get_headers(request)),
+            cookies=cls._get_cookies(request),
+            body=await cls._get_body(request),
+            form_data=await cls._get_form_data(request),
+            files=await cls._get_files(request),
+        )
 
-    @abstractmethod
-    def _get_body_sync(self, request: Any) -> bytes | str | dict:
-        """Extract body synchronously"""
 
-    @abstractmethod
-    async def _get_body_async(self, request: Any) -> bytes | str | dict:
-        """Extract body asynchronously"""
+class BaseAdapter(BaseRouter, ABC):
+    """Base adapter for framework integration"""
 
-    @abstractmethod
-    def _get_form_data_sync(self, request: Any) -> dict:
-        """Extract form data synchronously"""
+    # Path conversion pattern
+    PATH_CONVERSIONS = (r"{(\w+)}", r"{\1}")
+    EXCEPTION_MAPPER = {}
 
-    @abstractmethod
-    async def _get_form_async(self, request: Any) -> dict:
-        """Extract form data asynchronously"""
-
-    @abstractmethod
-    def _get_files_sync(self, request: Any) -> dict:
-        """Extract files synchronously"""
+    extractor_cls = BaseRequestDataExtractor
+    extractor_async_cls = BaseAsyncRequestDataExtractor
+    req_param_resolver_cls = ParameterResolver
+    response_builder_cls = ResponseBuilder
 
     @abstractmethod
     def build_framework_response(self, response: Response) -> Any:
         """Build framework-specific response object"""
 
-    def _get_synthetic_request(self, *args, **kwargs):
-        pass
+    @classmethod
+    def _convert_path_for_framework(cls, path: str) -> str:
+        """Convert path format for specific framework"""
+        pattern, replacement = cls.PATH_CONVERSIONS
+        return re.sub(pattern, replacement, path)
+
+    def handle_request(self, endpoint: Callable, env: RequestEnvelope) -> Any:
+        """Handle synchronous request"""
+        try:
+            request_data = self.extractor_cls.extract_request_data(env)
+            kwargs = self.req_param_resolver_cls.resolve(endpoint, request_data)
+            result = endpoint(**kwargs)
+            response = self.response_builder_cls.build(result, endpoint.__route_meta__)
+            return self.build_framework_response(response)
+        except Exception as e:
+            api_error = APIError.from_exception(e, self.EXCEPTION_MAPPER)
+            return self.build_framework_response(
+                Response(
+                    content=api_error.to_response(),
+                    status_code=api_error.status_code,
+                )
+            )
+
+    async def handle_request_async(
+        self, endpoint: Callable, env: RequestEnvelope
+    ) -> Any:
+        """Handle asynchronous request"""
+        try:
+            request_data = await self.extractor_async_cls.extract_request_data(env)
+            kwargs = self.req_param_resolver_cls.resolve(endpoint, request_data)
+            if inspect.iscoroutinefunction(endpoint):
+                result = await endpoint(**kwargs)
+            else:
+                result = endpoint(**kwargs)
+            response = self.response_builder_cls.build(result, endpoint.__route_meta__)
+            return self.build_framework_response(response)
+        except Exception as e:
+            api_error = APIError.from_exception(e, self.EXCEPTION_MAPPER)
+            return self.build_framework_response(
+                Response(
+                    content=api_error.to_response(),
+                    status_code=api_error.status_code,
+                )
+            )

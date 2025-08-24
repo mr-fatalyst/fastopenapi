@@ -3,7 +3,7 @@ import re
 import pytest
 import tornado.web
 
-from fastopenapi.routers.tornado import TornadoRouter
+from fastopenapi.routers import TornadoRouter
 
 
 # Simple endpoint for testing

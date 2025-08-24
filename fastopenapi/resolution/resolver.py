@@ -22,18 +22,20 @@ class ParameterResolver:
     # Cache endpoint signature
     _signature_cache: dict[Callable, MappingProxyType] = {}
 
-    def _get_signature(self, endpoint) -> typing.ItemsView:
-        cached_params = self._signature_cache.get(endpoint)
+    @classmethod
+    def _get_signature(cls, endpoint) -> typing.ItemsView:
+        cached_params = cls._signature_cache.get(endpoint)
         if cached_params:
             return cached_params.items()
         else:
             sig = inspect.signature(endpoint)
-            self._signature_cache[endpoint] = sig.parameters
-        return self._signature_cache[endpoint].items()
+            cls._signature_cache[endpoint] = sig.parameters
+        return cls._signature_cache[endpoint].items()
 
-    def resolve(self, endpoint: Callable, request_data: RequestData) -> dict[str, Any]:
+    @classmethod
+    def resolve(cls, endpoint: Callable, request_data: RequestData) -> dict[str, Any]:
         """Resolve all parameters for an endpoint"""
-        params = self._get_signature(endpoint)
+        params = cls._get_signature(endpoint)
         kwargs = {}
 
         # For collecting fields for dynamic validation
@@ -41,11 +43,11 @@ class ParameterResolver:
         model_values = {}
 
         for name, param in params:
-            source = self._determine_source(name, param, request_data.path_params)
+            source = cls._determine_source(name, param, request_data.path_params)
 
             # Handle Pydantic models
-            if self._is_pydantic_model(param.annotation):
-                kwargs[name] = self._resolve_pydantic_model(
+            if cls._is_pydantic_model(param.annotation):
+                kwargs[name] = cls._resolve_pydantic_model(
                     param.annotation,
                     (
                         request_data.body
@@ -57,7 +59,7 @@ class ParameterResolver:
                 continue
 
             # Extract value based on source
-            value = self._extract_value(name, param, source, request_data)
+            value = cls._extract_value(name, param, source, request_data)
 
             # Handle missing required parameters
             if value is None and param.default is inspect.Parameter.empty:
@@ -85,13 +87,14 @@ class ParameterResolver:
 
         # Validate collected parameters
         if model_fields:
-            validated = self._validate_parameters(endpoint, model_fields, model_values)
+            validated = cls._validate_parameters(endpoint, model_fields, model_values)
             kwargs.update(validated)
 
         return kwargs
 
+    @classmethod
     def _determine_source(
-        self, name: str, param: inspect.Parameter, path_params: dict
+        cls, name: str, param: inspect.Parameter, path_params: dict
     ) -> ParameterSource:
         """Determine where to extract parameter from"""
         if hasattr(param.default, "in_"):
@@ -106,13 +109,13 @@ class ParameterResolver:
             return ParameterSource.FILE
         elif name in path_params:
             return ParameterSource.PATH
-        elif self._is_pydantic_model(param.annotation):
+        elif cls._is_pydantic_model(param.annotation):
             return ParameterSource.BODY
         else:
             return ParameterSource.QUERY
 
+    @staticmethod
     def _extract_value(
-        self,
         name: str,
         param: inspect.Parameter,
         source: ParameterSource,
@@ -147,8 +150,9 @@ class ParameterResolver:
         """Check if annotation is a Pydantic model"""
         return isinstance(annotation, type) and issubclass(annotation, BaseModel)
 
+    @staticmethod
     def _resolve_pydantic_model(
-        self, model_class: type[BaseModel], data: dict, param_name: str
+        model_class: type[BaseModel], data: dict, param_name: str
     ):
         """Create Pydantic model instance from data"""
         try:
@@ -173,8 +177,9 @@ class ParameterResolver:
                 f"Validation error for parameter '{param_name}'", str(e)
             )
 
+    @classmethod
     def _validate_parameters(
-        self, endpoint: Callable, model_fields: dict, model_values: dict
+        cls, endpoint: Callable, model_fields: dict, model_values: dict
     ) -> dict[str, Any]:
         """Validate parameters using dynamic Pydantic model"""
         # Create cache key
@@ -184,18 +189,18 @@ class ParameterResolver:
         )
 
         # Get or create model
-        if cache_key not in self._param_model_cache:
+        if cache_key not in cls._param_model_cache:
 
             class _ParamsBase(BaseModel):
                 model_config = ConfigDict(arbitrary_types_allowed=True)
 
-            self._param_model_cache[cache_key] = create_model(
+            cls._param_model_cache[cache_key] = create_model(
                 "ParamsModel",
                 __base__=_ParamsBase,
                 **model_fields,
             )
         try:
-            validated = self._param_model_cache[cache_key](**model_values)
+            validated = cls._param_model_cache[cache_key](**model_values)
             return validated.model_dump()
         except PydanticValidationError as e:
             errors = e.errors()

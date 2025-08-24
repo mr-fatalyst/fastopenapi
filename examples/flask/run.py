@@ -1,7 +1,7 @@
 from app.api.routes import api_router
 from flask import Flask
 
-from fastopenapi.routers import FlaskRouter
+from fastopenapi.routers.sync.flask import FlaskRouter
 
 app = Flask(__name__)
 

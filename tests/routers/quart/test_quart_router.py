@@ -37,7 +37,7 @@ class TestQuartRouter:
         assert route.path == "/test"
         assert route.method == "GET"
         assert route.endpoint == test_endpoint
-        assert "test_endpoint" in router.app.view_functions
+        assert "test_endpoint:GET:/test" in router.app.view_functions
 
     def test_include_router(self):
         """Test including another router"""

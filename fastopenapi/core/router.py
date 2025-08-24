@@ -1,11 +1,15 @@
 from collections.abc import Callable
 from typing import Any
 
+from fastopenapi.core.constants import SUPPORTED_METHODS
+
 
 class RouteInfo:
     """Container for route information"""
 
     def __init__(self, path: str, method: str, endpoint: Callable, meta: dict):
+        if method.upper() not in SUPPORTED_METHODS:
+            raise ValueError(f"Unsupported method: {method}")
         self.path = path
         self.method = method.upper()
         self.endpoint = endpoint
