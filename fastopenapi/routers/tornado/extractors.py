@@ -2,7 +2,7 @@ from typing import Any
 
 from pydantic_core import from_json
 
-from fastopenapi.routers.base import BaseAsyncRequestDataExtractor
+from fastopenapi.routers.extractors import BaseAsyncRequestDataExtractor
 
 
 class TornadoRequestDataExtractor(BaseAsyncRequestDataExtractor):

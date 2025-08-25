@@ -6,10 +6,8 @@ from flask import jsonify, request
 
 from fastopenapi.core.types import Response
 from fastopenapi.openapi.ui import render_redoc_ui, render_swagger_ui
-from fastopenapi.routers.base import (
-    BaseAdapter,
-    RequestEnvelope,
-)
+from fastopenapi.routers.base import BaseAdapter
+from fastopenapi.routers.common import RequestEnvelope
 from fastopenapi.routers.flask.extractors import FlaskRequestDataExtractor
 
 

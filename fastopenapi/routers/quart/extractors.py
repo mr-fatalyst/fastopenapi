@@ -1,6 +1,6 @@
 from typing import Any
 
-from fastopenapi.routers.base import BaseAsyncRequestDataExtractor
+from fastopenapi.routers.extractors import BaseAsyncRequestDataExtractor
 
 
 class QuartRequestDataExtractor(BaseAsyncRequestDataExtractor):

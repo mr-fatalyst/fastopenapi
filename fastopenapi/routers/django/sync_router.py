@@ -16,7 +16,8 @@ from fastopenapi.errors.exceptions import (
     ResourceNotFoundError,
 )
 from fastopenapi.openapi.ui import render_redoc_ui, render_swagger_ui
-from fastopenapi.routers.base import BaseAdapter, RequestEnvelope
+from fastopenapi.routers.base import BaseAdapter
+from fastopenapi.routers.common import RequestEnvelope
 from fastopenapi.routers.django.extractors import DjangoRequestDataExtractor
 
 

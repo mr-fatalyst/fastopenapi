@@ -1,6 +1,6 @@
 from fastopenapi.core.types import Response
 from fastopenapi.openapi.ui import render_redoc_ui, render_swagger_ui
-from fastopenapi.routers.base import RequestEnvelope
+from fastopenapi.routers.common import RequestEnvelope
 from fastopenapi.routers.falcon.extractors import FalconAsyncRequestDataExtractor
 from fastopenapi.routers.falcon.sync_router import FalconRouter
 

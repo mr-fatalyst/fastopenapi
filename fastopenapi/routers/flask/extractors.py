@@ -1,7 +1,7 @@
 import io
 from typing import Any
 
-from fastopenapi.routers.base import (
+from fastopenapi.routers.extractors import (
     BaseRequestDataExtractor,
 )
 

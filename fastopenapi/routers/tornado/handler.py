@@ -1,7 +1,7 @@
 from tornado.web import RequestHandler
 
 from fastopenapi.core.types import Response
-from fastopenapi.routers.base import RequestEnvelope
+from fastopenapi.routers.common import RequestEnvelope
 from fastopenapi.routers.tornado.utils import json_encode
 
 

@@ -5,7 +5,7 @@ from django.views import View
 from django.views.decorators.csrf import csrf_exempt
 
 from fastopenapi.openapi.ui import render_redoc_ui, render_swagger_ui
-from fastopenapi.routers.base import RequestEnvelope
+from fastopenapi.routers.common import RequestEnvelope
 from fastopenapi.routers.django.extractors import DjangoAsyncRequestDataExtractor
 from fastopenapi.routers.django.sync_router import DjangoRouter
 
