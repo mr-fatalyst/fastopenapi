@@ -1,5 +1,7 @@
 from typing import Any
 
+from pydantic_core import from_json
+
 from fastopenapi.routers.base import BaseAsyncRequestDataExtractor
 
 
@@ -31,7 +33,14 @@ class TornadoRequestDataExtractor(BaseAsyncRequestDataExtractor):
     @classmethod
     async def _get_body(cls, request: Any) -> dict | list | None:
         """Extract body"""
-        return getattr(request, "json_body", {})
+        if request.body:
+            try:
+                json_body = from_json(request.body)
+            except Exception:
+                json_body = {}
+        else:
+            json_body = {}
+        return json_body
 
     @classmethod
     async def _get_form_data(cls, request: Any) -> dict:

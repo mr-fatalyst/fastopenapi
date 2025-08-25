@@ -1,7 +1,6 @@
 from fastopenapi.core.types import Response
 from fastopenapi.openapi.ui import render_redoc_ui, render_swagger_ui
 from fastopenapi.routers.base import RequestEnvelope
-from fastopenapi.routers.falcon.constants import METHODS_MAPPER
 from fastopenapi.routers.falcon.extractors import FalconAsyncRequestDataExtractor
 from fastopenapi.routers.falcon.sync_router import FalconRouter
 
@@ -16,7 +15,7 @@ class FalconAsyncRouter(FalconRouter):
             resource = type("DynamicResource", (), {})()
             self._resources[path] = resource
 
-        method_name = METHODS_MAPPER.get(method, f"on_{method.lower()}")
+        method_name = self.METHODS_MAPPER.get(method, f"on_{method.lower()}")
 
         async def handle(request, response, **path_params):
             env = RequestEnvelope(request=request, path_params=path_params)
@@ -25,7 +24,7 @@ class FalconAsyncRouter(FalconRouter):
 
             # Falcon needs special handling
             if isinstance(result_response, Response):
-                response.status = self._get_falcon_status(result_response.status_code)
+                response.status = result_response.status_code
                 response.media = result_response.content
                 for key, value in result_response.headers.items():
                     response.set_header(key, value)

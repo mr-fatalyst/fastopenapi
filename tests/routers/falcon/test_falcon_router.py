@@ -1,7 +1,7 @@
 import falcon.asgi
 from pydantic import BaseModel
 
-from fastopenapi.routers import FalconRouter
+from fastopenapi.routers import FalconAsyncRouter
 
 
 class TestFalconRouter:
@@ -9,7 +9,7 @@ class TestFalconRouter:
     def test_router_initialization(self):
         """Test router initialization"""
         app = falcon.asgi.App()
-        router = FalconRouter(
+        router = FalconAsyncRouter(
             app=app,
             title="Test API",
             description="Test API Description",
@@ -24,7 +24,7 @@ class TestFalconRouter:
     def test_add_route(self):
         """Test adding a route"""
         app = falcon.asgi.App()
-        router = FalconRouter(app=app)
+        router = FalconAsyncRouter(app=app)
 
         async def test_endpoint():
             return {"message": "Test"}
@@ -42,8 +42,8 @@ class TestFalconRouter:
     def test_include_router(self):
         """Test including another router"""
         app = falcon.asgi.App()
-        main_router = FalconRouter(app=app)
-        sub_router = FalconRouter()
+        main_router = FalconAsyncRouter(app=app)
+        sub_router = FalconAsyncRouter()
 
         async def sub_endpoint():
             return {"message": "Sub"}
@@ -61,7 +61,7 @@ class TestFalconRouter:
     def test_openapi_generation(self):
         """Test OpenAPI schema generation"""
         app = falcon.asgi.App()
-        router = FalconRouter(
+        router = FalconAsyncRouter(
             app=app,
             title="Test API",
             description="Test Description",

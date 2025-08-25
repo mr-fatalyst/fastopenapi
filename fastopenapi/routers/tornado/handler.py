@@ -1,4 +1,3 @@
-from pydantic_core import from_json
 from tornado.web import RequestHandler
 
 from fastopenapi.core.types import Response
@@ -15,13 +14,6 @@ class TornadoDynamicHandler(RequestHandler):
 
     async def prepare(self):
         """Prepare request data"""
-        if self.request.body:
-            try:
-                self.json_body = from_json(self.request.body)
-            except Exception:
-                self.json_body = {}
-        else:
-            self.json_body = {}
         self.endpoint = self.endpoints.get(self.request.method.upper())
 
     async def handle_request(self):

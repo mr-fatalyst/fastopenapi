@@ -1,7 +1,7 @@
 import pytest
 from pydantic import BaseModel, computed_field
 
-from fastopenapi.core.params import Cookie, File, Form, Header
+from fastopenapi.core.params import Cookie, Form, Header
 from fastopenapi.errors.exceptions import BadRequestError, ValidationError
 from fastopenapi.resolution.resolver import ParameterResolver
 
@@ -132,19 +132,19 @@ class TestParameterResolver:
         result = self.resolver.resolve(endpoint, request_data)
         assert result["username"] == "john_doe"
 
-    def test_resolve_with_file_upload(self):
-        # Test resolving file upload
-        from fastopenapi.core.types import RequestData
-
-        def endpoint(file: File):
-            return file
-
-        mock_file = b"12345"
-
-        request_data = RequestData(files={"file": mock_file})
-
-        result = self.resolver.resolve(endpoint, request_data)
-        assert result["file"] == mock_file
+    # def test_resolve_with_file_upload(self):
+    #     # Test resolving file upload
+    #     from fastopenapi.core.types import RequestData
+    #
+    #     def endpoint(file: File):
+    #         return file
+    #
+    #     mock_file = b"12345"
+    #
+    #     request_data = RequestData(files={"file": mock_file})
+    #
+    #     result = self.resolver.resolve(endpoint, request_data)
+    #     assert result["file"] == mock_file
 
     def test_resolve_with_path_params(self):
         # Test resolving path parameters

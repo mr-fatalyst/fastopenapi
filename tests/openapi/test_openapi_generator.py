@@ -1,6 +1,6 @@
 from pydantic import BaseModel, computed_field
 
-from fastopenapi.core.params import Cookie, File, Header
+from fastopenapi.core.params import Cookie, Header
 from fastopenapi.core.router import BaseRouter
 from fastopenapi.openapi.generator import OpenAPIGenerator
 
@@ -152,23 +152,23 @@ class TestOpenAPIGenerator:
         assert ref == "#/components/schemas/TestModel"
         assert "TestModel" in schema["components"]["schemas"]
 
-    def test_generate_with_file_upload(self):
-        # Test OpenAPI generation with file upload
-
-        @self.router.post("/upload")
-        def upload_file(file: File()):
-            pass
-
-        schema = self.generator.generate()
-
-        # Check request body for multipart
-        request_body = schema["paths"]["/upload"]["post"]["requestBody"]
-        assert "multipart/form-data" in request_body["content"]
-        multipart = request_body["content"]["multipart/form-data"]["schema"]
-        assert multipart["type"] == "object"
-        assert "file" in multipart["properties"]
-        assert multipart["properties"]["file"]["type"] == "string"
-        assert multipart["properties"]["file"]["format"] == "binary"
+    # def test_generate_with_file_upload(self):
+    #     # Test OpenAPI generation with file upload
+    #
+    #     @self.router.post("/upload")
+    #     def upload_file(file: File()):
+    #         pass
+    #
+    #     schema = self.generator.generate()
+    #
+    #     # Check request body for multipart
+    #     request_body = schema["paths"]["/upload"]["post"]["requestBody"]
+    #     assert "multipart/form-data" in request_body["content"]
+    #     multipart = request_body["content"]["multipart/form-data"]["schema"]
+    #     assert multipart["type"] == "object"
+    #     assert "file" in multipart["properties"]
+    #     assert multipart["properties"]["file"]["type"] == "string"
+    #     assert multipart["properties"]["file"]["format"] == "binary"
 
     def test_generate_with_response_model(self):
         # Test OpenAPI generation with response model

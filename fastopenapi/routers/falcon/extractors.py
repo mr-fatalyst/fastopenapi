@@ -73,7 +73,15 @@ class FalconAsyncRequestDataExtractor(
     @classmethod
     async def _get_body(cls, request: Any) -> bytes | str | dict:
         """Extract body"""
-        return super()._get_body(request)
+        ct = (request.content_type or "").lower()
+        if ct == "application/json":
+            try:
+                body_bytes = await request.bounded_stream.read()
+                if body_bytes:
+                    return from_json(body_bytes.decode("utf-8"))
+            except Exception:
+                pass
+        return {}
 
     @classmethod
     async def _get_form_data(cls, request: Any) -> dict:

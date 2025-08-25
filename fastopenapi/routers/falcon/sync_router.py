@@ -1,6 +1,5 @@
 import inspect
 from collections.abc import Callable
-from http import HTTPStatus
 
 import falcon
 
@@ -10,7 +9,6 @@ from fastopenapi.routers.base import (
     BaseAdapter,
     RequestEnvelope,
 )
-from fastopenapi.routers.falcon.constants import HTTP_STATUS_TO_FALCON, METHODS_MAPPER
 from fastopenapi.routers.falcon.extractors import FalconRequestDataExtractor
 
 
@@ -18,6 +16,17 @@ class FalconRouter(BaseAdapter):
     """Falcon adapter for FastOpenAPI"""
 
     extractor_cls = FalconRequestDataExtractor
+
+    # Method mapping
+    METHODS_MAPPER = {
+        "GET": "on_get",
+        "POST": "on_post",
+        "PUT": "on_put",
+        "PATCH": "on_patch",
+        "DELETE": "on_delete",
+        "HEAD": "on_head",
+        "OPTIONS": "on_options",
+    }
 
     def __init__(self, app: falcon.App = None, **kwargs):
         self._resources = {}
@@ -31,11 +40,6 @@ class FalconRouter(BaseAdapter):
             resource = self._create_or_update_resource(path, method.upper(), endpoint)
             self.app.add_route(path, resource)
 
-    def _get_falcon_status(self, status_code: int) -> str:
-        """Get Falcon status constant"""
-        http_status = HTTPStatus(status_code)
-        return HTTP_STATUS_TO_FALCON.get(http_status, falcon.HTTP_500)
-
     def _create_or_update_resource(self, path: str, method: str, endpoint):
         """Create or update Falcon resource"""
         resource = self._resources.get(path)
@@ -43,7 +47,7 @@ class FalconRouter(BaseAdapter):
             resource = type("DynamicResource", (), {})()
             self._resources[path] = resource
 
-        method_name = METHODS_MAPPER.get(method, f"on_{method.lower()}")
+        method_name = self.METHODS_MAPPER.get(method, f"on_{method.lower()}")
 
         def handle(request, response, **path_params):
             env = RequestEnvelope(request=request, path_params=path_params)
@@ -59,7 +63,7 @@ class FalconRouter(BaseAdapter):
 
             # Falcon needs special handling
             if isinstance(result_response, Response):
-                response.status = self._get_falcon_status(result_response.status_code)
+                response.status = result_response.status_code
                 response.media = result_response.content
                 for key, value in result_response.headers.items():
                     response.set_header(key, value)
