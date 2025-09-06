@@ -1,7 +1,12 @@
 from collections.abc import Callable
 from typing import Any
 
-from fastopenapi.core.constants import SUPPORTED_METHODS
+from fastopenapi.core.constants import (
+    SECURITY_SCHEME_NAMES,
+    SECURITY_SCHEMES,
+    SUPPORTED_METHODS,
+    SecuritySchemeType,
+)
 
 
 class RouteInfo:
@@ -32,6 +37,7 @@ class BaseRouter:
         title: str = "My App",
         version: str = "0.1.0",
         description: str = "API documentation",
+        security_scheme: SecuritySchemeType = SecuritySchemeType.BEARER_JWT,
     ):
         self.app = app
         self.docs_url = docs_url
@@ -43,6 +49,12 @@ class BaseRouter:
         self.description = description
         self._routes: list[RouteInfo] = []
         self._openapi_schema = None
+        self._security_schemes = None
+        self._global_security = []
+
+        if security_scheme:
+            scheme_name = SECURITY_SCHEME_NAMES[security_scheme]
+            self._security_schemes = {scheme_name: SECURITY_SCHEMES[security_scheme]}
 
         # Register documentation endpoints if app is provided
         if self.app is not None and all([docs_url, redoc_url, openapi_url]):
