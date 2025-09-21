@@ -70,7 +70,9 @@ class Param(FieldInfo):
         }
 
         # Filter out None values
-        filtered_kwargs = {k: v for k, v in kwargs.items() if v is not None}
+        filtered_kwargs = {
+            k: v for k, v in kwargs.items() if v is not None or k == "default"
+        }
 
         super().__init__(**filtered_kwargs)
 

@@ -486,7 +486,6 @@ class ResponseBuilder:
 
         # Add error responses
         self._add_security_error_responses(responses, route)
-        self._add_validation_error_response(responses)
         self._add_custom_error_responses(responses, route)
 
         return responses
@@ -528,17 +527,6 @@ class ResponseBuilder:
                     }
                 },
             }
-
-    def _add_validation_error_response(self, responses: dict) -> None:
-        """Add validation error response"""
-        responses["422"] = {
-            "description": "Validation Error",
-            "content": {
-                "application/json": {
-                    "schema": {"$ref": "#/components/schemas/ValidationErrorSchema"}
-                }
-            },
-        }
 
     def _add_custom_error_responses(self, responses: dict, route) -> None:
         """Add custom error responses"""
@@ -707,7 +695,6 @@ class OpenAPIGenerator:
         self.definitions.update(
             {
                 "ErrorSchema": self._build_error_schema(),
-                "ValidationErrorSchema": self._build_validation_error_schema(),
                 "PaginationParams": self._build_pagination_params_schema(),
             }
         )
@@ -724,36 +711,6 @@ class OpenAPIGenerator:
                         "message": {"type": "string"},
                         "status": {"type": "integer"},
                         "details": {"type": "string"},
-                    },
-                    "required": ["type", "message", "status"],
-                }
-            },
-            "required": ["error"],
-        }
-
-    def _build_validation_error_schema(self) -> dict:
-        """Build validation error schema"""
-        return {
-            "type": "object",
-            "properties": {
-                "error": {
-                    "type": "object",
-                    "properties": {
-                        "type": {"type": "string", "enum": ["validation_error"]},
-                        "message": {"type": "string"},
-                        "status": {"type": "integer", "enum": [422]},
-                        "details": {
-                            "type": "array",
-                            "items": {
-                                "type": "object",
-                                "properties": {
-                                    "field": {"type": "string"},
-                                    "message": {"type": "string"},
-                                    "type": {"type": "string"},
-                                },
-                                "required": ["field", "message"],
-                            },
-                        },
                     },
                     "required": ["type", "message", "status"],
                 }

@@ -131,28 +131,21 @@ class ServiceUnavailableError(APIError):
     error_type = ErrorType.SERVICE_UNAVAILABLE
 
 
-class DependencyError(BadRequestError):
+class DependencyError(InternalServerError):
     """Base exception for dependency resolution errors"""
+
+    default_message = "dependency_error"
 
 
 class CircularDependencyError(DependencyError):
     """Raised when circular dependencies are detected"""
 
-    def __init__(self, message: str):
-        super().__init__(message)
-        self.type = "circular_dependency_error"
+    default_message = "circular_dependency_error"
 
 
 class SecurityError(DependencyError):
     """Raised when security requirements are not met"""
 
-    def __init__(
-        self,
-        message: str,
-        required_scopes: list[str] = None,
-        provided_scopes: list[str] = None,
-    ):
-        super().__init__(message)
-        self.type = "security_error"
-        self.required_scopes = required_scopes or []
-        self.provided_scopes = provided_scopes or []
+    status_code = HTTPStatus.FORBIDDEN
+    default_message = "insufficient_scope"
+    error_type = ErrorType.AUTHORIZATION_ERROR
