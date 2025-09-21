@@ -1,15 +1,15 @@
-from falcon import App
+import falcon.asgi
 from pydantic import BaseModel
 
-from fastopenapi.routers import FalconRouter
+from fastopenapi.routers import FalconAsyncRouter
 
 
-class TestFalconRouter:
+class TestFalconAsyncRouter:
 
     def test_router_initialization(self):
         """Test router initialization"""
-        app = App()
-        router = FalconRouter(
+        app = falcon.asgi.App()
+        router = FalconAsyncRouter(
             app=app,
             title="Test API",
             description="Test API Description",
@@ -23,10 +23,10 @@ class TestFalconRouter:
 
     def test_add_route(self):
         """Test adding a route"""
-        app = App()
-        router = FalconRouter(app=app)
+        app = falcon.asgi.App()
+        router = FalconAsyncRouter(app=app)
 
-        def test_endpoint():
+        async def test_endpoint():
             return {"message": "Test"}
 
         router.add_route("/test", "GET", test_endpoint)
@@ -41,11 +41,11 @@ class TestFalconRouter:
 
     def test_include_router(self):
         """Test including another router"""
-        app = App()
-        main_router = FalconRouter(app=app)
-        sub_router = FalconRouter()
+        app = falcon.asgi.App()
+        main_router = FalconAsyncRouter(app=app)
+        sub_router = FalconAsyncRouter()
 
-        def sub_endpoint():
+        async def sub_endpoint():
             return {"message": "Sub"}
 
         sub_router.add_route("/sub", "GET", sub_endpoint)
@@ -60,8 +60,8 @@ class TestFalconRouter:
 
     def test_openapi_generation(self):
         """Test OpenAPI schema generation"""
-        app = App()
-        router = FalconRouter(
+        app = falcon.asgi.App()
+        router = FalconAsyncRouter(
             app=app,
             title="Test API",
             description="Test Description",
@@ -73,7 +73,7 @@ class TestFalconRouter:
             name: str
 
         @router.get("/test/{id}", response_model=TestModel)
-        def get_test(id: int):
+        async def get_test(id: int):
             """Test endpoint"""
             return TestModel(id=id, name="Test")
 
