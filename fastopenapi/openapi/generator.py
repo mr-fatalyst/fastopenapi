@@ -7,7 +7,6 @@ from functools import lru_cache
 from typing import Any
 
 from pydantic import BaseModel
-from pydantic_core import to_json
 
 from fastopenapi.core.constants import PYTHON_TYPE_MAPPING, ParameterSource
 from fastopenapi.core.params import Body, Depends, File, Form, Header, Param, Security
@@ -86,41 +85,63 @@ class SchemaBuilder:
 
     def _apply_param_constraints(self, schema: dict, param_obj: Param) -> None:
         """Apply validation constraints from Param object to schema"""
-        # Numeric constraints
-        constraint_mappings = {
-            "gt": "exclusiveMinimum",
-            "ge": "minimum",
-            "lt": "exclusiveMaximum",
-            "le": "maximum",
-            "multiple_of": "multipleOf",
-            "min_length": "minLength",
-            "max_length": "maxLength",
-            "pattern": "pattern",
+        self._apply_metadata_constraints(schema, param_obj)
+        self._apply_object_metadata(schema, param_obj)
+        self._apply_default_value(schema, param_obj)
+
+    def _apply_metadata_constraints(self, schema: dict, param_obj: Param) -> None:
+        """Apply constraints from param metadata"""
+        if not (hasattr(param_obj, "metadata") and param_obj.metadata):
+            return
+
+        constraint_mapping = {
+            "MinLen": ("min_length", "minLength"),
+            "MaxLen": ("max_length", "maxLength"),
+            "Ge": ("ge", "minimum"),
+            "Le": ("le", "maximum"),
+            "Gt": ("gt", "exclusiveMinimum"),
+            "Lt": ("lt", "exclusiveMaximum"),
+            "MultipleOf": ("multiple_of", "multipleOf"),
         }
 
-        for param_attr, schema_key in constraint_mappings.items():
-            if hasattr(param_obj, param_attr):
-                value = getattr(param_obj, param_attr)
-                if value is not None:
-                    schema[schema_key] = value
+        for constraint in param_obj.metadata:
+            constraint_type = type(constraint).__name__
 
-        # Metadata
-        if param_obj.title:
-            schema["title"] = param_obj.title
-        if param_obj.description:
-            schema["description"] = param_obj.description
-        if hasattr(param_obj, "examples") and param_obj.examples:
-            schema["examples"] = param_obj.examples
-        if (
-            param_obj.default is not None
+            if constraint_type in constraint_mapping:
+                attr_name, schema_key = constraint_mapping[constraint_type]
+                if hasattr(constraint, attr_name):
+                    schema[schema_key] = getattr(constraint, attr_name)
+            elif constraint_type == "_PydanticGeneralMetadata" and hasattr(
+                constraint, "pattern"
+            ):
+                schema["pattern"] = constraint.pattern
+
+    def _apply_object_metadata(self, schema: dict, param_obj: Param) -> None:
+        """Apply object-level metadata"""
+        attrs = ["title", "description", "examples"]
+        for attr in attrs:
+            if hasattr(param_obj, attr):
+                value = getattr(param_obj, attr)
+                if value:
+                    schema[attr] = value
+
+    def _apply_default_value(self, schema: dict, param_obj: Param) -> None:
+        """Apply default value if serializable"""
+        if not (
+            hasattr(param_obj, "default")
+            and param_obj.default is not None
             and param_obj.default is not ...
             and not str(type(param_obj.default)).endswith("PydanticUndefinedType")
         ):
-            try:
-                to_json(param_obj.default)
-                schema["default"] = param_obj.default
-            except (TypeError, ValueError):
-                pass
+            return
+
+        try:
+            from pydantic_core import to_json
+
+            to_json(param_obj.default)
+            schema["default"] = param_obj.default
+        except (TypeError, ValueError):
+            pass
 
     def get_model_schema(self, model: type[BaseModel]) -> dict:
         """Get OpenAPI schema for a Pydantic model with thread-safe caching"""
@@ -268,6 +289,9 @@ class ParameterProcessor:
         """Build parameter info with full Param object integration"""
         param_obj = param.default
 
+        if isinstance(param_obj, Param) and not param_obj.include_in_schema:
+            return None
+
         # Determine location and name
         location, actual_name = self._determine_parameter_location_and_name(
             param_name, param_obj, path_params
@@ -325,9 +349,11 @@ class ParameterProcessor:
     def _build_parameter_schema(self, param: inspect.Parameter, param_obj: Any) -> dict:
         """Build parameter schema"""
         if isinstance(param_obj, Param):
-            return self.schema_builder.build_parameter_schema_from_param(param)
+            result = self.schema_builder.build_parameter_schema_from_param(param)
+            return result
         else:
-            return self.schema_builder.build_parameter_schema(param.annotation)
+            result = self.schema_builder.build_parameter_schema(param.annotation)
+            return result
 
     def _is_parameter_required(
         self, param_obj: Any, param: inspect.Parameter, location: str

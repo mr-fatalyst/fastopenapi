@@ -76,6 +76,9 @@ class Param(FieldInfo):
 
         super().__init__(**filtered_kwargs)
 
+        self.examples = examples
+        self.include_in_schema = include_in_schema
+
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}({self.default})"
 
@@ -369,6 +372,11 @@ class Body(FieldInfo):
         filtered_kwargs = {k: v for k, v in kwargs.items() if v is not None}
 
         super().__init__(**filtered_kwargs)
+
+        self.embed = embed
+        self.media_type = media_type
+        self.examples = examples
+        self.include_in_schema = include_in_schema
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}({self.default})"
