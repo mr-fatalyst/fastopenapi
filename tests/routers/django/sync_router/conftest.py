@@ -2,7 +2,7 @@ import pytest
 from django.conf import settings
 from django.http import Http404
 from django.test import Client
-from django.urls import path
+from django.urls import clear_url_caches, path
 from pydantic import BaseModel
 
 from fastopenapi.routers import DjangoRouter
@@ -52,8 +52,8 @@ def urls(items_db):  # noqa: C901
         """Get all items"""
         return [Item(**item) for item in items_db]
 
-    @router.get("/items-sync", response_model=list[ItemResponse], tags=["items"])
-    def get_items_sync():
+    @router.get("/items-async", response_model=list[ItemResponse], tags=["items"])
+    async def get_items_async():
         """Get all items"""
         return [Item(**item) for item in items_db]
 
@@ -105,7 +105,10 @@ def django_settings(urls):
     globals()["urlpatterns"] = [path("", urls)]
     if not settings.configured:
         settings.configure(ROOT_URLCONF=__name__)
-    return settings
+    try:
+        yield settings
+    finally:
+        clear_url_caches()
 
 
 @pytest.fixture

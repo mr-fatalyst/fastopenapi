@@ -1,3 +1,6 @@
+import pytest
+
+
 class TestDjangoIntegration:
     def test_get_items(self, client):
         """Test fetching all items"""
@@ -8,6 +11,16 @@ class TestDjangoIntegration:
         assert len(result) == 2
         assert result[0]["name"] == "Item 1"
         assert result[1]["name"] == "Item 2"
+
+    def test_get_item_async(self, client):
+        """Test fetching an item by ID"""
+        with pytest.raises(Exception) as excinfo:
+            client.get("/items-async")
+            err_msg = (
+                "Async endpoint 'get_items_async' cannot be used with sync router."
+                " Use DjangoAsyncRouter for async support."
+            )
+            assert err_msg in str(excinfo.value)
 
     def test_get_items_fail(self, client):
         """Test fetching all items with an error"""
