@@ -21,7 +21,7 @@ class TestBaseRouter:
             description="Test API Description",
         )
 
-        self.router_no_app = TestRouter()
+        self.router_no_app = TestRouter(security_scheme=None)
 
     def test_init(self):
         # Test that constructor properly initializes the object
@@ -47,6 +47,7 @@ class TestBaseRouter:
         assert self.router_no_app.openapi_version == "3.0.0"
         assert self.router_no_app._routes == []
         assert self.router_no_app._openapi_schema is None
+        assert self.router_no_app._security_schemes is None
 
     def test_add_route(self):
         # Test adding a route to the router
@@ -60,6 +61,10 @@ class TestBaseRouter:
         assert route.path == "/test"
         assert route.method == "GET"
         assert route.endpoint == test_endpoint
+
+        with pytest.raises(ValueError) as excinfo:
+            self.router.add_route("/test", "TEST", test_endpoint)
+            assert "Unsupported method: TEST" in str(excinfo.value)
 
     def test_get_routes(self):
         # Test getting all routes

@@ -12,7 +12,7 @@ class TestDjangoIntegration:
         assert result[0]["name"] == "Item 1"
         assert result[1]["name"] == "Item 2"
 
-    def test_get_item_async(self, client):
+    def test_get_items_async(self, client):
         """Test fetching an item by ID"""
         with pytest.raises(Exception) as excinfo:
             client.get("/items-async")

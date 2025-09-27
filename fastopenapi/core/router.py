@@ -37,7 +37,7 @@ class BaseRouter:
         title: str = "My App",
         version: str = "0.1.0",
         description: str = "API documentation",
-        security_scheme: SecuritySchemeType = SecuritySchemeType.BEARER_JWT,
+        security_scheme: SecuritySchemeType | None = SecuritySchemeType.BEARER_JWT,
     ):
         self.app = app
         self.docs_url = docs_url

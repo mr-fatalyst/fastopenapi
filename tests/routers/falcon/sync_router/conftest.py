@@ -1,10 +1,9 @@
-from http import HTTPStatus
-
 import pytest
-from flask import Flask, abort
+from falcon import App, HTTPNotFound
+from falcon.testing import TestClient
 from pydantic import BaseModel
 
-from fastopenapi.routers import FlaskRouter
+from fastopenapi.routers import FalconRouter
 
 
 class Item(BaseModel):
@@ -34,11 +33,11 @@ def items_db():
 
 @pytest.fixture
 def app(items_db):  # noqa: C901
-    app = Flask(__name__)
-    router = FlaskRouter(
+    app = App()
+    router = FalconRouter(
         app=app,
         title="Test API",
-        description="Test API for FlaskRouter",
+        description="Test API for FalconRouter",
         version="0.1.0",
     )
 
@@ -68,7 +67,7 @@ def app(items_db):  # noqa: C901
         for item in items_db:
             if item["id"] == item_id:
                 return Item(**item)
-        abort(HTTPStatus.NOT_FOUND)
+        raise HTTPNotFound(description=f"Item with id {item_id} not found")
 
     @router.post("/items", response_model=ItemResponse, status_code=201, tags=["items"])
     def create_item(item: CreateItemRequest):
@@ -86,7 +85,7 @@ def app(items_db):  # noqa: C901
                 existing_item["name"] = item.name
                 existing_item["description"] = item.description
                 return Item(**existing_item)
-        abort(HTTPStatus.NOT_FOUND)
+        raise HTTPNotFound(description=f"Item with id {item_id} not found")
 
     @router.delete("/items/{item_id}", status_code=204, tags=["items"])
     def delete_item(item_id: int):
@@ -95,11 +94,11 @@ def app(items_db):  # noqa: C901
             if item["id"] == item_id:
                 del items_db[i]
                 return None
-        abort(HTTPStatus.NOT_FOUND)
+        raise HTTPNotFound(description=f"Item with id {item_id} not found")
 
     return app
 
 
 @pytest.fixture
-def client(app):
-    return app.test_client()
+def sync_client(app):
+    return TestClient(app)
