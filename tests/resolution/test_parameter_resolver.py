@@ -5,7 +5,16 @@ import pytest
 from pydantic import BaseModel, Field
 from pydantic import ValidationError as PydanticValidationError
 
-from fastopenapi.core.params import Body, Cookie, Depends, File, Form, Header, Query
+from fastopenapi.core.params import (
+    Body,
+    Cookie,
+    Depends,
+    File,
+    Form,
+    Header,
+    Param,
+    Query,
+)
 from fastopenapi.core.types import RequestData
 from fastopenapi.errors.exceptions import BadRequestError, ValidationError
 from fastopenapi.resolution.resolver import ParameterResolver, ProcessedParameter
@@ -395,18 +404,19 @@ class TestParameterResolver:
 
     def test_build_field_constraints_all_constraints(self):
         """Test building field constraints with all possible constraints"""
-        param_obj = Mock()
-        param_obj.gt = 0
-        param_obj.ge = 1
-        param_obj.lt = 100
-        param_obj.le = 99
-        param_obj.multiple_of = 5
-        param_obj.min_length = 2
-        param_obj.max_length = 50
-        param_obj.pattern = r"^[a-z]+$"
-        param_obj.strict = True
-        param_obj.description = "Test description"
-        param_obj.title = "Test title"
+        param_obj = Param(
+            gt=0,
+            ge=1,
+            lt=100,
+            le=99,
+            multiple_of=5,
+            min_length=2,
+            max_length=50,
+            pattern=r"^[a-z]+$",
+            strict=True,
+            description="Test description",
+            title="Test title",
+        )
 
         constraints = self.resolver._build_field_constraints(param_obj)
 
@@ -424,7 +434,7 @@ class TestParameterResolver:
 
     def test_build_field_constraints_none_values(self):
         """Test building field constraints with None values"""
-        param_obj = Mock()
+        param_obj = Param()
         param_obj.gt = None
         param_obj.description = None
 

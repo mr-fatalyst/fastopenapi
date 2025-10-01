@@ -23,7 +23,9 @@ class TestDjangoAsyncRequestDataExtractor:
     async def test_get_form_data_calls_sync_method(self):
         """Test async form data extraction calls sync method"""
         request = Mock()
-        request.POST = {"field": "value"}
+        request.POST = Mock()
+        request.POST.keys = Mock(return_value=["field"])
+        request.POST.getlist = Mock(return_value=["value"])
 
         result = await DjangoAsyncRequestDataExtractor._get_form_data(request)
 
@@ -49,7 +51,9 @@ class TestDjangoAsyncRequestDataExtractor:
         request.headers = {"Content-Type": "application/json"}
         request.COOKIES = {"session": "abc"}
         request.body = b'{"data": "test"}'
-        request.POST = {"form_field": "form_value"}
+        request.POST = Mock()
+        request.POST.keys = Mock(return_value=["form_field"])
+        request.POST.getlist = Mock(return_value=["form_value"])
 
         env = RequestEnvelope(request=request, path_params=None)
 

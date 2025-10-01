@@ -5,7 +5,7 @@ from django.test import Client
 from django.urls import clear_url_caches, path
 from pydantic import BaseModel
 
-from fastopenapi.routers import DjangoRouter
+from fastopenapi import Cookie, DjangoRouter, Form, Header, Path, Query
 
 
 class Item(BaseModel):
@@ -96,6 +96,91 @@ def urls(items_db):  # noqa: C901
                 del items_db[i]
                 return None
         raise Http404(f"Item with id {item_id} not found")
+
+    @router.get("/test-echo-headers")
+    def test_echo_headers(x_request_id: str = Header(None, alias="X-Request-ID")):
+        """Test endpoint that returns headers"""
+        return (
+            {"received": x_request_id or "none"},
+            200,
+            {"X-Echo-ID": x_request_id or "none", "X-Custom": "test"},
+        )
+
+    @router.get("/test-headers")
+    def test_headers(
+        user_agent: str = Header(None, alias="User-Agent"),
+        custom_header: str = Header(None, alias="X-Custom-Header"),
+        authorization: str = Header(None),
+    ):
+        """Test endpoint for headers"""
+        return {
+            "user_agent": user_agent,
+            "custom_header": custom_header,
+            "authorization": authorization,
+        }
+
+    @router.get("/test-cookies")
+    def test_cookies(
+        session_id: str = Cookie(None, alias="sessionid"),
+        csrf_token: str = Cookie(None, alias="csrftoken"),
+    ):
+        """Test endpoint for cookies"""
+        return {
+            "session_id": session_id,
+            "csrf_token": csrf_token,
+        }
+
+    @router.get("/test-query-validation")
+    def test_query_validation(
+        page: int = Query(1, ge=1, le=100, description="Page number"),
+        limit: int = Query(10, ge=1, le=100),
+        search: str = Query(None, min_length=3, max_length=50),
+    ):
+        """Test endpoint for query parameter validation"""
+        return {
+            "page": page,
+            "limit": limit,
+            "search": search,
+        }
+
+    @router.get("/test-path/{user_id}/items/{item_id}")
+    def test_multiple_path_params(
+        user_id: int = Path(..., ge=1),
+        item_id: int = Path(..., ge=1),
+    ):
+        """Test endpoint for multiple path parameters"""
+        return {
+            "user_id": user_id,
+            "item_id": item_id,
+        }
+
+    @router.post("/test-form")
+    def test_form_data(
+        username: str = Form(..., min_length=3),
+        email: str = Form(...),
+        age: int | None = Form(default=None, ge=0, le=120),
+    ):
+        """Test endpoint for form data"""
+        return {
+            "username": username,
+            "email": email,
+            "age": age,
+        }
+
+    @router.get("/test-mixed-params/{item_id}")
+    def test_mixed_params(
+        item_id: int = Path(...),
+        search: str = Query(None),
+        user_agent: str = Header(None, alias="User-Agent"),
+        session: str = Cookie(None),
+    ):
+        """Test endpoint with mixed parameter types"""
+        return {
+            "item_id": item_id,
+            "search": search,
+            "user_agent": user_agent,
+            "session": session,
+        }
 
     return router.urls
 

@@ -9,7 +9,16 @@ from typing import Any
 from pydantic import BaseModel
 
 from fastopenapi.core.constants import PYTHON_TYPE_MAPPING, ParameterSource
-from fastopenapi.core.params import Body, Depends, File, Form, Header, Param, Security
+from fastopenapi.core.params import (
+    BaseParam,
+    Body,
+    Depends,
+    File,
+    Form,
+    Header,
+    Param,
+    Security,
+)
 
 # Thread-safe compiled regex patterns
 PATH_PARAM_PATTERN = re.compile(r"<(?:[^:>]+:)?([^>]+)>")
@@ -78,7 +87,7 @@ class SchemaBuilder:
 
         schema = self.build_parameter_schema(annotation)
 
-        if isinstance(param_obj, Param):
+        if isinstance(param_obj, BaseParam):
             self._apply_param_constraints(schema, param_obj)
 
         return schema
@@ -289,7 +298,7 @@ class ParameterProcessor:
         """Build parameter info with full Param object integration"""
         param_obj = param.default
 
-        if isinstance(param_obj, Param) and not param_obj.include_in_schema:
+        if isinstance(param_obj, BaseParam) and not param_obj.include_in_schema:
             return None
 
         # Determine location and name
@@ -359,7 +368,7 @@ class ParameterProcessor:
         self, param_obj: Any, param: inspect.Parameter, location: str
     ) -> bool:
         """Determine if parameter is required"""
-        if isinstance(param_obj, Param):
+        if isinstance(param_obj, BaseParam):
             return param_obj.default is ... or location == "path"
         else:
             return param.default is inspect.Parameter.empty or location == "path"
@@ -369,7 +378,7 @@ class ParameterProcessor:
     ) -> None:
         """Add metadata to parameter info"""
         # Add OpenAPI-specific fields from Param object
-        if isinstance(param_obj, Param):
+        if isinstance(param_obj, BaseParam):
             if param_obj.description:
                 param_info["description"] = param_obj.description
             if hasattr(param_obj, "examples") and param_obj.examples:

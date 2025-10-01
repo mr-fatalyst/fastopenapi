@@ -7,10 +7,12 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field
 from pydantic import ValidationError as PydanticValidationError
 from pydantic import create_model
+from pydantic_core import PydanticUndefined
 
 from fastopenapi.core.constants import ParameterSource
 from fastopenapi.core.dependency_resolver import dependency_resolver
 from fastopenapi.core.params import (
+    BaseParam,
     Body,
     Cookie,
     Depends,
@@ -148,7 +150,7 @@ class ParameterResolver:
 
         field_info = None
         if needs_validation:
-            if isinstance(param.default, Param):
+            if isinstance(param.default, BaseParam):
                 field_info = cls._build_field_info(param)
             else:
                 annotation = (
@@ -244,22 +246,27 @@ class ParameterResolver:
     @staticmethod
     def _get_param_name(name: str, param: inspect.Parameter) -> str:
         """Get the actual parameter name to use (considering aliases)"""
-        if isinstance(param.default, Param) and param.default.alias:
+        if isinstance(param.default, BaseParam) and param.default.alias:
             return param.default.alias
         return name
 
     @staticmethod
     def _is_required_param(param: inspect.Parameter) -> bool:
         """Check if parameter is required"""
-        if isinstance(param.default, Param):
-            return param.default.default is ...
+        if isinstance(param.default, BaseParam):
+            default_val = param.default.default
+            result = default_val is ... or default_val is PydanticUndefined
+            return result
         return param.default is inspect.Parameter.empty
 
     @staticmethod
     def _get_default_value(param: inspect.Parameter) -> Any:
         """Get default value for parameter"""
-        if isinstance(param.default, Param):
-            return param.default.default if param.default.default is not ... else None
+        if isinstance(param.default, BaseParam):
+            default_val = param.default.default
+            if default_val is ... or default_val is PydanticUndefined:
+                return None
+            return default_val
         elif param.default is not inspect.Parameter.empty:
             return param.default
         return None
@@ -268,7 +275,7 @@ class ParameterResolver:
     def _needs_validation(param: inspect.Parameter) -> bool:
         """Check if parameter needs validation"""
         # Always validate if it's a Param instance with constraints
-        if isinstance(param.default, Param):
+        if isinstance(param.default, BaseParam):
             return True
         # Validate if it has a specific type annotation
         return param.annotation != inspect.Parameter.empty
@@ -285,38 +292,87 @@ class ParameterResolver:
         default = param_obj.default if param_obj.default is not ... else ...
 
         if field_kwargs:
-            return (annotation, Field(default=default, **field_kwargs))
+            return annotation, Field(default=default, **field_kwargs)
         else:
-            return (annotation, default)
+            return annotation, default
 
     @staticmethod
-    def _build_field_constraints(param_obj: Param) -> dict[str, Any]:
-        """Build field constraints from Param object"""
-        field_kwargs = {}
+    def _process_numeric_constraints(
+        constraint, constraint_type: str, field_kwargs: dict
+    ) -> None:
+        """Process numeric constraints (gt, ge, lt, le, multiple_of)"""
+        constraint_mapping = {
+            "Gt": ("gt", "gt"),
+            "Ge": ("ge", "ge"),
+            "Lt": ("lt", "lt"),
+            "Le": ("le", "le"),
+            "MultipleOf": ("multiple_of", "multiple_of"),
+        }
 
-        # Numeric constraints
-        for constraint in ["gt", "ge", "lt", "le", "multiple_of"]:
-            value = getattr(param_obj, constraint, None)
-            if value is not None:
-                field_kwargs[constraint] = value
+        if constraint_type in constraint_mapping:
+            attr_name, field_name = constraint_mapping[constraint_type]
+            if hasattr(constraint, attr_name):
+                field_kwargs[field_name] = getattr(constraint, attr_name)
 
-        # String constraints
-        for constraint in ["min_length", "max_length", "pattern"]:
-            value = getattr(param_obj, constraint, None)
-            if value is not None:
-                field_kwargs[constraint] = value
+    @staticmethod
+    def _process_string_constraints(
+        constraint, constraint_type: str, field_kwargs: dict
+    ) -> None:
+        """Process string constraints (min_length, max_length)"""
+        if constraint_type == "MinLen" and hasattr(constraint, "min_length"):
+            field_kwargs["min_length"] = constraint.min_length
+        elif constraint_type == "MaxLen" and hasattr(constraint, "max_length"):
+            field_kwargs["max_length"] = constraint.max_length
 
-        # Other constraints
-        for constraint in ["strict"]:
-            value = getattr(param_obj, constraint, None)
-            if value is not None:
-                field_kwargs[constraint] = value
+    @staticmethod
+    def _process_pattern_constraint(constraint, field_kwargs: dict) -> None:
+        """Process pattern constraint"""
+        if hasattr(constraint, "pattern"):
+            field_kwargs["pattern"] = constraint.pattern
 
-        # Metadata
+    @staticmethod
+    def _process_strict_mode(
+        constraint, constraint_type: str, field_kwargs: dict
+    ) -> None:
+        """Process strict mode constraint"""
+        if constraint_type == "Strict":
+            field_kwargs["strict"] = constraint.strict
+
+    @staticmethod
+    def _process_float_decimal_constraints(constraint, field_kwargs: dict) -> None:
+        """Process float/decimal specific constraints"""
+        float_decimal_attrs = ["allow_inf_nan", "max_digits", "decimal_places"]
+
+        for attr in float_decimal_attrs:
+            if hasattr(constraint, attr):
+                field_kwargs[attr] = getattr(constraint, attr)
+
+    @staticmethod
+    def _process_metadata(param_obj: Param, field_kwargs: dict) -> None:
+        """Process metadata fields (description, title)"""
         for meta in ["description", "title"]:
             value = getattr(param_obj, meta, None)
             if value is not None:
                 field_kwargs[meta] = value
+
+    @classmethod
+    def _build_field_constraints(cls, param_obj: Param) -> dict[str, Any]:
+        """Build field constraints from Param object"""
+        field_kwargs = {}
+        metadata = getattr(param_obj, "metadata", [])
+
+        for constraint in metadata:
+            constraint_type = type(constraint).__name__
+
+            # Process different types of constraints
+            cls._process_numeric_constraints(constraint, constraint_type, field_kwargs)
+            cls._process_string_constraints(constraint, constraint_type, field_kwargs)
+            cls._process_pattern_constraint(constraint, field_kwargs)
+            cls._process_strict_mode(constraint, constraint_type, field_kwargs)
+            cls._process_float_decimal_constraints(constraint, field_kwargs)
+
+        # Process metadata
+        cls._process_metadata(param_obj, field_kwargs)
 
         return field_kwargs
 

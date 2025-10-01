@@ -14,6 +14,7 @@ from fastopenapi.core.router import BaseRouter
 from fastopenapi.core.types import Response
 from fastopenapi.routers import (
     AioHttpRouter,
+    DjangoAsyncRouter,
     DjangoRouter,
     FalconRouter,
     FlaskRouter,
@@ -30,6 +31,7 @@ __all__ = [
     # adapters
     "AioHttpRouter",
     "DjangoRouter",
+    "DjangoAsyncRouter",
     "FalconRouter",
     "FlaskRouter",
     "QuartRouter",

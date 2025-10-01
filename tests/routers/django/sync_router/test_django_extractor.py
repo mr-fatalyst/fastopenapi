@@ -110,7 +110,11 @@ class TestDjangoRequestDataExtractor:
     def test_get_form_data(self):
         """Test form data extraction"""
         request = Mock()
-        request.POST = {"field1": "value1", "field2": "value2"}
+        request.POST = Mock()
+        request.POST.keys = Mock(return_value=["field1", "field2"])
+        request.POST.getlist = Mock(
+            side_effect=lambda k: ["value1"] if k == "field1" else ["value2"]
+        )
 
         result = DjangoRequestDataExtractor._get_form_data(request)
 
@@ -142,7 +146,9 @@ class TestDjangoRequestDataExtractor:
         request.headers = {"Content-Type": "application/json"}
         request.COOKIES = {"session": "abc"}
         request.body = b'{"data": "test"}'
-        request.POST = {"form_field": "form_value"}
+        request.POST = Mock()
+        request.POST.keys = Mock(return_value=["form_field"])
+        request.POST.getlist = Mock(return_value=["form_value"])
 
         env = RequestEnvelope(request=request, path_params=None)
 

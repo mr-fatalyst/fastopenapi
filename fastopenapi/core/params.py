@@ -12,10 +12,8 @@ from pydantic.fields import FieldInfo
 from fastopenapi.core.constants import ParameterSource
 
 
-class Param(FieldInfo):
+class BaseParam(FieldInfo):
     """Base parameter class extending Pydantic FieldInfo"""
-
-    in_: ParameterSource
 
     def __init__(
         self,
@@ -81,6 +79,61 @@ class Param(FieldInfo):
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}({self.default})"
+
+
+class Param(BaseParam):
+    """Base parameter class for URL/header/cookie parameters"""
+
+    in_: ParameterSource
+
+    def __init__(
+        self,
+        default: Any = ...,
+        *,
+        alias: str | None = None,
+        title: str | None = None,
+        description: str | None = None,
+        gt: float | None = None,
+        ge: float | None = None,
+        lt: float | None = None,
+        le: float | None = None,
+        min_length: int | None = None,
+        max_length: int | None = None,
+        pattern: str | None = None,
+        strict: bool | None = None,
+        multiple_of: float | None = None,
+        allow_inf_nan: bool | None = None,
+        max_digits: int | None = None,
+        decimal_places: int | None = None,
+        examples: list[Any] | None = None,
+        deprecated: bool | None = None,
+        include_in_schema: bool = True,
+        json_schema_extra: dict[str, Any] | None = None,
+        **extra: Any,
+    ):
+        super().__init__(
+            default=default,
+            alias=alias,
+            title=title,
+            description=description,
+            gt=gt,
+            ge=ge,
+            lt=lt,
+            le=le,
+            min_length=min_length,
+            max_length=max_length,
+            pattern=pattern,
+            strict=strict,
+            multiple_of=multiple_of,
+            allow_inf_nan=allow_inf_nan,
+            max_digits=max_digits,
+            decimal_places=decimal_places,
+            examples=examples,
+            deprecated=deprecated,
+            include_in_schema=include_in_schema,
+            json_schema_extra=json_schema_extra,
+            **extra,
+        )
 
 
 class Query(Param):
@@ -310,7 +363,7 @@ class Cookie(Param):
         )
 
 
-class Body(FieldInfo):
+class Body(BaseParam):
     """Body parameter for JSON request bodies"""
 
     def __init__(
@@ -342,44 +395,33 @@ class Body(FieldInfo):
     ):
         self.embed = embed
         self.media_type = media_type
-        self.examples = examples
-        self.include_in_schema = include_in_schema
 
-        # Build kwargs for FieldInfo
-        kwargs = {
-            "default": default,
-            "alias": alias,
-            "title": title,
-            "description": description,
-            "gt": gt,
-            "ge": ge,
-            "lt": lt,
-            "le": le,
-            "min_length": min_length,
-            "max_length": max_length,
-            "pattern": pattern,
-            "strict": strict,
-            "multiple_of": multiple_of,
-            "allow_inf_nan": allow_inf_nan,
-            "max_digits": max_digits,
-            "decimal_places": decimal_places,
-            "deprecated": deprecated,
-            "json_schema_extra": json_schema_extra,
+        super().__init__(
+            default=default,
+            alias=alias,
+            title=title,
+            description=description,
+            gt=gt,
+            ge=ge,
+            lt=lt,
+            le=le,
+            min_length=min_length,
+            max_length=max_length,
+            pattern=pattern,
+            strict=strict,
+            multiple_of=multiple_of,
+            allow_inf_nan=allow_inf_nan,
+            max_digits=max_digits,
+            decimal_places=decimal_places,
+            examples=examples,
+            deprecated=deprecated,
+            include_in_schema=include_in_schema,
+            json_schema_extra=json_schema_extra,
             **extra,
-        }
-
-        # Filter out None values
-        filtered_kwargs = {k: v for k, v in kwargs.items() if v is not None}
-
-        super().__init__(**filtered_kwargs)
+        )
 
         self.embed = embed
         self.media_type = media_type
-        self.examples = examples
-        self.include_in_schema = include_in_schema
-
-    def __repr__(self) -> str:
-        return f"{self.__class__.__name__}({self.default})"
 
 
 class Form(Body):

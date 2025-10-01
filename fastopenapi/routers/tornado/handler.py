@@ -1,6 +1,5 @@
 from tornado.web import RequestHandler
 
-from fastopenapi.core.types import Response
 from fastopenapi.routers.common import RequestEnvelope
 from fastopenapi.routers.tornado.utils import json_encode
 
@@ -25,17 +24,16 @@ class TornadoDynamicHandler(RequestHandler):
         env = RequestEnvelope(request=self.request, path_params=self.path_kwargs)
         result_response = await self.router.handle_request_async(self.endpoint, env)
 
-        if isinstance(result_response, Response):
-            self.set_status(result_response.status_code)
-            self.set_header("Content-Type", "application/json")
+        self.set_status(result_response.status_code)
+        self.set_header("Content-Type", "application/json")
 
-            for key, value in result_response.headers.items():
-                self.set_header(key, value)
+        for key, value in result_response.headers.items():
+            self.set_header(key, value)
 
-            if result_response.status_code == 204:
-                await self.finish()
-            else:
-                await self.finish(json_encode(result_response.content))
+        if result_response.status_code == 204:
+            await self.finish()
+        else:
+            await self.finish(json_encode(result_response.content))
 
     async def get(self, *args, **kwargs):
         await self.handle_request()

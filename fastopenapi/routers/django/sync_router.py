@@ -55,7 +55,7 @@ class DjangoRouter(BaseAdapter):
         method_name = method.lower()
         outer = self
 
-        def handle(self, req, **path_params):
+        def handle(self, req, **path_params):  # pragma: no cover
             env = RequestEnvelope(request=req, path_params=path_params)
             if inspect.iscoroutinefunction(endpoint):
                 raise Exception(
@@ -84,7 +84,7 @@ class DjangoRouter(BaseAdapter):
 
         return http_response
 
-    def _register_docs_endpoints(self):
+    def _register_docs_endpoints(self):  # pragma: no cover
         """Register documentation endpoints"""
         outer = self
 

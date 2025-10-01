@@ -255,7 +255,7 @@ class TestBody:
     def test_body_init_minimal(self):
         """Test Body initialization with minimal parameters"""
         body = Body()
-        assert body.default is PydanticUndefined  # Changed
+        assert body.default is None
         assert body.embed is None
         assert body.media_type == "application/json"
         assert body.examples is None
@@ -306,7 +306,7 @@ class TestForm:
     def test_form_init_minimal(self):
         """Test Form initialization with minimal parameters"""
         form = Form()
-        assert form.default is PydanticUndefined  # Changed
+        assert form.default is None
         assert form.media_type == "application/x-www-form-urlencoded"
 
     def test_form_init_with_custom_media_type(self):
@@ -347,7 +347,7 @@ class TestFile:
     def test_file_init_minimal(self):
         """Test File initialization with minimal parameters"""
         file = File()
-        assert file.default is PydanticUndefined  # Changed
+        assert file.default is None
         assert file.media_type == "multipart/form-data"
 
     def test_file_init_with_parameters(self):
@@ -359,7 +359,7 @@ class TestFile:
             examples=["file1.txt", "file2.pdf"],
         )
 
-        assert file.default is PydanticUndefined
+        assert file.default is None
         assert file.media_type == "multipart/form-data"
         assert file.alias == "upload_file"
         assert file.title == "Upload File"

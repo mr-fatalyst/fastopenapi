@@ -80,3 +80,16 @@ class TestDjangoRouter:
         assert "get" in schema["paths"]["/test/{id}"]
         assert schema["paths"]["/test/{id}"]["get"]["summary"] == "Test endpoint"
         assert "TestModel" in schema["components"]["schemas"]
+
+    def test_openapi_docs_view(self):
+        """Test OpenAPI schema generation"""
+        router = DjangoRouter(
+            app=True,
+            title="Test API",
+            description="Test Description",
+            version="1.0.0",
+        )
+        router._register_docs_endpoints()
+        assert router.openapi_url in router._views
+        assert router.docs_url in router._views
+        assert router.redoc_url in router._views

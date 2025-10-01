@@ -148,3 +148,204 @@ class TestDjangoIntegration:
         assert data["received_param1"] == "first_value"
         assert isinstance(data["received_param2"], list)
         assert data["received_param2"] == ["value1", "value2"]
+
+    def test_headers_extraction(self, client):
+        """Test header parameters extraction"""
+        response = client.get(
+            "/test-headers",
+            HTTP_USER_AGENT="TestBot/1.0",
+            HTTP_X_CUSTOM_HEADER="CustomValue",
+            HTTP_AUTHORIZATION="Bearer token123",
+        )
+
+        assert response.status_code == 200
+        result = response.json()
+        assert result["user_agent"] == "TestBot/1.0"
+        assert result["custom_header"] == "CustomValue"
+        assert result["authorization"] == "Bearer token123"
+
+    def test_echo_headers(self, client):
+        """Test that headers from echo response are set"""
+        response = client.get(
+            "/test-echo-headers",
+            HTTP_X_REQUEST_ID="test-123",
+        )
+
+        assert response.status_code == 200
+        assert response["X-Echo-ID"] == "test-123"
+        assert response["X-Custom"] == "test"
+
+        result = response.json()
+        assert result["received"] == "test-123"
+
+    def test_headers_missing(self, client):
+        """Test missing optional headers"""
+        response = client.get("/test-headers")
+
+        assert response.status_code == 200
+        result = response.json()
+        assert result["user_agent"] is None
+        assert result["custom_header"] is None
+        assert result["authorization"] is None
+
+    def test_cookies_extraction(self, client):
+        """Test cookie parameters extraction"""
+        client.cookies["sessionid"] = "session123"
+        client.cookies["csrftoken"] = "csrf456"
+
+        response = client.get("/test-cookies")
+
+        assert response.status_code == 200
+        result = response.json()
+        assert result["session_id"] == "session123"
+        assert result["csrf_token"] == "csrf456"
+
+    def test_cookies_missing(self, client):
+        """Test missing optional cookies"""
+        response = client.get("/test-cookies")
+
+        assert response.status_code == 200
+        result = response.json()
+        assert result["session_id"] is None
+        assert result["csrf_token"] is None
+
+    def test_query_validation_valid(self, client):
+        """Test query parameter validation with valid data"""
+        response = client.get("/test-query-validation?page=5&limit=20&search=test")
+
+        assert response.status_code == 200
+        result = response.json()
+        assert result["page"] == 5
+        assert result["limit"] == 20
+        assert result["search"] == "test"
+
+    def test_query_validation_defaults(self, client):
+        """Test query parameter validation with defaults"""
+        response = client.get("/test-query-validation")
+
+        assert response.status_code == 200
+        result = response.json()
+        assert result["page"] == 1
+        assert result["limit"] == 10
+        assert result["search"] is None
+
+    def test_query_validation_out_of_range(self, client):
+        """Test query parameter validation with out of range values"""
+        response = client.get("/test-query-validation?page=200")
+
+        assert response.status_code == 400
+        result = response.json()
+        assert "Error parsing parameter" in result["error"]["message"]
+
+    def test_query_validation_min_length(self, client):
+        """Test query parameter validation with string too short"""
+        response = client.get("/test-query-validation?search=ab")
+
+        assert response.status_code == 400
+        result = response.json()
+        assert "Error parsing parameter" in result["error"]["message"]
+
+    def test_multiple_path_params(self, client):
+        """Test multiple path parameters"""
+        response = client.get("/test-path/5/items/10")
+
+        assert response.status_code == 200
+        result = response.json()
+        assert result["user_id"] == 5
+        assert result["item_id"] == 10
+
+    def test_path_params_validation_error(self, client):
+        """Test path parameter validation error"""
+        response = client.get("/test-path/0/items/10")
+
+        assert response.status_code == 400
+        result = response.json()
+        assert "Error parsing parameter" in result["error"]["message"]
+
+    def test_form_data_valid(self, client):
+        """Test form data submission with valid data"""
+        response = client.post(
+            "/test-form",
+            data={
+                "username": "testuser",
+                "email": "test@example.com",
+                "age": 25,
+            },
+        )
+
+        assert response.status_code == 200
+        result = response.json()
+        assert result["username"] == "testuser"
+        assert result["email"] == "test@example.com"
+        assert result["age"] == 25
+
+    def test_form_data_optional(self, client):
+        """Test form data with optional fields"""
+        response = client.post(
+            "/test-form",
+            data={
+                "username": "testuser",
+                "email": "test@example.com",
+            },
+        )
+
+        assert response.status_code == 200
+        result = response.json()
+        assert result["username"] == "testuser"
+        assert result["email"] == "test@example.com"
+        assert result["age"] is None
+
+    def test_form_data_validation_error(self, client):
+        """Test form data validation error"""
+        response = client.post(
+            "/test-form",
+            data={
+                "username": "ab",  # Too short
+                "email": "test@example.com",
+            },
+        )
+
+        assert response.status_code == 400
+        result = response.json()
+        assert "Error parsing parameter" in result["error"]["message"]
+
+    def test_form_data_missing_required(self, client):
+        """Test form data with missing required field"""
+        response = client.post(
+            "/test-form",
+            data={
+                "username": "testuser",
+                # email is missing
+            },
+        )
+
+        assert response.status_code == 400
+        result = response.json()
+        assert "Missing required parameter" in result["error"]["message"]
+
+    def test_mixed_params_all_present(self, client):
+        """Test endpoint with all parameter types present"""
+        client.cookies["session"] = "session_value"
+
+        response = client.get(
+            "/test-mixed-params/42?search=query",
+            HTTP_USER_AGENT="TestBot/1.0",
+        )
+
+        assert response.status_code == 200
+        result = response.json()
+        assert result["item_id"] == 42
+        assert result["search"] == "query"
+        assert result["user_agent"] == "TestBot/1.0"
+        assert result["session"] == "session_value"
+
+    def test_mixed_params_optional_missing(self, client):
+        """Test endpoint with optional parameters missing"""
+        response = client.get("/test-mixed-params/42")
+
+        assert response.status_code == 200
+        result = response.json()
+        assert result["item_id"] == 42
+        assert result["search"] is None
+        assert result["user_agent"] is None
+        assert result["session"] is None

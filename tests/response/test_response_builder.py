@@ -36,6 +36,17 @@ class TestResponseBuilder:
         assert response.status_code == 201
         assert response.headers == {}
 
+    def test_build_unknown_tuple_response(self):
+        # Test building response from tuple (any, any, any, any)
+        result = (1, 2, 3, 4)
+        meta = {}
+
+        response = self.builder.build(result, meta)
+
+        assert response.content == (1, 2, 3, 4)
+        assert response.status_code == 200
+        assert response.headers == {}
+
     def test_build_tuple_response_with_headers(self):
         # Test building response from tuple (body, status, headers)
         result = ("Content", 201, {"X-Custom": "Header"})

@@ -3,6 +3,7 @@ from pydantic_core import from_json, to_json
 from tornado.testing import AsyncHTTPTestCase, gen_test
 from tornado.web import Application, HTTPError
 
+from fastopenapi import Header
 from fastopenapi.routers import TornadoRouter
 
 
@@ -45,6 +46,33 @@ class TestTornadoIntegration(AsyncHTTPTestCase):
         async def list_endpoint(param1: str, param2: list[str] = None):
             """Test endpoint that returns the parameters it receives"""
             return {"received_param1": param1, "received_param2": param2}
+
+        @router.head("/health")
+        def health_head():
+            """HEAD request for health check - returns only headers"""
+            return (
+                None,
+                200,
+                {"X-Status": "Ok"},
+            )
+
+        @router.options("/items")
+        def service_options():
+            """OPTIONS request showing available methods"""
+            return (
+                None,
+                204,
+                {"Allow": "GET, POST, HEAD, OPTIONS", "X-RateLimit": "100 per hour"},
+            )
+
+        @router.get("/test-echo-headers")
+        def echo_headers(x_request_id: str = Header(None, alias="X-Request-ID")):
+            """Test endpoint that returns headers"""
+            return (
+                {"received": x_request_id or "none"},
+                200,
+                {"X-Echo-ID": x_request_id or "none", "X-Custom": "test"},
+            )
 
         @router.get("/items-sync", response_model=list[ItemResponse], tags=["items"])
         def get_items_sync():
@@ -109,7 +137,51 @@ class TestTornadoIntegration(AsyncHTTPTestCase):
         return app
 
     def parse_json(self, response):
-        return from_json(response.body.decode())
+        return from_json(response.body.decode()) if response.body else {}
+
+    @gen_test
+    async def test_echo_headers(self):
+        """Test that headers from echo response are set"""
+        response = await self.http_client.fetch(
+            self.get_url("/test-echo-headers"),
+            headers={"X-Request-Id": "test-123"},
+        )
+
+        self.assertEqual(response.code, 200)
+        result = self.parse_json(response)
+        headers = dict(response.headers)
+        self.assertEqual(headers["X-Echo-Id"], "test-123")
+        self.assertEqual(headers["X-Custom"], "test")
+        self.assertEqual(result["received"], "test-123")
+
+    @gen_test
+    async def test_head(self):
+        """Test that headers from head response are set"""
+        response = await self.http_client.fetch(
+            self.get_url("/health"),
+            method="HEAD",
+        )
+
+        self.assertEqual(response.code, 200)
+        result = self.parse_json(response)
+        headers = dict(response.headers)
+        self.assertEqual(headers["X-Status"], "Ok")
+        self.assertFalse(result)
+
+    @gen_test
+    async def test_options(self):
+        """Test that options works"""
+        response = await self.http_client.fetch(
+            self.get_url("/items"),
+            method="OPTIONS",
+        )
+
+        self.assertEqual(response.code, 204)
+        result = self.parse_json(response)
+        headers = dict(response.headers)
+        self.assertEqual(headers["Allow"], "GET, POST, HEAD, OPTIONS")
+        self.assertEqual(headers["X-Ratelimit"], "100 per hour")
+        self.assertFalse(result)
 
     @gen_test
     async def test_get_items(self):
