@@ -1,12 +1,14 @@
 import inspect
 import re
 import threading
+import types
 import typing
 from dataclasses import dataclass
 from functools import lru_cache
 from typing import Any
 
 from pydantic import BaseModel
+from pydantic_core import PydanticUndefined
 
 from fastopenapi.core.constants import PYTHON_TYPE_MAPPING, ParameterSource
 from fastopenapi.core.params import (
@@ -53,7 +55,9 @@ class SchemaBuilder:
         if origin is list:
             return self._build_array_schema(annotation)
 
-        if origin is typing.Union:
+        if origin is typing.Union or (
+            hasattr(types, "UnionType") and origin is types.UnionType
+        ):
             return self._build_union_schema(annotation)
 
         return {"type": PYTHON_TYPE_MAPPING.get(annotation, "string")}
@@ -92,13 +96,13 @@ class SchemaBuilder:
 
         return schema
 
-    def _apply_param_constraints(self, schema: dict, param_obj: Param) -> None:
+    def _apply_param_constraints(self, schema: dict, param_obj: BaseParam) -> None:
         """Apply validation constraints from Param object to schema"""
         self._apply_metadata_constraints(schema, param_obj)
         self._apply_object_metadata(schema, param_obj)
         self._apply_default_value(schema, param_obj)
 
-    def _apply_metadata_constraints(self, schema: dict, param_obj: Param) -> None:
+    def _apply_metadata_constraints(self, schema: dict, param_obj: BaseParam) -> None:
         """Apply constraints from param metadata"""
         if not (hasattr(param_obj, "metadata") and param_obj.metadata):
             return
@@ -125,7 +129,7 @@ class SchemaBuilder:
             ):
                 schema["pattern"] = constraint.pattern
 
-    def _apply_object_metadata(self, schema: dict, param_obj: Param) -> None:
+    def _apply_object_metadata(self, schema: dict, param_obj: BaseParam) -> None:
         """Apply object-level metadata"""
         attrs = ["title", "description", "examples"]
         for attr in attrs:
@@ -134,7 +138,7 @@ class SchemaBuilder:
                 if value:
                     schema[attr] = value
 
-    def _apply_default_value(self, schema: dict, param_obj: Param) -> None:
+    def _apply_default_value(self, schema: dict, param_obj: BaseParam) -> None:
         """Apply default value if serializable"""
         if not (
             hasattr(param_obj, "default")
@@ -369,7 +373,10 @@ class ParameterProcessor:
     ) -> bool:
         """Determine if parameter is required"""
         if isinstance(param_obj, BaseParam):
-            return param_obj.default is ... or location == "path"
+            is_undefined = (
+                param_obj.default is ... or param_obj.default is PydanticUndefined
+            )
+            return is_undefined or location == "path"
         else:
             return param.default is inspect.Parameter.empty or location == "path"
 
@@ -430,7 +437,8 @@ class ParameterProcessor:
 
         request_body = {
             "content": {content_type: {"schema": schema}},
-            "required": param_obj.default is ...,
+            "required": param_obj.default is ...
+            or param_obj.default is PydanticUndefined,
         }
 
         if param_obj.description:

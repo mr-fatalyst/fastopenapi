@@ -14,7 +14,6 @@ from fastopenapi.core.dependency_resolver import dependency_resolver
 from fastopenapi.core.params import (
     BaseParam,
     Body,
-    Cookie,
     Depends,
     File,
     Form,
@@ -169,17 +168,19 @@ class ParameterResolver:
         name: str, param: inspect.Parameter, path_params: dict[str, Any]
     ) -> ParameterSource:
         """Determine where to extract parameter from using param classes"""
-        # Check if it's one of our parameter classes
-        if isinstance(param.default, Param):
+        # Check Body and its subclasses first (Form, File)
+        if isinstance(param.default, Body):
+            if isinstance(param.default, File):
+                return ParameterSource.FILE
+            elif isinstance(param.default, Form):
+                return ParameterSource.FORM
+            else:
+                return ParameterSource.BODY
+        # Check Param and its subclasses (Query, Path, Header, Cookie)
+        elif isinstance(param.default, Param):
+            # All Param subclasses have in_ class attribute
             return param.default.in_
-        elif isinstance(param.default, Header):
-            return ParameterSource.HEADER
-        elif isinstance(param.default, Cookie):
-            return ParameterSource.COOKIE
-        elif isinstance(param.default, Form):
-            return ParameterSource.FORM
-        elif isinstance(param.default, Body):
-            return ParameterSource.BODY
+        # Fallback checks based on annotation or context
         elif param.annotation == File:
             return ParameterSource.FILE
         elif name in path_params:

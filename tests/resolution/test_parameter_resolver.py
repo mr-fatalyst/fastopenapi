@@ -1,10 +1,11 @@
 import inspect
-from unittest.mock import Mock, patch
+from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 from pydantic import BaseModel, Field
-from pydantic import ValidationError as PydanticValidationError
+from pydantic_core import PydanticUndefined
 
+from fastopenapi.core.constants import ParameterSource
 from fastopenapi.core.params import (
     Body,
     Cookie,
@@ -12,699 +13,1129 @@ from fastopenapi.core.params import (
     File,
     Form,
     Header,
-    Param,
     Query,
+    Security,
 )
 from fastopenapi.core.types import RequestData
 from fastopenapi.errors.exceptions import BadRequestError, ValidationError
 from fastopenapi.resolution.resolver import ParameterResolver, ProcessedParameter
 
 
-class TestModel(BaseModel):
-    name: str
-    age: int
-    is_active: bool = True
+class TestProcessedParameter:
+    """Tests for ProcessedParameter class"""
 
+    def test_init_without_validation(self) -> None:
+        """Test initialization without validation"""
+        proc_param = ProcessedParameter(value=42, needs_validation=False)
+        assert proc_param.value == 42
+        assert proc_param.needs_validation is False
+        assert proc_param.field_info is None
 
-class TestModelWithList(BaseModel):
-    tags: list[str] = Field(default_factory=list)
-    name: str
-
-
-class TestModelOptional(BaseModel):
-    optional_field: str | None = None
-    required_field: str
+    def test_init_with_validation(self) -> None:
+        """Test initialization with validation"""
+        field_info = (int, ...)
+        proc_param = ProcessedParameter(
+            value=42, needs_validation=True, field_info=field_info
+        )
+        assert proc_param.value == 42
+        assert proc_param.needs_validation is True
+        assert proc_param.field_info == field_info
 
 
 class TestParameterResolver:
-    def setup_method(self):
-        self.resolver = ParameterResolver()
-        self.request_data = RequestData(
-            path_params={"id": "123"},
-            query_params={"page": "1", "name": "John"},
-            headers={"content-type": "application/json", "X-API-Key": "secret"},
-            cookies={"session": "abc123"},
-            body={"data": "test"},
-            form_data={"username": "john"},
-            files={"upload": b"file_content"},
+    """Tests for ParameterResolver class"""
+
+    @pytest.fixture(autouse=True)
+    def setup(self) -> None:
+        """Clear caches before each test"""
+        ParameterResolver._param_model_cache.clear()
+        ParameterResolver._signature_cache.clear()
+
+    @pytest.fixture
+    def request_data(self) -> RequestData:
+        """Base RequestData fixture for tests"""
+        return RequestData(
+            path_params={"user_id": "123"},
+            query_params={"limit": "10", "offset": "0"},
+            headers={"Content-Type": "application/json", "X-API-Key": "secret"},
+            cookies={"session_id": "abc123"},
+            body={"name": "Test User"},
+            form_data={"username": "testuser"},
+            files={"avatar": MagicMock()},
         )
 
-    def test_resolve_with_primitive_types(self):
-        """Test resolving endpoint parameters with primitive types"""
+    def test_get_signature_caching(self) -> None:
+        """Test signature caching mechanism"""
 
-        def endpoint(name: str, page: int, active: bool = False):
-            return {"name": name, "page": page, "active": active}
-
-        result = self.resolver.resolve(endpoint, self.request_data)
-
-        assert result["name"] == "John"
-        assert result["page"] == 1
-        assert result["active"] is False
-
-    def test_resolve_with_pydantic_model_body_source(self):
-        """Test resolving Pydantic model from body"""
-
-        def endpoint(user: TestModel):
-            return user
-
-        request_data = RequestData(body={"name": "John", "age": 30})
-        result = self.resolver.resolve(endpoint, request_data)
-
-        assert isinstance(result["user"], TestModel)
-        assert result["user"].name == "John"
-        assert result["user"].age == 30
-
-    def test_resolve_with_pydantic_model_query_source(self):
-        """Test resolving Pydantic model from query params should fail validation"""
-
-        def endpoint(filters: TestModel):
-            return filters
-
-        # Empty query params should cause validation error
-        request_data = RequestData(query_params={})
-
-        with pytest.raises(ValidationError, match="Validation error for parameter"):
-            self.resolver.resolve(endpoint, request_data)
-
-    def test_resolve_missing_required_parameter(self):
-        """Test error when required parameter is missing"""
-
-        def endpoint(name: str, age: int):
+        def test_endpoint(param1: int, param2: str) -> None:
             pass
 
-        request_data = RequestData(query_params={"name": "John"})
+        # First call - should cache
+        result1 = ParameterResolver._get_signature(test_endpoint)
+        assert test_endpoint in ParameterResolver._signature_cache
+
+        # Second call - should use cache
+        result2 = ParameterResolver._get_signature(test_endpoint)
+        assert list(result1) == list(result2)
+
+    def test_resolve_basic_parameters(self, request_data: RequestData) -> None:
+        """Test resolving basic parameters from different sources"""
+
+        def endpoint(user_id: str, limit: int) -> None:
+            pass
+
+        result = ParameterResolver.resolve(endpoint, request_data)
+        assert result["user_id"] == "123"
+        assert result["limit"] == 10
+
+    def test_resolve_with_dependencies(self, request_data: RequestData) -> None:
+        """Test resolving dependencies"""
+
+        def dependency() -> str:
+            return "dep_value"
+
+        def endpoint(dep: str = Depends(dependency)) -> None:
+            pass
+
+        with patch.object(
+            ParameterResolver,
+            "_resolve_dependencies",
+            return_value={"dep": "dep_value"},
+        ):
+            result = ParameterResolver.resolve(endpoint, request_data)
+            assert result["dep"] == "dep_value"
+
+    def test_resolve_dependencies_error_propagation(
+        self, request_data: RequestData
+    ) -> None:
+        """Test that dependency errors are propagated"""
+
+        def endpoint() -> None:
+            pass
+
+        with patch(
+            "fastopenapi.resolution.resolver.dependency_resolver.resolve_dependencies",
+            side_effect=RuntimeError("Dependency error"),
+        ):
+            with pytest.raises(RuntimeError, match="Dependency error"):
+                ParameterResolver._resolve_dependencies(endpoint, request_data)
+
+    def test_process_parameters_with_depends(self, request_data: RequestData) -> None:
+        """Test that Depends parameters are skipped in processing"""
+
+        def dependency() -> str:
+            return "value"
+
+        params_dict = {
+            "dep": inspect.Parameter(
+                "dep",
+                inspect.Parameter.POSITIONAL_OR_KEYWORD,
+                default=Depends(dependency),
+            )
+        }
+
+        regular, model_fields, model_values = ParameterResolver._process_parameters(
+            params_dict.items(), request_data
+        )
+
+        assert "dep" not in regular
+        assert "dep" not in model_fields
+
+    def test_process_parameters_with_security(self, request_data: RequestData) -> None:
+        """Test that Security parameters are skipped in processing"""
+
+        params_dict = {
+            "token": inspect.Parameter(
+                "token",
+                inspect.Parameter.POSITIONAL_OR_KEYWORD,
+                default=Security(lambda: "token"),
+            )
+        }
+
+        regular, model_fields, model_values = ParameterResolver._process_parameters(
+            params_dict.items(), request_data
+        )
+
+        assert "token" not in regular
+        assert "token" not in model_fields
+
+    def test_process_single_parameter_pydantic_model(
+        self, request_data: RequestData
+    ) -> None:
+        """Test processing Pydantic model parameter"""
+
+        class UserModel(BaseModel):
+            name: str
+
+        param = inspect.Parameter(
+            "user", inspect.Parameter.POSITIONAL_OR_KEYWORD, annotation=UserModel
+        )
+
+        result = ParameterResolver._process_single_parameter(
+            "user", param, request_data
+        )
+        assert isinstance(result.value, UserModel)
+        assert result.value.name == "Test User"
+        assert result.needs_validation is False
+
+    def test_process_single_parameter_missing_required(
+        self, request_data: RequestData
+    ) -> None:
+        """Test missing required parameter raises error"""
+        param = inspect.Parameter(
+            "missing_param",
+            inspect.Parameter.POSITIONAL_OR_KEYWORD,
+            annotation=str,
+        )
 
         with pytest.raises(BadRequestError, match="Missing required parameter"):
-            self.resolver.resolve(endpoint, request_data)
+            ParameterResolver._process_single_parameter(
+                "missing_param", param, request_data
+            )
 
-    def test_resolve_dependency_error(self):
-        """Test dependency resolution error handling"""
-
-        def endpoint(dep: str = Depends(lambda: "test")):
-            return dep
-
-        # Mock dependency resolver to raise error
-        with patch("fastopenapi.resolution.resolver.dependency_resolver") as mock_dep:
-            mock_dep.resolve_dependencies.side_effect = Exception("Dependency failed")
-
-            with pytest.raises(Exception, match="Dependency failed"):
-                self.resolver.resolve(endpoint, self.request_data)
-
-    def test_resolve_with_header_param(self):
-        """Test resolving header parameters"""
-
-        def endpoint(content_type: str = Header()):
-            return content_type
-
-        result = self.resolver.resolve(endpoint, self.request_data)
-        assert result["content_type"] == "application/json"
-
-    def test_resolve_with_header_alias(self):
-        """Test header with alias"""
-
-        def endpoint(api_key: str = Header(alias="X-API-Key")):
-            return api_key
-
-        result = self.resolver.resolve(endpoint, self.request_data)
-        assert result["api_key"] == "secret"
-
-    def test_resolve_with_header_no_conversion(self):
-        """Test header without underscore conversion"""
-
-        def endpoint(content_type: str = Header(convert_underscores=False)):
-            return content_type
-
-        request_data = RequestData(headers={"content_type": "text/html"})
-        result = self.resolver.resolve(endpoint, request_data)
-        assert result["content_type"] == "text/html"
-
-    def test_resolve_with_cookie_param(self):
-        """Test resolving cookie parameters"""
-
-        def endpoint(session_id: str = Cookie()):
-            return session_id
-
-        request_data = RequestData(cookies={"session_id": "abc123"})
-        result = self.resolver.resolve(endpoint, request_data)
-        assert result["session_id"] == "abc123"
-
-    def test_resolve_with_form_param(self):
-        """Test resolving form parameters"""
-
-        def endpoint(username: str = Form()):
-            return username
-
-        result = self.resolver.resolve(endpoint, self.request_data)
-        assert result["username"] == "john"
-
-    # def test_resolve_with_file_upload(self):
-    #     # Test resolving file upload
-    #     from fastopenapi.core.types import RequestData
-    #
-    #     def endpoint(file: File):
-    #         return file
-    #
-    #     mock_file = b"12345"
-    #
-    #     request_data = RequestData(files={"file": mock_file})
-    #
-    #     result = self.resolver.resolve(endpoint, request_data)
-    #     assert result["file"] == mock_file
-
-    def test_resolve_with_body_param(self):
-        """Test resolving body parameters"""
-
-        def endpoint(data: dict = Body()):
-            return data
-
-        result = self.resolver.resolve(endpoint, self.request_data)
-        assert result["data"] == {"data": "test"}
-
-    def test_resolve_with_path_params(self):
-        """Test resolving path parameters"""
-
-        def endpoint(user_id: int, name: str):
-            return {"user_id": user_id, "name": name}
-
-        request_data = RequestData(
-            path_params={"user_id": "123"}, query_params={"name": "John"}
+    def test_process_single_parameter_with_default(
+        self, request_data: RequestData
+    ) -> None:
+        """Test parameter with default value"""
+        param = inspect.Parameter(
+            "optional_param",
+            inspect.Parameter.POSITIONAL_OR_KEYWORD,
+            default="default_value",
+            annotation=str,
         )
 
-        result = self.resolver.resolve(endpoint, request_data)
-        assert result["user_id"] == 123
-        assert result["name"] == "John"
+        result = ParameterResolver._process_single_parameter(
+            "optional_param", param, request_data
+        )
+        assert result.value == "default_value"
 
-    def test_determine_source_header(self):
-        """Test determining source for Header parameter"""
-        param = Mock()
-        param.default = Header()
+    def test_determine_source_body(self) -> None:
+        """Test source determination for Body"""
+        param = inspect.Parameter(
+            "data",
+            inspect.Parameter.POSITIONAL_OR_KEYWORD,
+            default=Body(),
+        )
+        source = ParameterResolver._determine_source("data", param, {})
+        assert source == ParameterSource.BODY
 
-        source = self.resolver._determine_source("content_type", param, {})
-        assert source.value == "header"
+    def test_determine_source_file(self) -> None:
+        """Test source determination for File"""
+        param = inspect.Parameter(
+            "upload",
+            inspect.Parameter.POSITIONAL_OR_KEYWORD,
+            default=File(),
+        )
+        source = ParameterResolver._determine_source("upload", param, {})
+        assert source == ParameterSource.FILE
 
-    def test_determine_source_cookie(self):
-        """Test determining source for Cookie parameter"""
-        param = Mock()
-        param.default = Cookie()
+    def test_determine_source_form(self) -> None:
+        """Test source determination for Form"""
+        param = inspect.Parameter(
+            "username",
+            inspect.Parameter.POSITIONAL_OR_KEYWORD,
+            default=Form(),
+        )
+        source = ParameterResolver._determine_source("username", param, {})
+        assert source == ParameterSource.FORM
 
-        source = self.resolver._determine_source("session", param, {})
-        assert source.value == "cookie"
+    def test_determine_source_query(self) -> None:
+        """Test source determination for Query"""
+        param = inspect.Parameter(
+            "search",
+            inspect.Parameter.POSITIONAL_OR_KEYWORD,
+            default=Query(),
+        )
+        source = ParameterResolver._determine_source("search", param, {})
+        assert source == ParameterSource.QUERY
 
-    def test_determine_source_form(self):
-        """Test determining source for Form parameter"""
-        param = Mock()
-        param.default = Form()
+    def test_determine_source_header(self) -> None:
+        """Test source determination for Header"""
+        param = inspect.Parameter(
+            "api_key",
+            inspect.Parameter.POSITIONAL_OR_KEYWORD,
+            default=Header(),
+        )
+        source = ParameterResolver._determine_source("api_key", param, {})
+        assert source == ParameterSource.HEADER
 
-        source = self.resolver._determine_source("username", param, {})
-        assert source.value == "form"
+    def test_determine_source_cookie(self) -> None:
+        """Test source determination for Cookie"""
+        param = inspect.Parameter(
+            "session",
+            inspect.Parameter.POSITIONAL_OR_KEYWORD,
+            default=Cookie(),
+        )
+        source = ParameterResolver._determine_source("session", param, {})
+        assert source == ParameterSource.COOKIE
 
-    def test_determine_source_body(self):
-        """Test determining source for Body parameter"""
-        param = Mock()
-        param.default = Body()
+    def test_determine_source_file_annotation(self) -> None:
+        """Test source determination for File type annotation"""
+        param = inspect.Parameter(
+            "upload",
+            inspect.Parameter.POSITIONAL_OR_KEYWORD,
+            annotation=File,
+        )
+        source = ParameterResolver._determine_source("upload", param, {})
+        assert source == ParameterSource.FILE
 
-        source = self.resolver._determine_source("data", param, {})
-        assert source.value == "body"
+    def test_determine_source_path(self) -> None:
+        """Test source determination for path parameter"""
+        param = inspect.Parameter(
+            "user_id",
+            inspect.Parameter.POSITIONAL_OR_KEYWORD,
+        )
+        source = ParameterResolver._determine_source("user_id", param, {"user_id": "1"})
+        assert source == ParameterSource.PATH
 
-    def test_determine_source_file_annotation(self):
-        """Test determining source for File annotation"""
-        param = Mock()
-        param.default = inspect.Parameter.empty
-        param.annotation = File
+    def test_determine_source_pydantic_model(self) -> None:
+        """Test source determination for Pydantic model"""
 
-        source = self.resolver._determine_source("upload", param, {})
-        assert source.value == "file"
+        class Model(BaseModel):
+            field: str
 
-    def test_determine_source_path_param(self):
-        """Test determining source for path parameter"""
-        param = Mock()
-        param.default = inspect.Parameter.empty
-        param.annotation = str
+        param = inspect.Parameter(
+            "data",
+            inspect.Parameter.POSITIONAL_OR_KEYWORD,
+            annotation=Model,
+        )
+        source = ParameterResolver._determine_source("data", param, {})
+        assert source == ParameterSource.BODY
 
-        source = self.resolver._determine_source("user_id", param, {"user_id": "123"})
-        assert source.value == "path"
+    def test_determine_source_query_default(self) -> None:
+        """Test source determination defaults to query"""
+        param = inspect.Parameter(
+            "search",
+            inspect.Parameter.POSITIONAL_OR_KEYWORD,
+        )
+        source = ParameterResolver._determine_source("search", param, {})
+        assert source == ParameterSource.QUERY
 
-    def test_determine_source_pydantic_model(self):
-        """Test determining source for Pydantic model"""
-        param = Mock()
-        param.default = inspect.Parameter.empty
-        param.annotation = TestModel
+    def test_extract_value_path(self, request_data: RequestData) -> None:
+        """Test extracting value from path parameters"""
+        param = inspect.Parameter("user_id", inspect.Parameter.POSITIONAL_OR_KEYWORD)
+        value = ParameterResolver._extract_value(
+            "user_id", param, ParameterSource.PATH, request_data
+        )
+        assert value == "123"
 
-        source = self.resolver._determine_source("user", param, {})
-        assert source.value == "body"
+    def test_extract_value_query(self, request_data: RequestData) -> None:
+        """Test extracting value from query parameters"""
+        param = inspect.Parameter("limit", inspect.Parameter.POSITIONAL_OR_KEYWORD)
+        value = ParameterResolver._extract_value(
+            "limit", param, ParameterSource.QUERY, request_data
+        )
+        assert value == "10"
 
-    def test_determine_source_fallback_query(self):
-        """Test determining source fallback to query"""
-        param = Mock()
-        param.default = inspect.Parameter.empty
-        param.annotation = str
+    def test_extract_value_header(self, request_data: RequestData) -> None:
+        """Test extracting value from headers"""
+        param = inspect.Parameter(
+            "x_api_key",
+            inspect.Parameter.POSITIONAL_OR_KEYWORD,
+            default=Header(),
+        )
+        value = ParameterResolver._extract_value(
+            "x_api_key", param, ParameterSource.HEADER, request_data
+        )
+        assert value == "secret"
 
-        source = self.resolver._determine_source("unknown", param, {})
-        assert source.value == "query"
+    def test_extract_value_cookie(self, request_data: RequestData) -> None:
+        """Test extracting value from cookies"""
+        param = inspect.Parameter("session_id", inspect.Parameter.POSITIONAL_OR_KEYWORD)
+        value = ParameterResolver._extract_value(
+            "session_id", param, ParameterSource.COOKIE, request_data
+        )
+        assert value == "abc123"
 
-    def test_extract_header_value_case_insensitive(self):
-        """Test case-insensitive header extraction"""
-        headers = {"Content-Type": "application/json", "X-API-Key": "secret"}
+    def test_extract_value_form(self, request_data: RequestData) -> None:
+        """Test extracting value from form data"""
+        param = inspect.Parameter("username", inspect.Parameter.POSITIONAL_OR_KEYWORD)
+        value = ParameterResolver._extract_value(
+            "username", param, ParameterSource.FORM, request_data
+        )
+        assert value == "testuser"
 
-        result1 = self.resolver._get_case_insensitive_header(headers, "content-type")
-        result2 = self.resolver._get_case_insensitive_header(headers, "CONTENT-TYPE")
-        result3 = self.resolver._get_case_insensitive_header(headers, "x-api-key")
+    def test_extract_value_file(self, request_data: RequestData) -> None:
+        """Test extracting value from files"""
+        param = inspect.Parameter("avatar", inspect.Parameter.POSITIONAL_OR_KEYWORD)
+        value = ParameterResolver._extract_value(
+            "avatar", param, ParameterSource.FILE, request_data
+        )
+        assert value is not None
 
-        assert result1 == "application/json"
-        assert result2 == "application/json"
-        assert result3 == "secret"
+    def test_extract_value_body(self, request_data: RequestData) -> None:
+        """Test extracting value from body"""
+        param = inspect.Parameter("data", inspect.Parameter.POSITIONAL_OR_KEYWORD)
+        value = ParameterResolver._extract_value(
+            "data", param, ParameterSource.BODY, request_data
+        )
+        assert value == {"name": "Test User"}
 
-    def test_extract_header_value_not_found(self):
-        """Test header extraction when header not found"""
-        headers = {"Content-Type": "application/json"}
-
-        result = self.resolver._get_case_insensitive_header(headers, "missing-header")
-        assert result is None
-
-    def test_extract_header_with_underscore_conversion(self):
-        """Test header extraction with underscore conversion"""
-        param = Mock()
-        param.default = Header()
-        headers = {"user-agent": "test-agent"}
-
-        result = self.resolver._extract_header_value(param, "user_agent", headers)
-        assert result == "test-agent"
-
-    def test_get_param_name_with_alias(self):
-        """Test getting parameter name with alias"""
-        param = Mock()
-        param.default = Query(alias="custom_name")
-
-        name = self.resolver._get_param_name("original", param)
-        assert name == "custom_name"
-
-    def test_get_param_name_without_alias(self):
-        """Test getting parameter name without alias"""
-        param = Mock()
-        param.default = Query()
-        param.default.alias = None
-
-        name = self.resolver._get_param_name("original", param)
-        assert name == "original"
-
-    def test_get_param_name_non_param_object(self):
-        """Test getting parameter name for non-Param object"""
-        param = Mock()
-        param.default = "default_value"
-
-        name = self.resolver._get_param_name("original", param)
-        assert name == "original"
-
-    def test_is_required_param_with_ellipsis(self):
-        """Test required parameter check with ellipsis"""
-        param = Mock()
-        param.default = Query(default=...)
-
-        result = self.resolver._is_required_param(param)
-        # Note: In Pydantic v2, this might not work as expected due to PydanticUndefined
-        # Testing actual behavior
-        assert isinstance(result, bool)
-
-    def test_is_required_param_with_default(self):
-        """Test parameter with default value"""
-        param = Mock()
-        param.default = Query(default="test")
-
-        result = self.resolver._is_required_param(param)
-        assert result is False
-
-    def test_is_required_param_empty_default(self):
-        """Test parameter with empty default"""
-        param = Mock()
-        param.default = inspect.Parameter.empty
-
-        result = self.resolver._is_required_param(param)
-        assert result is True
-
-    def test_get_default_value_from_param(self):
-        """Test getting default value from Param object"""
-        param = Mock()
-        param.default = Query(default="test_default")
-
-        value = self.resolver._get_default_value(param)
-        assert value == "test_default"
-
-    def test_get_default_value_from_parameter(self):
-        """Test getting default value from parameter"""
-        param = Mock()
-        param.default = "param_default"
-
-        value = self.resolver._get_default_value(param)
-        assert value == "param_default"
-
-    def test_get_default_value_empty_parameter(self):
-        """Test getting default value from empty parameter"""
-        param = Mock()
-        param.default = inspect.Parameter.empty
-
-        value = self.resolver._get_default_value(param)
+    def test_extract_value_unknown_source(self, request_data: RequestData) -> None:
+        """Test extracting value from unknown source returns None"""
+        param = inspect.Parameter("unknown", inspect.Parameter.POSITIONAL_OR_KEYWORD)
+        value = ParameterResolver._extract_value(
+            "unknown", param, "UNKNOWN_SOURCE", request_data
+        )
         assert value is None
 
-    def test_needs_validation_param_object(self):
-        """Test validation needed for Param object"""
-        param = Mock()
-        param.default = Query()
+    def test_extract_header_value_with_alias(self) -> None:
+        """Test extracting header with alias"""
+        param = inspect.Parameter(
+            "api_key",
+            inspect.Parameter.POSITIONAL_OR_KEYWORD,
+            default=Header(alias="X-API-Key"),
+        )
+        headers = {"X-API-Key": "secret"}
+        value = ParameterResolver._extract_header_value(param, "api_key", headers)
+        assert value == "secret"
 
-        result = self.resolver._needs_validation(param)
-        assert result is True
+    def test_extract_header_value_with_underscore_conversion(self) -> None:
+        """Test extracting header with underscore conversion"""
+        param = inspect.Parameter(
+            "api_key",
+            inspect.Parameter.POSITIONAL_OR_KEYWORD,
+            default=Header(convert_underscores=True),
+        )
+        headers = {"Api-Key": "secret"}
+        value = ParameterResolver._extract_header_value(param, "api_key", headers)
+        assert value == "secret"
 
-    def test_needs_validation_type_annotation(self):
-        """Test validation needed for type annotation"""
-        param = Mock()
-        param.default = inspect.Parameter.empty
-        param.annotation = int
+    def test_extract_header_value_without_underscore_conversion(self) -> None:
+        """Test extracting header without underscore conversion"""
+        param = inspect.Parameter(
+            "api_key",
+            inspect.Parameter.POSITIONAL_OR_KEYWORD,
+            default=Header(convert_underscores=False),
+        )
+        headers = {"api_key": "secret"}
+        value = ParameterResolver._extract_header_value(param, "api_key", headers)
+        assert value == "secret"
 
-        result = self.resolver._needs_validation(param)
-        assert result is True
+    def test_extract_header_value_without_header_default(self) -> None:
+        """Test extracting header without Header default"""
+        param = inspect.Parameter(
+            "content_type",
+            inspect.Parameter.POSITIONAL_OR_KEYWORD,
+        )
+        headers = {"Content-Type": "application/json"}
+        value = ParameterResolver._extract_header_value(param, "content_type", headers)
+        assert value == "application/json"
 
-    def test_needs_validation_no_annotation(self):
-        """Test no validation needed without annotation"""
-        param = Mock()
-        param.default = "default"
-        param.annotation = inspect.Parameter.empty
+    def test_get_case_insensitive_header(self) -> None:
+        """Test case-insensitive header retrieval"""
+        headers = {"Content-Type": "application/json", "X-API-Key": "secret"}
 
-        result = self.resolver._needs_validation(param)
-        assert result is False
-
-    def test_build_field_info_with_constraints(self):
-        """Test building field info with constraints"""
-        param = Mock()
-        param.default = Query(min_length=1, max_length=10, description="Test field")
-        param.annotation = str
-
-        field_info = self.resolver._build_field_info(param)
-
-        assert len(field_info) == 2
-        assert field_info[0] == str
-
-    def test_build_field_constraints_all_constraints(self):
-        """Test building field constraints with all possible constraints"""
-        param_obj = Param(
-            gt=0,
-            ge=1,
-            lt=100,
-            le=99,
-            multiple_of=5,
-            min_length=2,
-            max_length=50,
-            pattern=r"^[a-z]+$",
-            strict=True,
-            description="Test description",
-            title="Test title",
+        assert (
+            ParameterResolver._get_case_insensitive_header(headers, "content-type")
+            == "application/json"
+        )
+        assert (
+            ParameterResolver._get_case_insensitive_header(headers, "CONTENT-TYPE")
+            == "application/json"
+        )
+        assert (
+            ParameterResolver._get_case_insensitive_header(headers, "x-api-key")
+            == "secret"
+        )
+        assert (
+            ParameterResolver._get_case_insensitive_header(headers, "missing") is None
         )
 
-        constraints = self.resolver._build_field_constraints(param_obj)
+    def test_get_param_name_with_alias(self) -> None:
+        """Test getting parameter name with alias"""
+        param = inspect.Parameter(
+            "internal_name",
+            inspect.Parameter.POSITIONAL_OR_KEYWORD,
+            default=Query(alias="externalName"),
+        )
+        name = ParameterResolver._get_param_name("internal_name", param)
+        assert name == "externalName"
 
-        assert constraints["gt"] == 0
-        assert constraints["ge"] == 1
-        assert constraints["lt"] == 100
-        assert constraints["le"] == 99
-        assert constraints["multiple_of"] == 5
-        assert constraints["min_length"] == 2
-        assert constraints["max_length"] == 50
-        assert constraints["pattern"] == r"^[a-z]+$"
-        assert constraints["strict"] is True
-        assert constraints["description"] == "Test description"
-        assert constraints["title"] == "Test title"
+    def test_get_param_name_without_alias(self) -> None:
+        """Test getting parameter name without alias"""
+        param = inspect.Parameter(
+            "param_name",
+            inspect.Parameter.POSITIONAL_OR_KEYWORD,
+        )
+        name = ParameterResolver._get_param_name("param_name", param)
+        assert name == "param_name"
 
-    def test_build_field_constraints_none_values(self):
-        """Test building field constraints with None values"""
-        param_obj = Param()
-        param_obj.gt = None
+    def test_is_required_param_with_baseparam_ellipsis(self) -> None:
+        """Test required parameter with BaseParam and ellipsis"""
+        param = inspect.Parameter(
+            "required",
+            inspect.Parameter.POSITIONAL_OR_KEYWORD,
+            default=Query(default=...),
+        )
+        assert ParameterResolver._is_required_param(param) is True
+
+    def test_is_required_param_with_baseparam_undefined(self) -> None:
+        """Test required parameter with BaseParam and PydanticUndefined"""
+        param = inspect.Parameter(
+            "required",
+            inspect.Parameter.POSITIONAL_OR_KEYWORD,
+            default=Query(default=PydanticUndefined),
+        )
+        assert ParameterResolver._is_required_param(param) is True
+
+    def test_is_required_param_with_baseparam_default(self) -> None:
+        """Test non-required parameter with BaseParam and default value"""
+        param = inspect.Parameter(
+            "optional",
+            inspect.Parameter.POSITIONAL_OR_KEYWORD,
+            default=Query(default="default"),
+        )
+        assert ParameterResolver._is_required_param(param) is False
+
+    def test_is_required_param_empty(self) -> None:
+        """Test required parameter without default"""
+        param = inspect.Parameter(
+            "required",
+            inspect.Parameter.POSITIONAL_OR_KEYWORD,
+        )
+        assert ParameterResolver._is_required_param(param) is True
+
+    def test_is_required_param_with_default(self) -> None:
+        """Test non-required parameter with default value"""
+        param = inspect.Parameter(
+            "optional",
+            inspect.Parameter.POSITIONAL_OR_KEYWORD,
+            default="default",
+        )
+        assert ParameterResolver._is_required_param(param) is False
+
+    def test_get_default_value_from_baseparam(self) -> None:
+        """Test getting default value from BaseParam"""
+        param = inspect.Parameter(
+            "param",
+            inspect.Parameter.POSITIONAL_OR_KEYWORD,
+            default=Query(default="value"),
+        )
+        assert ParameterResolver._get_default_value(param) == "value"
+
+    def test_get_default_value_from_baseparam_ellipsis(self) -> None:
+        """Test getting default value from BaseParam with ellipsis"""
+        param = inspect.Parameter(
+            "param",
+            inspect.Parameter.POSITIONAL_OR_KEYWORD,
+            default=Query(default=...),
+        )
+        assert ParameterResolver._get_default_value(param) is None
+
+    def test_get_default_value_from_baseparam_undefined(self) -> None:
+        """Test getting default value from BaseParam with PydanticUndefined"""
+        param = inspect.Parameter(
+            "param",
+            inspect.Parameter.POSITIONAL_OR_KEYWORD,
+            default=Query(default=PydanticUndefined),
+        )
+        assert ParameterResolver._get_default_value(param) is None
+
+    def test_get_default_value_from_parameter(self) -> None:
+        """Test getting default value from parameter"""
+        param = inspect.Parameter(
+            "param",
+            inspect.Parameter.POSITIONAL_OR_KEYWORD,
+            default="default",
+        )
+        assert ParameterResolver._get_default_value(param) == "default"
+
+    def test_get_default_value_none(self) -> None:
+        """Test getting default value when none exists"""
+        param = inspect.Parameter(
+            "param",
+            inspect.Parameter.POSITIONAL_OR_KEYWORD,
+        )
+        assert ParameterResolver._get_default_value(param) is None
+
+    def test_needs_validation_with_baseparam(self) -> None:
+        """Test validation needed for BaseParam"""
+        param = inspect.Parameter(
+            "param",
+            inspect.Parameter.POSITIONAL_OR_KEYWORD,
+            default=Query(),
+        )
+        assert ParameterResolver._needs_validation(param) is True
+
+    def test_needs_validation_with_annotation(self) -> None:
+        """Test validation needed for annotated parameter"""
+        param = inspect.Parameter(
+            "param",
+            inspect.Parameter.POSITIONAL_OR_KEYWORD,
+            annotation=int,
+        )
+        assert ParameterResolver._needs_validation(param) is True
+
+    def test_needs_validation_without_annotation(self) -> None:
+        """Test validation not needed without annotation"""
+        param = inspect.Parameter(
+            "param",
+            inspect.Parameter.POSITIONAL_OR_KEYWORD,
+        )
+        assert ParameterResolver._needs_validation(param) is False
+
+    def test_build_field_info_with_constraints(self) -> None:
+        """Test building field info with constraints"""
+        param = inspect.Parameter(
+            "param",
+            inspect.Parameter.POSITIONAL_OR_KEYWORD,
+            annotation=int,
+            default=Query(default=10, gt=0, le=100),
+        )
+
+        annotation, field = ParameterResolver._build_field_info(param)
+        assert annotation == int
+        assert isinstance(field, type(Field()))
+
+    def test_build_field_info_without_constraints(self) -> None:
+        """Test building field info without constraints"""
+        param = inspect.Parameter(
+            "param",
+            inspect.Parameter.POSITIONAL_OR_KEYWORD,
+            annotation=str,
+            default=Query(default="value"),
+        )
+
+        with patch.object(
+            ParameterResolver, "_build_field_constraints", return_value={}
+        ):
+            annotation, default = ParameterResolver._build_field_info(param)
+            assert annotation == str
+            assert default == "value"
+
+    def test_build_field_info_required(self) -> None:
+        """Test building field info for required parameter"""
+        param = inspect.Parameter(
+            "param",
+            inspect.Parameter.POSITIONAL_OR_KEYWORD,
+            annotation=str,
+            default=Query(default=...),
+        )
+
+        with patch.object(
+            ParameterResolver, "_build_field_constraints", return_value={}
+        ):
+            annotation, default = ParameterResolver._build_field_info(param)
+            assert annotation == str
+            # In Pydantic v2, ... may be converted to PydanticUndefined
+            assert default is ... or default is PydanticUndefined
+
+    def test_process_numeric_constraints_missing_attribute(self) -> None:
+        """Test processing numeric constraint when attribute is missing"""
+        constraint = Mock(spec=[])  # Empty spec = no attributes
+        type(constraint).__name__ = "Gt"  # Constraint type matches mapping
+        field_kwargs = {}
+
+        # Should not raise error, just skip the constraint
+        ParameterResolver._process_numeric_constraints(constraint, "Gt", field_kwargs)
+
+        # field_kwargs should remain empty since hasattr returned False
+        assert field_kwargs == {}
+
+    def test_process_numeric_constraints_gt(self) -> None:
+        """Test processing Gt constraint"""
+        constraint = Mock()
+        constraint.gt = 0
+        field_kwargs = {}
+
+        ParameterResolver._process_numeric_constraints(constraint, "Gt", field_kwargs)
+        assert field_kwargs["gt"] == 0
+
+    def test_process_numeric_constraints_ge(self) -> None:
+        """Test processing Ge constraint"""
+        constraint = Mock()
+        constraint.ge = 0
+        field_kwargs = {}
+
+        ParameterResolver._process_numeric_constraints(constraint, "Ge", field_kwargs)
+        assert field_kwargs["ge"] == 0
+
+    def test_process_numeric_constraints_lt(self) -> None:
+        """Test processing Lt constraint"""
+        constraint = Mock()
+        constraint.lt = 100
+        field_kwargs = {}
+
+        ParameterResolver._process_numeric_constraints(constraint, "Lt", field_kwargs)
+        assert field_kwargs["lt"] == 100
+
+    def test_process_numeric_constraints_le(self) -> None:
+        """Test processing Le constraint"""
+        constraint = Mock()
+        constraint.le = 100
+        field_kwargs = {}
+
+        ParameterResolver._process_numeric_constraints(constraint, "Le", field_kwargs)
+        assert field_kwargs["le"] == 100
+
+    def test_process_numeric_constraints_multiple_of(self) -> None:
+        """Test processing MultipleOf constraint"""
+        constraint = Mock()
+        constraint.multiple_of = 5
+        field_kwargs = {}
+
+        ParameterResolver._process_numeric_constraints(
+            constraint, "MultipleOf", field_kwargs
+        )
+        assert field_kwargs["multiple_of"] == 5
+
+    def test_process_numeric_constraints_unknown(self) -> None:
+        """Test processing unknown numeric constraint"""
+        constraint = Mock()
+        field_kwargs = {}
+
+        ParameterResolver._process_numeric_constraints(
+            constraint, "Unknown", field_kwargs
+        )
+        assert field_kwargs == {}
+
+    def test_process_string_constraints_min_len(self) -> None:
+        """Test processing MinLen constraint"""
+        constraint = Mock()
+        constraint.min_length = 5
+        field_kwargs = {}
+
+        ParameterResolver._process_string_constraints(
+            constraint, "MinLen", field_kwargs
+        )
+        assert field_kwargs["min_length"] == 5
+
+    def test_process_string_constraints_max_len(self) -> None:
+        """Test processing MaxLen constraint"""
+        constraint = Mock()
+        constraint.max_length = 100
+        field_kwargs = {}
+
+        ParameterResolver._process_string_constraints(
+            constraint, "MaxLen", field_kwargs
+        )
+        assert field_kwargs["max_length"] == 100
+
+    def test_process_string_constraints_unknown(self) -> None:
+        """Test processing unknown string constraint"""
+        constraint = Mock()
+        field_kwargs = {}
+
+        ParameterResolver._process_string_constraints(
+            constraint, "Unknown", field_kwargs
+        )
+        assert field_kwargs == {}
+
+    def test_process_pattern_constraint(self) -> None:
+        """Test processing pattern constraint"""
+        constraint = Mock()
+        constraint.pattern = r"^\d+$"
+        field_kwargs = {}
+
+        ParameterResolver._process_pattern_constraint(constraint, field_kwargs)
+        assert field_kwargs["pattern"] == r"^\d+$"
+
+    def test_process_pattern_constraint_missing(self) -> None:
+        """Test processing pattern constraint when attribute missing"""
+        constraint = Mock(spec=[])
+        field_kwargs = {}
+
+        ParameterResolver._process_pattern_constraint(constraint, field_kwargs)
+        assert field_kwargs == {}
+
+    def test_process_strict_mode(self) -> None:
+        """Test processing strict mode constraint"""
+        constraint = Mock()
+        constraint.strict = True
+        field_kwargs = {}
+
+        ParameterResolver._process_strict_mode(constraint, "Strict", field_kwargs)
+        assert field_kwargs["strict"] is True
+
+    def test_process_strict_mode_non_strict_type(self) -> None:
+        """Test processing non-Strict constraint type"""
+        constraint = Mock()
+        field_kwargs = {}
+
+        ParameterResolver._process_strict_mode(constraint, "Other", field_kwargs)
+        assert field_kwargs == {}
+
+    def test_process_float_decimal_constraints(self) -> None:
+        """Test processing float/decimal constraints"""
+        constraint = Mock()
+        constraint.allow_inf_nan = True
+        constraint.max_digits = 10
+        constraint.decimal_places = 2
+        field_kwargs = {}
+
+        ParameterResolver._process_float_decimal_constraints(constraint, field_kwargs)
+        assert field_kwargs["allow_inf_nan"] is True
+        assert field_kwargs["max_digits"] == 10
+        assert field_kwargs["decimal_places"] == 2
+
+    def test_process_float_decimal_constraints_partial(self) -> None:
+        """Test processing float/decimal constraints with missing attributes"""
+        constraint = Mock(spec=["max_digits"])
+        constraint.max_digits = 5
+        field_kwargs = {}
+
+        ParameterResolver._process_float_decimal_constraints(constraint, field_kwargs)
+        assert field_kwargs["max_digits"] == 5
+        assert "allow_inf_nan" not in field_kwargs
+
+    def test_process_metadata(self) -> None:
+        """Test processing metadata fields"""
+        param_obj = Mock()
+        param_obj.description = "Test description"
+        param_obj.title = "Test Title"
+        field_kwargs = {}
+
+        ParameterResolver._process_metadata(param_obj, field_kwargs)
+        assert field_kwargs["description"] == "Test description"
+        assert field_kwargs["title"] == "Test Title"
+
+    def test_process_metadata_partial(self) -> None:
+        """Test processing metadata with None values"""
+        param_obj = Mock()
         param_obj.description = None
+        param_obj.title = "Test Title"
+        field_kwargs = {}
 
-        constraints = self.resolver._build_field_constraints(param_obj)
+        ParameterResolver._process_metadata(param_obj, field_kwargs)
+        assert "description" not in field_kwargs
+        assert field_kwargs["title"] == "Test Title"
 
-        assert "gt" not in constraints
-        assert "description" not in constraints
+    def test_build_field_constraints_comprehensive(self) -> None:
+        """Test building field constraints with all constraint types"""
 
-    def test_is_pydantic_model_true(self):
-        """Test Pydantic model detection positive case"""
-        result = self.resolver._is_pydantic_model(TestModel)
-        assert result is True
+        # Create mock constraints
+        gt_constraint = Mock()
+        gt_constraint.gt = 0
+        type(gt_constraint).__name__ = "Gt"
 
-    def test_is_pydantic_model_false_non_class(self):
-        """Test Pydantic model detection non-class"""
-        result = self.resolver._is_pydantic_model("not_a_class")
-        assert result is False
+        min_len_constraint = Mock()
+        min_len_constraint.min_length = 5
+        type(min_len_constraint).__name__ = "MinLen"
 
-    def test_is_pydantic_model_false_regular_class(self):
-        """Test Pydantic model detection regular class"""
+        pattern_constraint = Mock()
+        pattern_constraint.pattern = r"^\w+$"
+        type(pattern_constraint).__name__ = "Pattern"
+
+        param_obj = Mock()
+        param_obj.metadata = [gt_constraint, min_len_constraint, pattern_constraint]
+        param_obj.description = "Test param"
+        param_obj.title = "Test"
+
+        result = ParameterResolver._build_field_constraints(param_obj)
+
+        assert result["gt"] == 0
+        assert result["min_length"] == 5
+        assert result["pattern"] == r"^\w+$"
+        assert result["description"] == "Test param"
+        assert result["title"] == "Test"
+
+    def test_is_pydantic_model_true(self) -> None:
+        """Test identifying Pydantic model"""
+
+        class TestModel(BaseModel):
+            field: str
+
+        assert ParameterResolver._is_pydantic_model(TestModel) is True
+
+    def test_is_pydantic_model_false(self) -> None:
+        """Test identifying non-Pydantic class"""
 
         class RegularClass:
             pass
 
-        result = self.resolver._is_pydantic_model(RegularClass)
-        assert result is False
+        assert ParameterResolver._is_pydantic_model(RegularClass) is False
 
-    def test_resolve_pydantic_model_empty_data(self):
-        """Test resolving Pydantic model with empty data should raise ValidationError"""
+    def test_is_pydantic_model_not_type(self) -> None:
+        """Test identifying non-type value"""
+        assert ParameterResolver._is_pydantic_model("not a type") is False
+        assert ParameterResolver._is_pydantic_model(42) is False
+
+    def test_resolve_pydantic_model_success(self) -> None:
+        """Test successful Pydantic model resolution"""
+
+        class UserModel(BaseModel):
+            name: str
+            age: int
+
+        data = {"name": "John", "age": 30}
+        result = ParameterResolver._resolve_pydantic_model(UserModel, data, "user")
+
+        assert isinstance(result, UserModel)
+        assert result.name == "John"
+        assert result.age == 30
+
+    def test_resolve_pydantic_model_empty_data(self) -> None:
+        """Test Pydantic model resolution with empty data"""
+
+        class UserModel(BaseModel):
+            name: str = "default"
+
+        result = ParameterResolver._resolve_pydantic_model(UserModel, None, "user")
+        assert isinstance(result, UserModel)
+        assert result.name == "default"
+
+    def test_resolve_pydantic_model_validation_error(self) -> None:
+        """Test Pydantic model resolution with validation error"""
+
+        class UserModel(BaseModel):
+            age: int
+
+        data = {"age": "not a number"}
+
         with pytest.raises(ValidationError, match="Validation error for parameter"):
-            self.resolver._resolve_pydantic_model(TestModelWithList, {}, "model")
+            ParameterResolver._resolve_pydantic_model(UserModel, data, "user")
 
-    def test_resolve_pydantic_model_none_data(self):
-        """Test resolving Pydantic model with None data should raise ValidationError"""
-        with pytest.raises(ValidationError, match="Validation error for parameter"):
-            self.resolver._resolve_pydantic_model(TestModelWithList, None, "model")
+    def test_process_list_fields(self) -> None:
+        """Test processing list fields in Pydantic model"""
 
-    def test_resolve_pydantic_model_validation_error(self):
-        """Test Pydantic model with validation error"""
-        with pytest.raises(ValidationError, match="Validation error for parameter"):
-            self.resolver._resolve_pydantic_model(
-                TestModelOptional, {"optional_field": "test"}, "model"
-            )
+        class ModelWithList(BaseModel):
+            tags: list[str]
+            name: str
 
-    def test_process_list_fields_convert_single_to_list(self):
-        """Test converting single value to list for list fields"""
         data = {"tags": "single_tag", "name": "test"}
-
-        result = self.resolver._process_list_fields(TestModelWithList, data)
+        result = ParameterResolver._process_list_fields(ModelWithList, data)
 
         assert result["tags"] == ["single_tag"]
         assert result["name"] == "test"
 
-    def test_process_list_fields_already_list(self):
-        """Test list field that's already a list"""
-        data = {"tags": ["tag1", "tag2"], "name": "test"}
+    def test_process_list_fields_already_list(self) -> None:
+        """Test processing list fields when value is already a list"""
 
-        result = self.resolver._process_list_fields(TestModelWithList, data)
+        class ModelWithList(BaseModel):
+            tags: list[str]
+
+        data = {"tags": ["tag1", "tag2"]}
+        result = ParameterResolver._process_list_fields(ModelWithList, data)
 
         assert result["tags"] == ["tag1", "tag2"]
 
-    def test_process_list_fields_model_without_model_fields(self):
-        """Test processing list fields on model without model_fields attribute"""
-        mock_model = Mock()
-        del mock_model.model_fields
+    def test_process_list_fields_no_model_fields(self) -> None:
+        """Test processing list fields for model without model_fields"""
 
-        data = {"tags": "single_value"}
+        class OldStyleModel:
+            pass
 
-        result = self.resolver._process_list_fields(mock_model, data)
+        data = {"field": "value"}
+        result = ParameterResolver._process_list_fields(OldStyleModel, data)
+
         assert result == data
 
-    def test_process_list_fields_field_without_annotation(self):
-        """Test field without annotation attribute"""
-        mock_model = Mock()
-        mock_field = Mock()
-        del mock_field.annotation
-        mock_model.model_fields = {"test_field": mock_field}
+    def test_get_or_create_validation_model_caching(self) -> None:
+        """Test validation model caching"""
 
-        data = {"test_field": "value"}
+        def endpoint(param1: int, param2: str) -> None:
+            pass
 
-        result = self.resolver._process_list_fields(mock_model, data)
-        assert result == data
+        # Use simple tuples to ensure consistent cache keys
+        model_fields = {
+            "param1": (int, ...),
+            "param2": (str, "default"),
+        }
 
-    def test_validate_parameters_success(self):
+        # Clear cache before test
+        ParameterResolver._param_model_cache.clear()
+
+        # First call - creates model
+        ParameterResolver._get_or_create_validation_model(endpoint, model_fields)
+        cache_size_after_first = len(ParameterResolver._param_model_cache)
+
+        # Second call - should use cache (cache size shouldn't increase)
+        ParameterResolver._get_or_create_validation_model(endpoint, model_fields)
+        cache_size_after_second = len(ParameterResolver._param_model_cache)
+
+        # Verify caching worked
+        assert cache_size_after_first == 1
+        assert cache_size_after_second == 1
+
+    def test_get_or_create_validation_model_different_fields(self) -> None:
+        """Test validation model creation for different field sets"""
+
+        def endpoint(param: int) -> None:
+            pass
+
+        fields1 = {"param1": (int, ...)}
+        fields2 = {"param2": (str, ...)}
+
+        model1 = ParameterResolver._get_or_create_validation_model(endpoint, fields1)
+        model2 = ParameterResolver._get_or_create_validation_model(endpoint, fields2)
+
+        assert model1 is not model2
+        assert len(ParameterResolver._param_model_cache) == 2
+
+    def test_validate_parameters_success(self) -> None:
         """Test successful parameter validation"""
 
-        def endpoint(param: int = Query()):
+        def endpoint(age: int, name: str) -> None:
             pass
 
-        model_fields = {"param": (int, ...)}
-        model_values = {"param": 123}
+        model_fields = {"age": (int, ...), "name": (str, ...)}
+        model_values = {"age": 25, "name": "John"}
 
-        result = self.resolver._validate_parameters(
+        result = ParameterResolver._validate_parameters(
             endpoint, model_fields, model_values
         )
-        assert result["param"] == 123
 
-    def test_validate_parameters_error(self):
-        """Test parameter validation error"""
+        assert result["age"] == 25
+        assert result["name"] == "John"
 
-        def endpoint(param: int = Query()):
+    def test_validate_parameters_type_coercion(self) -> None:
+        """Test parameter validation with type coercion"""
+
+        def endpoint(age: int) -> None:
             pass
 
-        model_fields = {"param": (int, ...)}
-        model_values = {"param": "not_an_int"}
+        model_fields = {"age": (int, ...)}
+        model_values = {"age": "25"}
+
+        result = ParameterResolver._validate_parameters(
+            endpoint, model_fields, model_values
+        )
+
+        assert result["age"] == 25
+        assert isinstance(result["age"], int)
+
+    def test_validate_parameters_validation_error(self) -> None:
+        """Test parameter validation error"""
+
+        def endpoint(age: int) -> None:
+            pass
+
+        model_fields = {"age": (int, ...)}
+        model_values = {"age": "not a number"}
 
         with pytest.raises(BadRequestError, match="Error parsing parameter"):
-            self.resolver._validate_parameters(endpoint, model_fields, model_values)
+            ParameterResolver._validate_parameters(endpoint, model_fields, model_values)
 
-    def test_validate_parameters_empty_errors(self):
-        """Test validation error with empty errors list"""
+    def test_validate_parameters_empty_errors_list(self) -> None:
+        """Test parameter validation with empty errors list"""
 
-        def endpoint(param: int = Query()):
+        def endpoint(param: int) -> None:
             pass
 
         model_fields = {"param": (int, ...)}
         model_values = {"param": "invalid"}
 
-        with patch("pydantic.create_model") as mock_create:
+        with patch("fastopenapi.resolution.resolver.create_model") as mock_create:
             mock_model = Mock()
-            mock_model.side_effect = PydanticValidationError.from_exception_data(
+            mock_instance = Mock()
+
+            # Create PydanticValidationError with empty errors list
+            from pydantic import ValidationError as PydanticValidationError
+
+            validation_error = PydanticValidationError.from_exception_data(
                 "TestModel", []
             )
+
+            mock_model.return_value = mock_instance
+            mock_instance.model_dump.side_effect = validation_error
             mock_create.return_value = mock_model
 
-            with pytest.raises(
-                BadRequestError, match="Error parsing parameter 'param'"
-            ):
-                self.resolver._validate_parameters(endpoint, model_fields, model_values)
+            with pytest.raises(BadRequestError, match="Parameter validation failed"):
+                ParameterResolver._validate_parameters(
+                    endpoint, model_fields, model_values
+                )
 
-    def test_signature_caching(self):
-        """Test signature caching mechanism"""
-
-        def test_func(param: str):
-            return param
-
-        sig1 = dict(self.resolver._get_signature(test_func))
-        sig2 = dict(self.resolver._get_signature(test_func))
-
-        assert sig1 == sig2
-        assert test_func in self.resolver._signature_cache
-
-    def test_extract_value_unknown_source(self):
-        """Test extracting value from unknown source"""
-
-        param = Mock()
-        unknown_source = Mock()
-        unknown_source.value = "unknown"
-
-        result = self.resolver._extract_value(
-            "test", param, unknown_source, self.request_data
-        )
-        assert result is None
-
-    def test_processed_parameter_init(self):
-        """Test ProcessedParameter initialization"""
-        pp = ProcessedParameter(
-            value="test_value", needs_validation=True, field_info=(str, ...)
-        )
-
-        assert pp.value == "test_value"
-        assert pp.needs_validation is True
-        assert pp.field_info == (str, ...)
-
-    def test_resolve_complex_endpoint_with_multiple_param_types(self):
-        """Test resolving endpoint with multiple parameter types"""
+    def test_resolve_integration_all_sources(self) -> None:
+        """Integration test with parameters from all sources"""
 
         def endpoint(
-            user_id: int,  # path param
-            name: str = Query(),  # query param
-            auth: str = Header(alias="Authorization"),  # header param
-            session: str = Cookie(),  # cookie param
-            data: dict = Body(),  # body param
-            username: str = Form(),  # form param
-        ):
-            return {
-                "user_id": user_id,
-                "name": name,
-                "auth": auth,
-                "session": session,
-                "data": data,
-                "username": username,
-            }
+            user_id: str,
+            limit: int,
+            x_api_key: str = Header(),
+            session_id: str = Cookie(),
+        ) -> None:
+            pass
 
         request_data = RequestData(
             path_params={"user_id": "123"},
-            query_params={"name": "John"},
-            headers={"Authorization": "Bearer token"},
-            cookies={"session": "abc123"},
-            body={"key": "value"},
-            form_data={"username": "john"},
+            query_params={"limit": "50"},
+            headers={"X-API-Key": "secret"},
+            cookies={"session_id": "abc"},
+            body={},
+            form_data={},
+            files={},
         )
 
-        result = self.resolver.resolve(endpoint, request_data)
+        result = ParameterResolver.resolve(endpoint, request_data)
 
-        assert result["user_id"] == 123
+        assert result["user_id"] == "123"
+        assert result["limit"] == 50
+        assert result["x_api_key"] == "secret"
+        assert result["session_id"] == "abc"
+
+    def test_resolve_integration_pydantic_body(self) -> None:
+        """Integration test with Pydantic model in body"""
+
+        class UserCreate(BaseModel):
+            name: str
+            email: str
+
+        def endpoint(user: UserCreate) -> None:
+            pass
+
+        request_data = RequestData(
+            path_params={},
+            query_params={},
+            headers={},
+            cookies={},
+            body={"name": "John", "email": "john@example.com"},
+            form_data={},
+            files={},
+        )
+
+        result = ParameterResolver.resolve(endpoint, request_data)
+
+        assert isinstance(result["user"], UserCreate)
+        assert result["user"].name == "John"
+        assert result["user"].email == "john@example.com"
+
+    def test_resolve_integration_with_defaults(self) -> None:
+        """Integration test with default values"""
+
+        def endpoint(
+            required: str,
+            optional: str = "default_value",
+            limit: int = 10,
+        ) -> None:
+            pass
+
+        request_data = RequestData(
+            path_params={},
+            query_params={"required": "value"},
+            headers={},
+            cookies={},
+            body={},
+            form_data={},
+            files={},
+        )
+
+        result = ParameterResolver.resolve(endpoint, request_data)
+
+        assert result["required"] == "value"
+        assert result["optional"] == "default_value"
+        assert result["limit"] == 10
+
+    def test_resolve_integration_complex_validation(self) -> None:
+        """Integration test with complex validation using Query"""
+
+        def endpoint(
+            age: int = Query(ge=0, le=150),
+            name: str = Query(min_length=2, max_length=50),
+        ) -> None:
+            pass
+
+        request_data = RequestData(
+            path_params={},
+            query_params={"age": "25", "name": "John"},
+            headers={},
+            cookies={},
+            body={},
+            form_data={},
+            files={},
+        )
+
+        result = ParameterResolver.resolve(endpoint, request_data)
+
+        assert result["age"] == 25
         assert result["name"] == "John"
-        assert result["auth"] == "Bearer token"
-        assert result["session"] == "abc123"
-        assert result["data"] == {"key": "value"}
-        assert result["username"] == "john"
-
-    # def test_resolve_with_validation_error_multiple_fields(self):
-    #     """Test validation error with multiple validation errors"""
-    #
-    #     def endpoint(age: int = Query(ge=0), name: str = Query(min_length=1)):
-    #         pass
-    #
-    #     request_data = RequestData(query_params={"age": "-5", "name": ""})
-    #
-    #     with pytest.raises(BadRequestError):
-    #         self.resolver.resolve(endpoint, request_data)
-
-    def test_extract_value_all_sources(self):
-        """Test extracting values from all parameter sources"""
-        from fastopenapi.core.constants import ParameterSource
-
-        param = Mock()
-
-        # Test PATH source
-        result = self.resolver._extract_value(
-            "id", param, ParameterSource.PATH, self.request_data
-        )
-        assert result == "123"
-
-        # Test QUERY source
-        result = self.resolver._extract_value(
-            "name", param, ParameterSource.QUERY, self.request_data
-        )
-        assert result == "John"
-
-        # Test HEADER source
-        result = self.resolver._extract_value(
-            "content-type", param, ParameterSource.HEADER, self.request_data
-        )
-        assert result == "application/json"
-
-        # Test COOKIE source
-        result = self.resolver._extract_value(
-            "session", param, ParameterSource.COOKIE, self.request_data
-        )
-        assert result == "abc123"
-
-        # Test FORM source
-        result = self.resolver._extract_value(
-            "username", param, ParameterSource.FORM, self.request_data
-        )
-        assert result == "john"
-
-        # Test FILE source
-        result = self.resolver._extract_value(
-            "upload", param, ParameterSource.FILE, self.request_data
-        )
-        assert result == b"file_content"
-
-        # Test BODY source
-        result = self.resolver._extract_value(
-            "data", param, ParameterSource.BODY, self.request_data
-        )
-        assert result == {"data": "test"}
-
-    def test_build_field_info_no_constraints(self):
-        """Test building field info without constraints"""
-        param = Mock()
-        param.default = Query(default="test")
-        param.annotation = str
-
-        with patch.object(self.resolver, "_build_field_constraints", return_value={}):
-            field_info = self.resolver._build_field_info(param)
-
-        assert len(field_info) == 2
-        assert field_info[0] == str
-        assert field_info[1] == "test"

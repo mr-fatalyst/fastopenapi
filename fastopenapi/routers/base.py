@@ -44,6 +44,7 @@ class BaseAdapter(BaseRouter, ABC):
             request_data = self.extractor_cls.extract_request_data(env)
             kwargs = self.req_param_resolver_cls.resolve(endpoint, request_data)
             result = endpoint(**kwargs)
+            # TODO Add a check if the result is a framework response
             response = self.response_builder_cls.build(result, endpoint.__route_meta__)
             return self.build_framework_response(response)
         except Exception as e:
