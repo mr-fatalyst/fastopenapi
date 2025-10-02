@@ -45,7 +45,7 @@ class TornadoRouter(BaseAdapter):
             if self.app is not None:
                 self.app.add_handlers(r".*", [spec])
         else:
-            for rule in self.routes:
+            for rule in self.routes:  # pragma: no cover
                 if rule.matcher.regex.pattern == f"{tornado_path}$":
                     rule.target_kwargs["endpoints"] = self._endpoint_map[tornado_path]
                     break
@@ -53,6 +53,10 @@ class TornadoRouter(BaseAdapter):
     def build_framework_response(self, response: Response):
         """Build Tornado response - handled directly in handler"""
         return response
+
+    def is_framework_response(self, response: Response) -> bool:
+        # TODO I have to think about this
+        return False
 
     def _register_docs_endpoints(self):
         """Register documentation endpoints"""

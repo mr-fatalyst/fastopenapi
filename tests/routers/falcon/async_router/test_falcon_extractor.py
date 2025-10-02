@@ -20,6 +20,18 @@ class TestFalconAsyncRequestDataExtractor:
         assert result == {"key": "value"}
 
     @pytest.mark.asyncio
+    async def test_get_empty_body_json(self):
+        """Test async JSON body extraction"""
+        request = Mock()
+        request.content_type = "application/json"
+        request.bounded_stream = Mock()
+        request.bounded_stream.read = AsyncMock(return_value=b"")
+
+        result = await FalconAsyncRequestDataExtractor._get_body(request)
+
+        assert result == {}
+
+    @pytest.mark.asyncio
     async def test_get_body_non_json(self):
         """Test async non-JSON body"""
         request = Mock()

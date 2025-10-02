@@ -51,6 +51,9 @@ class FlaskRouter(BaseAdapter):
 
         return flask_response
 
+    def is_framework_response(self, response: Response | FlaskResponse) -> bool:
+        return isinstance(response, FlaskResponse)
+
     def _register_docs_endpoints(self):
         """Register documentation endpoints"""
 

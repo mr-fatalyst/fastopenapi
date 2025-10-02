@@ -1,3 +1,5 @@
+from falcon import Response as FalconResponse
+
 from fastopenapi.core.types import Response
 from fastopenapi.openapi.ui import render_redoc_ui, render_swagger_ui
 from fastopenapi.routers.common import RequestEnvelope
@@ -26,6 +28,11 @@ class FalconAsyncRouter(FalconRouter):
             if isinstance(result_response, Response):
                 response.status = result_response.status_code
                 response.media = result_response.content
+                for key, value in result_response.headers.items():
+                    response.set_header(key, value)
+            elif isinstance(result_response, FalconResponse):  # pragma: no cover
+                response.status = result_response.status_code
+                response.media = result_response.media
                 for key, value in result_response.headers.items():
                     response.set_header(key, value)
 

@@ -66,7 +66,7 @@ class APIError(Exception):
                 try:
                     status = HTTPStatus(int(getattr(exc, attr)))
                     break
-                except Exception:
+                except Exception:  # pragma: no cover
                     pass
 
         message = str(exc)

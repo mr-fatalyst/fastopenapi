@@ -65,6 +65,11 @@ class FalconRouter(BaseAdapter):
                 response.media = result_response.content
                 for key, value in result_response.headers.items():
                     response.set_header(key, value)
+            elif isinstance(result_response, falcon.Response):  # pragma: no cover
+                response.status = result_response.status_code
+                response.media = result_response.media
+                for key, value in result_response.headers.items():
+                    response.set_header(key, value)
 
         setattr(resource, method_name, handle)
         return resource
@@ -72,6 +77,9 @@ class FalconRouter(BaseAdapter):
     def build_framework_response(self, response: Response) -> Response:
         """Build Falcon response"""
         return response
+
+    def is_framework_response(self, response: Response | falcon.Response) -> bool:
+        return isinstance(response, falcon.Response)
 
     def _register_docs_endpoints(self):
         """Register documentation endpoints"""

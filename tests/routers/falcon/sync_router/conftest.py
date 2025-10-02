@@ -1,8 +1,9 @@
 import pytest
-from falcon import App, HTTPNotFound
+from falcon import App, HTTPNotFound, Response
 from falcon.testing import TestClient
 from pydantic import BaseModel
 
+from fastopenapi import Header
 from fastopenapi.routers import FalconRouter
 
 
@@ -45,6 +46,27 @@ def app(items_db):  # noqa: C901
     def list_endpoint(param1: str, param2: list[str] = None):
         """Test endpoint that returns the parameters it receives"""
         return {"received_param1": param1, "received_param2": param2}
+
+    @router.get("/test-echo-headers")
+    def test_echo_headers(x_request_id: str = Header(None, alias="http-x-request-id")):
+        """Test endpoint that returns headers"""
+        return (
+            {"received": x_request_id or "none"},
+            200,
+            {"X-Echo-ID": x_request_id or "none", "X-Custom": "test"},
+        )
+
+    @router.get("/test-echo-headers-2")
+    def test_echo_headers_2(
+        x_request_id: str = Header(None, alias="http-x-request-id")
+    ):
+        """Test endpoint that returns headers"""
+        resp = Response()
+        resp.media = {"received": x_request_id or "none"}
+        resp.status = 200
+        resp.set_header("X-Echo-ID", x_request_id or "none")
+        resp.set_header("X-Custom", "test")
+        return resp
 
     @router.get("/items", response_model=list[ItemResponse], tags=["items"])
     def get_items():

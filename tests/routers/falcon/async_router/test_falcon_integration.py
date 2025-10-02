@@ -15,6 +15,36 @@ class TestFalconIntegration:
         assert result[1]["name"] == "Item 2"
 
     @pytest.mark.asyncio
+    async def test_echo_headers(self, async_client):
+        """Test that headers from echo response are set"""
+        response = await async_client.get(
+            "/test-echo-headers",
+            headers={"HTTP_X_REQUEST_ID": "test-123"},
+        )
+
+        assert response.status_code == 200
+        result = from_json(response.text)
+        headers = dict(response.headers)
+        assert headers["x-echo-id"] == "test-123"
+        assert headers["x-custom"] == "test"
+        assert result["received"] == "test-123"
+
+    @pytest.mark.asyncio
+    async def test_echo_headers_with_falcon_resp(self, async_client):
+        """Test that headers from echo response are set"""
+        response = await async_client.get(
+            "/test-echo-headers-2",
+            headers={"HTTP_X_REQUEST_ID": "test-123"},
+        )
+
+        assert response.status_code == 200
+        result = from_json(response.text)
+        headers = dict(response.headers)
+        assert headers["x-echo-id"] == "test-123"
+        assert headers["x-custom"] == "test"
+        assert result["received"] == "test-123"
+
+    @pytest.mark.asyncio
     async def test_get_items(self, async_client):
         """Test fetching all items"""
         response = await async_client.simulate_get("/items")

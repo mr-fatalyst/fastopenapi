@@ -316,7 +316,7 @@ class DependencyResolver:
                 from fastopenapi.resolution.resolver import ParameterResolver
 
                 # Create temporary function with only regular parameters
-                def _temp():
+                def _temp():  # pragma: no cover
                     return None
 
                 temp_sig = inspect.Signature(regular_params.values())

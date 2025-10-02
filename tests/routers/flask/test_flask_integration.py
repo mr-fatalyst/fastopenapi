@@ -14,6 +14,19 @@ class TestFlaskIntegration:
         assert result[0]["name"] == "Item 1"
         assert result[1]["name"] == "Item 2"
 
+    def test_get_headers(self, client):
+        """Test fetching all items"""
+        response = client.get(
+            "/test-echo-headers", headers={"HTTP_X_REQUEST_ID": "test-123"}
+        )
+
+        assert response.status_code == 200
+        result = from_json(response.text)
+        headers = dict(response.headers)
+        assert headers["X-Echo-ID"] == "test-123"
+        assert headers["X-Custom"] == "test"
+        assert result["received"] == "test-123"
+
     def test_get_items_async(self, client):
         """Test fetching an item by ID"""
         with pytest.raises(Exception) as excinfo:

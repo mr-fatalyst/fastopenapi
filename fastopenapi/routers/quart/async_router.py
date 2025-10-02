@@ -38,6 +38,9 @@ class QuartRouter(BaseAdapter):
         quart_response = jsonify(response.content)
         return quart_response, response.status_code, response.headers
 
+    def is_framework_response(self, response: Response | QuartResponse) -> bool:
+        return isinstance(response, QuartResponse)
+
     def _register_docs_endpoints(self):
         """Register documentation endpoints"""
 

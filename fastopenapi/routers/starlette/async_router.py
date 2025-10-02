@@ -2,7 +2,11 @@ import functools
 from collections.abc import Callable
 
 from starlette.applications import Starlette
-from starlette.responses import HTMLResponse, JSONResponse
+from starlette.responses import (
+    HTMLResponse,
+    JSONResponse,
+)
+from starlette.responses import Response as StarletteResponse
 from starlette.routing import Route
 
 from fastopenapi.core.types import Response
@@ -44,6 +48,9 @@ class StarletteRouter(BaseAdapter):
         return JSONResponse(
             response.content, status_code=response.status_code, headers=response.headers
         )
+
+    def is_framework_response(self, response: Response | StarletteResponse) -> bool:
+        return isinstance(response, StarletteResponse)
 
     def _register_docs_endpoints(self):
         """Register documentation endpoints"""

@@ -637,3 +637,20 @@ class TestDependencyResolver:
             DependencyError, match="Dependency function 'failing_dep' failed"
         ):
             self.resolver._call_dependency(failing_dep, {})
+
+    def test_dependency_error_wrapped(self):
+        class DummyRequest:
+            pass
+
+        def endpoint(dep: "NotCallable" = Depends()):  # noqa: F821
+            return "ok"
+
+        resolver = DependencyResolver()
+        req = DummyRequest()
+
+        with pytest.raises(DependencyError) as exc:
+            resolver.resolve_dependencies(endpoint, req)
+
+        assert "Failed to resolve dependency 'dep'" in str(exc.value)
+        assert isinstance(exc.value.__cause__, Exception)
+        assert isinstance(exc.value.__cause__, TypeError)

@@ -41,6 +41,9 @@ class SanicRouter(BaseAdapter):
             headers=response_obj.headers,
         )
 
+    def is_framework_response(self, resp: Response | response.BaseHTTPResponse) -> bool:
+        return isinstance(resp, response.BaseHTTPResponse)
+
     def _register_docs_endpoints(self):
         """Register documentation endpoints"""
 

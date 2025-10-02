@@ -14,6 +14,34 @@ class TestFalconIntegration:
             )
             assert err_msg in str(excinfo.value)
 
+    def test_echo_headers(self, sync_client):
+        """Test that headers from echo response are set"""
+        response = sync_client.get(
+            "/test-echo-headers",
+            headers={"HTTP_X_REQUEST_ID": "test-123"},
+        )
+
+        assert response.status_code == 200
+        result = from_json(response.text)
+        headers = dict(response.headers)
+        assert headers["x-echo-id"] == "test-123"
+        assert headers["x-custom"] == "test"
+        assert result["received"] == "test-123"
+
+    def test_echo_headers_with_falcon_resp(self, sync_client):
+        """Test that headers from echo response are set"""
+        response = sync_client.get(
+            "/test-echo-headers-2",
+            headers={"HTTP_X_REQUEST_ID": "test-123"},
+        )
+
+        assert response.status_code == 200
+        result = from_json(response.text)
+        headers = dict(response.headers)
+        assert headers["x-echo-id"] == "test-123"
+        assert headers["x-custom"] == "test"
+        assert result["received"] == "test-123"
+
     def test_get_items(self, sync_client):
         """Test fetching all items"""
         response = sync_client.simulate_get("/items")

@@ -32,6 +32,10 @@ class BaseAdapter(BaseRouter, ABC):
     def build_framework_response(self, response: Response) -> Any:
         """Build framework-specific response object"""
 
+    @abstractmethod
+    def is_framework_response(self, response: Response) -> bool:
+        """Check if response is framework-ready"""
+
     @classmethod
     def _convert_path_for_framework(cls, path: str) -> str:
         """Convert path format for specific framework"""
@@ -44,9 +48,13 @@ class BaseAdapter(BaseRouter, ABC):
             request_data = self.extractor_cls.extract_request_data(env)
             kwargs = self.req_param_resolver_cls.resolve(endpoint, request_data)
             result = endpoint(**kwargs)
-            # TODO Add a check if the result is a framework response
-            response = self.response_builder_cls.build(result, endpoint.__route_meta__)
-            return self.build_framework_response(response)
+            if self.is_framework_response(result):
+                return result
+            else:
+                response = self.response_builder_cls.build(
+                    result, endpoint.__route_meta__
+                )
+                return self.build_framework_response(response)
         except Exception as e:
             api_error = APIError.from_exception(e, self.EXCEPTION_MAPPER)
             return self.build_framework_response(
@@ -67,8 +75,13 @@ class BaseAdapter(BaseRouter, ABC):
                 result = await endpoint(**kwargs)
             else:
                 result = endpoint(**kwargs)
-            response = self.response_builder_cls.build(result, endpoint.__route_meta__)
-            return self.build_framework_response(response)
+            if self.is_framework_response(result):
+                return result
+            else:
+                response = self.response_builder_cls.build(
+                    result, endpoint.__route_meta__
+                )
+                return self.build_framework_response(response)
         except Exception as e:
             api_error = APIError.from_exception(e, self.EXCEPTION_MAPPER)
             return self.build_framework_response(

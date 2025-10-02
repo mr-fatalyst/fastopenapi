@@ -38,6 +38,9 @@ class AioHttpRouter(BaseAdapter):
             response.content, status=response.status_code, headers=response.headers
         )
 
+    def is_framework_response(self, response: Response | web.Response) -> bool:
+        return isinstance(response, web.Response)
+
     def _register_docs_endpoints(self):
         """Register documentation endpoints"""
 

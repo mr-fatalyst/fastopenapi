@@ -579,6 +579,13 @@ class TestOpenAPIGenerator:
         schema = builder._build_union_schema(Union[str, int])
         assert schema == {"type": "string"}
 
+    def test_schema_builder_build_union_schema_empty(self):
+        """Test building schema for empty"""
+        builder = SchemaBuilder({}, threading.Lock())
+
+        schema = builder._build_union_schema(Union[None])
+        assert schema == {"type": "string"}
+
     def test_schema_builder_build_parameter_schema_from_param_basic(self):
         """Test building schema from Param object"""
         builder = SchemaBuilder({}, threading.Lock())
@@ -586,6 +593,17 @@ class TestOpenAPIGenerator:
         param = Mock()
         param.annotation = str
         param.default = Query()
+
+        schema = builder.build_parameter_schema_from_param(param)
+        assert "type" in schema
+
+    def test_schema_builder_build_parameter_schema_from_non_param(self):
+        """Test building schema from Param object"""
+        builder = SchemaBuilder({}, threading.Lock())
+
+        param = Mock()
+        param.annotation = str
+        param.default = Mock()
 
         schema = builder.build_parameter_schema_from_param(param)
         assert "type" in schema
@@ -661,6 +679,7 @@ class TestOpenAPIGenerator:
         param_obj.title = None
         param_obj.description = None
         param_obj.examples = None
+        param_obj.unknown = None
 
         builder._apply_object_metadata(schema, param_obj)
         assert schema == {}

@@ -3,7 +3,7 @@ import re
 from collections.abc import Callable
 
 from django.core.exceptions import BadRequest, PermissionDenied
-from django.http import Http404, HttpResponse, JsonResponse
+from django.http import Http404, HttpResponse, HttpResponseBase, JsonResponse
 from django.urls import path as django_path
 from django.views import View
 from django.views.decorators.csrf import csrf_exempt
@@ -83,6 +83,9 @@ class DjangoRouter(BaseAdapter):
             http_response[key] = value
 
         return http_response
+
+    def is_framework_response(self, response: Response | HttpResponseBase) -> bool:
+        return isinstance(response, HttpResponseBase)
 
     def _register_docs_endpoints(self):  # pragma: no cover
         """Register documentation endpoints"""
