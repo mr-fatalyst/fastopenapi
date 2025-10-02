@@ -14,14 +14,16 @@ class TestFastOpenAPIRouters:
 
     def test_all_missing(self, monkeypatch):
         modules_to_fail = {
-            "fastopenapi.routers.aiohttp",
-            "fastopenapi.routers.falcon",
-            "fastopenapi.routers.flask",
-            "fastopenapi.routers.quart",
-            "fastopenapi.routers.sanic",
-            "fastopenapi.routers.starlette",
-            "fastopenapi.routers.tornado",
-            "fastopenapi.routers.django",
+            "fastopenapi.routers.aiohttp.async_router",
+            "fastopenapi.routers.falcon.sync_router",
+            "fastopenapi.routers.falcon.async_router",
+            "fastopenapi.routers.flask.sync_router",
+            "fastopenapi.routers.quart.async_router",
+            "fastopenapi.routers.sanic.async_router",
+            "fastopenapi.routers.starlette.async_router",
+            "fastopenapi.routers.tornado.async_router",
+            "fastopenapi.routers.django.sync_router",
+            "fastopenapi.routers.django.async_router",
         }
 
         def fake_import(name, globals=None, locals=None, fromlist=(), level=0):
@@ -37,12 +39,14 @@ class TestFastOpenAPIRouters:
 
         assert routers.AioHttpRouter is MissingRouter
         assert routers.FalconRouter is MissingRouter
+        assert routers.FalconAsyncRouter is MissingRouter
         assert routers.FlaskRouter is MissingRouter
         assert routers.QuartRouter is MissingRouter
         assert routers.SanicRouter is MissingRouter
         assert routers.StarletteRouter is MissingRouter
         assert routers.TornadoRouter is MissingRouter
         assert routers.DjangoRouter is MissingRouter
+        assert routers.DjangoAsyncRouter is MissingRouter
 
         with pytest.raises(ImportError, match="This framework is not installed."):
             routers.FalconRouter()
@@ -53,11 +57,13 @@ class TestFastOpenAPIRouters:
         expected = [
             "AioHttpRouter",
             "FalconRouter",
+            "FalconAsyncRouter",
             "FlaskRouter",
             "QuartRouter",
             "SanicRouter",
             "StarletteRouter",
             "TornadoRouter",
             "DjangoRouter",
+            "DjangoAsyncRouter",
         ]
         assert routers.__all__ == expected

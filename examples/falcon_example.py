@@ -2,10 +2,10 @@ import falcon.asgi
 import uvicorn
 from pydantic import BaseModel
 
-from fastopenapi.routers import FalconRouter
+from fastopenapi.routers import FalconAsyncRouter
 
 app = falcon.asgi.App()
-router = FalconRouter(app=app)
+router = FalconAsyncRouter(app=app)
 
 
 class HelloResponse(BaseModel):
