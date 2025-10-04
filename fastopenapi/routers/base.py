@@ -1,5 +1,6 @@
 import inspect
 import re
+import threading
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from typing import Any
@@ -30,6 +31,9 @@ class BaseAdapter(BaseRouter, ABC):
     req_param_resolver_cls = ParameterResolver
     response_builder_cls = ResponseBuilder
 
+    _type_adapter_cache: dict[type, TypeAdapter] = {}
+    _cache_lock = threading.Lock()
+
     @abstractmethod
     def build_framework_response(self, response: Response) -> Any:
         """Build framework-specific response object"""
@@ -44,8 +48,18 @@ class BaseAdapter(BaseRouter, ABC):
         pattern, replacement = cls.PATH_CONVERSIONS
         return re.sub(pattern, replacement, path)
 
-    @staticmethod
-    def _validate_response(result, response_model):
+    @classmethod
+    def _get_type_adapter(cls, resp_model):
+        """Get or create cached TypeAdapter"""
+        if resp_model not in cls._type_adapter_cache:
+            with cls._cache_lock:
+                # Double-check locking
+                if resp_model not in cls._type_adapter_cache:
+                    cls._type_adapter_cache[resp_model] = TypeAdapter(resp_model)
+        return cls._type_adapter_cache[resp_model]
+
+    @classmethod
+    def _validate_response(cls, result, response_model):
         try:
             if isinstance(response_model, type) and issubclass(
                 response_model, BaseModel
@@ -54,7 +68,7 @@ class BaseAdapter(BaseRouter, ABC):
                     return result
                 return response_model.model_validate(result)
             else:
-                adapter = TypeAdapter(response_model)
+                adapter = cls._get_type_adapter(response_model)
                 return adapter.validate_python(result)
         except ValidationError as e:
             raise InternalServerError(
