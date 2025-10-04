@@ -81,23 +81,23 @@ class FalconRouter(BaseAdapter):
         if result_response.status_code == 204:
             return
 
-        content_type = result_response.headers.get("Content-Type", "application/json")
+        content_type = result_response.headers.get("Content-Type")
 
         # Binary content
         if isinstance(result_response.content, bytes):
             response.data = result_response.content
-            response.content_type = content_type
+            response.content_type = content_type or "application/octet-stream"
         # String non-JSON content
         elif isinstance(result_response.content, str) and content_type not in [
             "application/json",
             "text/json",
         ]:
             response.text = result_response.content
-            response.content_type = content_type
+            response.content_type = content_type or "text/plain"
         # JSON content
         else:
             response.media = result_response.content
-            response.content_type = content_type
+            response.content_type = content_type or "application/json"
 
         # Set custom headers (except Content-Type, already set)
         for key, value in result_response.headers.items():

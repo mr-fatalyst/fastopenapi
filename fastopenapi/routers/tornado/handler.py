@@ -15,6 +15,45 @@ class TornadoDynamicHandler(RequestHandler):
         """Prepare request data"""
         self.endpoint = self.endpoints.get(self.request.method.upper())
 
+    def _set_response_headers(self, headers):
+        """Set response headers from result"""
+        content_type = headers.get("Content-Type")
+        if content_type:
+            self.set_header("Content-Type", content_type)
+
+        for key, value in headers.items():
+            if key.lower() != "content-type":
+                self.set_header(key, value)
+
+        return content_type
+
+    async def _send_response(self, content, content_type, status_code):
+        """Send response based on content type"""
+        if status_code == 204:
+            await self.finish()
+            return
+
+        # Binary content
+        if isinstance(content, bytes):
+            if not content_type:
+                self.set_header("Content-Type", "application/octet-stream")
+            await self.finish(content)
+
+        # String non-JSON content
+        elif isinstance(content, str) and content_type not in [
+            "application/json",
+            "text/json",
+        ]:
+            if not content_type:
+                self.set_header("Content-Type", "text/plain")
+            await self.finish(content)
+
+        # JSON content
+        else:
+            if not content_type:
+                self.set_header("Content-Type", "application/json")
+            await self.finish(json_encode(content))
+
     async def handle_request(self):
         """Common request handling"""
         if not hasattr(self, "endpoint") or not self.endpoint:
@@ -25,29 +64,10 @@ class TornadoDynamicHandler(RequestHandler):
         result_response = await self.router.handle_request_async(self.endpoint, env)
 
         self.set_status(result_response.status_code)
-
-        content_type = result_response.headers.get("Content-Type", "application/json")
-        self.set_header("Content-Type", content_type)
-
-        for key, value in result_response.headers.items():
-            if key.lower() != "content-type":
-                self.set_header(key, value)
-
-        if result_response.status_code == 204:
-            await self.finish()
-        else:
-            # Binary content
-            if isinstance(result_response.content, bytes):
-                await self.finish(result_response.content)
-            # String non-JSON content
-            elif isinstance(result_response.content, str) and content_type not in [
-                "application/json",
-                "text/json",
-            ]:
-                await self.finish(result_response.content)
-            # JSON content
-            else:
-                await self.finish(json_encode(result_response.content))
+        content_type = self._set_response_headers(result_response.headers)
+        await self._send_response(
+            result_response.content, content_type, result_response.status_code
+        )
 
     async def get(self, *args, **kwargs):
         await self.handle_request()

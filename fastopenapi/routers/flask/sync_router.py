@@ -43,7 +43,7 @@ class FlaskRouter(BaseAdapter):
 
     def build_framework_response(self, response: Response) -> FlaskResponse:
         """Build Flask response"""
-        content_type = response.headers.get("Content-Type", "application/json")
+        content_type = response.headers.get("Content-Type")
 
         # Binary content
         if isinstance(response.content, bytes):

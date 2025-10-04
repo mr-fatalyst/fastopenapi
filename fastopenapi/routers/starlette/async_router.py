@@ -47,7 +47,7 @@ class StarletteRouter(BaseAdapter):
         self, response: Response
     ) -> StarletteResponse | JSONResponse:
         """Build Starlette response"""
-        content_type = response.headers.get("Content-Type", "application/json")
+        content_type = response.headers.get("Content-Type")
 
         # Binary content
         if isinstance(response.content, bytes):
@@ -55,7 +55,7 @@ class StarletteRouter(BaseAdapter):
                 content=response.content,
                 status_code=response.status_code,
                 headers=response.headers,
-                media_type=content_type,
+                media_type=content_type or "application/octet-stream",
             )
 
         # String non-JSON content
@@ -67,7 +67,7 @@ class StarletteRouter(BaseAdapter):
                 content=response.content,
                 status_code=response.status_code,
                 headers=response.headers,
-                media_type=content_type,
+                media_type=content_type or "text/plain",
             )
 
         # JSON content

@@ -70,14 +70,14 @@ class DjangoRouter(BaseAdapter):
 
     def build_framework_response(self, response: Response) -> HttpResponse:
         """Build Django response"""
-        content_type = response.headers.get("Content-Type", "application/json")
+        content_type = response.headers.get("Content-Type")
 
         # Binary content
         if isinstance(response.content, bytes):
             http_response = HttpResponse(
                 content=response.content,
                 status=response.status_code,
-                content_type=content_type,
+                content_type=content_type or "application/octet-stream",
             )
         # String non-JSON content
         elif isinstance(response.content, str) and content_type not in [
@@ -87,7 +87,7 @@ class DjangoRouter(BaseAdapter):
             http_response = HttpResponse(
                 content=response.content,
                 status=response.status_code,
-                content_type=content_type,
+                content_type=content_type or "text/plain",
             )
         # JSON content
         else:
