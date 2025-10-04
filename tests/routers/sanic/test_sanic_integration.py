@@ -100,7 +100,7 @@ class TestSanicIntegration:
             headers={"Content-Type": "application/json"},
         )
 
-        assert response.status_code == 400
+        assert response.status_code == 422
 
     @pytest.mark.asyncio
     async def test_update_item(self, client):
@@ -185,3 +185,72 @@ class TestSanicIntegration:
         _, response = await client.get("/echo?param=hello%20world")
         assert response.status == 200
         assert response.json["param"] == "hello world"
+
+    @pytest.mark.asyncio
+    async def test_binary_response(self, client):
+        """Test binary content response"""
+        _, response = await client.get("/test-binary")
+        assert response.status_code == 200
+        assert response.headers["Content-Type"] == "application/octet-stream"
+        assert isinstance(response.body, bytes)
+        assert response.body == b"\x00\x01\x02\x03\x04"
+
+    @pytest.mark.asyncio
+    async def test_image_response(self, client):
+        """Test image binary response"""
+        _, response = await client.get("/test-image")
+        assert response.status_code == 200
+        assert response.headers["Content-Type"] == "image/png"
+        assert isinstance(response.body, bytes)
+
+    @pytest.mark.asyncio
+    async def test_csv_response(self, client):
+        """Test CSV text response"""
+        _, response = await client.get("/test-csv")
+        assert response.status_code == 200
+        assert "text/csv" in response.headers["Content-Type"]
+        assert "name,age,city" in response.text
+        assert "John,30,NYC" in response.text
+
+    @pytest.mark.asyncio
+    async def test_xml_response(self, client):
+        """Test XML text response"""
+        _, response = await client.get("/test-xml")
+        assert response.status_code == 200
+        assert "application/xml" in response.headers["Content-Type"]
+        assert "<root>" in response.text
+        assert "<item>value</item>" in response.text
+
+    @pytest.mark.asyncio
+    async def test_plain_text_response(self, client):
+        """Test plain text response"""
+        _, response = await client.get("/test-text")
+        assert response.status_code == 200
+        assert "text/plain" in response.headers["Content-Type"]
+        assert response.text == "Hello, World!"
+
+    @pytest.mark.asyncio
+    async def test_html_response(self, client):
+        """Test HTML text response"""
+        _, response = await client.get("/test-html")
+        assert response.status_code == 200
+        assert "text/html" in response.headers["Content-Type"]
+        assert "<html>" in response.text
+        assert "<body>" in response.text
+
+    @pytest.mark.asyncio
+    async def test_custom_headers_in_response(self, client):
+        """Test custom headers are preserved"""
+        _, response = await client.get("/test-custom-headers")
+        assert response.status_code == 200
+        assert response.headers["X-Custom-Header"] == "CustomValue"
+        assert response.headers["X-Request-ID"] == "12345"
+
+    @pytest.mark.asyncio
+    async def test_pdf_response(self, client):
+        """Test PDF binary response"""
+        _, response = await client.get("/test-pdf")
+        assert response.status_code == 200
+        assert response.headers["Content-Type"] == "application/pdf"
+        assert isinstance(response.body, bytes)
+        assert response.body.startswith(b"%PDF")

@@ -35,8 +35,21 @@ class QuartRouter(BaseAdapter):
 
     def build_framework_response(self, response: Response):
         """Build Quart response"""
-        quart_response = jsonify(response.content)
-        return quart_response, response.status_code, response.headers
+        content_type = response.headers.get("Content-Type", "application/json")
+
+        # Binary content
+        if isinstance(response.content, bytes):
+            return response.content, response.status_code, response.headers
+
+        # String non-JSON content
+        if isinstance(response.content, str) and content_type not in [
+            "application/json",
+            "text/json",
+        ]:
+            return response.content, response.status_code, response.headers
+
+        # JSON content
+        return jsonify(response.content), response.status_code, response.headers
 
     def is_framework_response(self, response: Response | QuartResponse) -> bool:
         return isinstance(response, QuartResponse)

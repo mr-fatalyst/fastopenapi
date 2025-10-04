@@ -25,15 +25,29 @@ class TornadoDynamicHandler(RequestHandler):
         result_response = await self.router.handle_request_async(self.endpoint, env)
 
         self.set_status(result_response.status_code)
-        self.set_header("Content-Type", "application/json")
+
+        content_type = result_response.headers.get("Content-Type", "application/json")
+        self.set_header("Content-Type", content_type)
 
         for key, value in result_response.headers.items():
-            self.set_header(key, value)
+            if key.lower() != "content-type":
+                self.set_header(key, value)
 
         if result_response.status_code == 204:
             await self.finish()
         else:
-            await self.finish(json_encode(result_response.content))
+            # Binary content
+            if isinstance(result_response.content, bytes):
+                await self.finish(result_response.content)
+            # String non-JSON content
+            elif isinstance(result_response.content, str) and content_type not in [
+                "application/json",
+                "text/json",
+            ]:
+                await self.finish(result_response.content)
+            # JSON content
+            else:
+                await self.finish(json_encode(result_response.content))
 
     async def get(self, *args, **kwargs):
         await self.handle_request()

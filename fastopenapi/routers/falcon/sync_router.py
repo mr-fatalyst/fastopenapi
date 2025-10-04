@@ -40,39 +40,76 @@ class FalconRouter(BaseAdapter):
 
     def _create_or_update_resource(self, path: str, method: str, endpoint):
         """Create or update Falcon resource"""
-        resource = self._resources.get(path)
-        if not resource:
-            resource = type("DynamicResource", (), {})()
-            self._resources[path] = resource
-
+        resource = self._get_or_create_resource(path)
         method_name = self.METHODS_MAPPER.get(method, f"on_{method.lower()}")
+        handler = self._build_response_handler(endpoint)
+        setattr(resource, method_name, handler)
+        return resource
+
+    def _get_or_create_resource(self, path: str):
+        """Get existing resource or create new one"""
+        if path not in self._resources:
+            self._resources[path] = type("DynamicResource", (), {})()
+        return self._resources[path]
+
+    def _build_response_handler(self, endpoint: Callable):
+        """Build request handler function for endpoint"""
 
         def handle(request, response, **path_params):
-            env = RequestEnvelope(request=request, path_params=path_params)
-
             if inspect.iscoroutinefunction(endpoint):
                 raise Exception(
                     f"Async endpoint '{endpoint.__name__}' "
                     f"cannot be used with sync router. "
                     f"Use FalconAsyncRouter for async support."
                 )
-            else:
-                result_response = self.handle_request(endpoint, env)
 
-            # Falcon needs special handling
+            env = RequestEnvelope(request=request, path_params=path_params)
+            result_response = self.handle_request(endpoint, env)
+
             if isinstance(result_response, Response):
-                response.status = result_response.status_code
-                response.media = result_response.content
-                for key, value in result_response.headers.items():
-                    response.set_header(key, value)
+                self._apply_falcon_response(result_response, response)
             elif isinstance(result_response, falcon.Response):  # pragma: no cover
-                response.status = result_response.status_code
-                response.media = result_response.media
-                for key, value in result_response.headers.items():
-                    response.set_header(key, value)
+                self._copy_falcon_response(result_response, response)
 
-        setattr(resource, method_name, handle)
-        return resource
+        return handle
+
+    def _apply_falcon_response(self, result_response: Response, response):
+        """Apply our Response to Falcon response object"""
+        response.status = result_response.status_code
+
+        # For 204 No Content, no body or content-type should be set
+        if result_response.status_code == 204:
+            return
+
+        content_type = result_response.headers.get("Content-Type", "application/json")
+
+        # Binary content
+        if isinstance(result_response.content, bytes):
+            response.data = result_response.content
+            response.content_type = content_type
+        # String non-JSON content
+        elif isinstance(result_response.content, str) and content_type not in [
+            "application/json",
+            "text/json",
+        ]:
+            response.text = result_response.content
+            response.content_type = content_type
+        # JSON content
+        else:
+            response.media = result_response.content
+            response.content_type = content_type
+
+        # Set custom headers (except Content-Type, already set)
+        for key, value in result_response.headers.items():
+            if key.lower() != "content-type":
+                response.set_header(key, value)
+
+    def _copy_falcon_response(self, source: falcon.Response, target):
+        """Copy Falcon Response to response object"""
+        target.status = source.status_code
+        target.media = source.media
+        for key, value in source.headers.items():
+            target.set_header(key, value)
 
     def build_framework_response(self, response: Response) -> Response:
         """Build Falcon response"""

@@ -192,3 +192,64 @@ class TestFalconIntegration:
         assert data["received_param1"] == "first_value"
         assert isinstance(data["received_param2"], list)
         assert data["received_param2"] == ["value1", "value2"]
+
+    def test_binary_response(self, sync_client):
+        """Test binary content response"""
+        response = sync_client.get("/test-binary")
+        assert response.status_code == 200
+        assert response.headers["content-type"] == "application/octet-stream"
+        assert isinstance(response.content, bytes)
+        assert response.content == b"\x00\x01\x02\x03\x04"
+
+    def test_image_response(self, sync_client):
+        """Test image binary response"""
+        response = sync_client.get("/test-image")
+        assert response.status_code == 200
+        assert response.headers["content-type"] == "image/png"
+        assert isinstance(response.content, bytes)
+
+    def test_csv_response(self, sync_client):
+        """Test CSV text response"""
+        response = sync_client.get("/test-csv")
+        assert response.status_code == 200
+        assert "text/csv" in response.headers["content-type"]
+        assert "name,age,city" in response.text
+        assert "John,30,NYC" in response.text
+
+    def test_xml_response(self, sync_client):
+        """Test XML text response"""
+        response = sync_client.get("/test-xml")
+        assert response.status_code == 200
+        assert "application/xml" in response.headers["content-type"]
+        assert "<root>" in response.text
+        assert "<item>value</item>" in response.text
+
+    def test_plain_text_response(self, sync_client):
+        """Test plain text response"""
+        response = sync_client.get("/test-text")
+        assert response.status_code == 200
+        assert "text/plain" in response.headers["content-type"]
+        assert response.text == "Hello, World!"
+
+    def test_html_response(self, sync_client):
+        """Test HTML text response"""
+        response = sync_client.get("/test-html")
+        assert response.status_code == 200
+        assert "text/html" in response.headers["content-type"]
+        assert "<html>" in response.text
+        assert "<body>" in response.text
+
+    def test_custom_headers_in_response(self, sync_client):
+        """Test custom headers are preserved"""
+        response = sync_client.get("/test-custom-headers")
+        assert response.status_code == 200
+        assert response.headers["x-custom-header"] == "CustomValue"
+        assert response.headers["x-request-id"] == "12345"
+
+    def test_pdf_response(self, sync_client):
+        """Test PDF binary response"""
+        response = sync_client.get("/test-pdf")
+        assert response.status_code == 200
+        assert response.headers["content-type"] == "application/pdf"
+        assert isinstance(response.content, bytes)
+        assert response.content.startswith(b"%PDF")

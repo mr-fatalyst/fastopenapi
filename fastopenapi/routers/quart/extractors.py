@@ -1,5 +1,6 @@
 from typing import Any
 
+from fastopenapi.core.types import FileUpload
 from fastopenapi.routers.extractors import BaseAsyncRequestDataExtractor
 
 
@@ -40,14 +41,31 @@ class QuartRequestDataExtractor(BaseAsyncRequestDataExtractor):
     async def _get_form_data(cls, request: Any) -> dict:
         """Extract form data"""
         form_data = {}
-
         form = await request.form
         for key in form:
-            form_data[key] = form[key]
-
+            values = form.getlist(key)
+            form_data[key] = values[0] if len(values) == 1 else values
         return form_data
 
     @classmethod
-    async def _get_files(cls, request: Any) -> dict[str, bytes]:
+    async def _get_files(cls, request: Any) -> dict[str, FileUpload | list[FileUpload]]:
         """Extract files from Quart request"""
-        return {}
+        files = {}
+        try:
+            file_storage = await request.files
+        except (AttributeError, RuntimeError):
+            file_storage = None
+        if file_storage:
+            for key in file_storage.keys():
+                file_list = file_storage.getlist(key)
+                uploads = []
+                for file_obj in file_list:
+                    file_upload = FileUpload(
+                        filename=file_obj.filename or "unknown",
+                        content_type=file_obj.content_type,
+                        size=None,
+                        file=file_obj,
+                    )
+                    uploads.append(file_upload)
+                files[key] = uploads[0] if len(uploads) == 1 else uploads
+        return files

@@ -34,6 +34,28 @@ class AioHttpRouter(BaseAdapter):
 
     def build_framework_response(self, response: Response) -> web.Response:
         """Build AioHttp response"""
+        content_type = response.headers.get("Content-Type", "application/json")
+
+        # Binary content
+        if isinstance(response.content, bytes):
+            return web.Response(
+                body=response.content,
+                status=response.status_code,
+                headers={**response.headers, "Content-Type": content_type},
+            )
+
+        # String non-JSON content (CSV, XML, plain text, etc.)
+        if isinstance(response.content, str) and content_type not in [
+            "application/json",
+            "text/json",
+        ]:
+            return web.Response(
+                text=response.content,
+                status=response.status_code,
+                headers={**response.headers, "Content-Type": content_type},
+            )
+
+        # JSON content (dict, list, None)
         return web.json_response(
             response.content, status=response.status_code, headers=response.headers
         )

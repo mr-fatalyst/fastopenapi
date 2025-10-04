@@ -182,6 +182,75 @@ def urls(items_db):  # noqa: C901
             "session": session,
         }
 
+    @router.get("/test-binary")
+    async def test_binary():
+        return (
+            b"\x00\x01\x02\x03\x04",
+            200,
+            {"Content-Type": "application/octet-stream"},
+        )
+
+    @router.get("/test-image")
+    async def test_image():
+        png_data = (
+            b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00"
+            b"\x00\x01\x08\x02\x00\x00\x00\x90wS\xde\x00\x00\x00\x0cIDATx"
+            b"\x9cc\x00\x01\x00\x00\x05\x00\x01\r\n-\xb4\x00\x00\x00\x00"
+            b"IEND\xaeB`\x82"
+        )
+        return png_data, 200, {"Content-Type": "image/png"}
+
+    @router.get("/test-csv")
+    async def test_csv():
+        return (
+            "name,age,city\nJohn,30,NYC\nJane,25,LA",
+            200,
+            {"Content-Type": "text/csv"},
+        )
+
+    @router.get("/test-xml")
+    async def test_xml():
+        return (
+            "<?xml version='1.0'?><root><item>value</item></root>",
+            200,
+            {"Content-Type": "application/xml"},
+        )
+
+    @router.get("/test-text")
+    async def test_text():
+        return "Hello, World!", 200, {"Content-Type": "text/plain"}
+
+    @router.get("/test-html")
+    async def test_html():
+        return (
+            "<html><body><h1>Test</h1></body></html>",
+            200,
+            {"Content-Type": "text/html"},
+        )
+
+    @router.get("/test-custom-headers")
+    async def test_custom_headers():
+        return (
+            {"message": "test"},
+            200,
+            {"X-Custom-Header": "CustomValue", "X-Request-ID": "12345"},
+        )
+
+    @router.get("/test-pdf")
+    async def test_pdf():
+        pdf_data = (
+            b"%PDF-1.0\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj 2 0 obj<<"
+            b"/Type/Pages/Kids[3 0 R]/Count 1>>endobj 3 0 obj<</Type/Page/MediaBox["
+            b"0 0 612 792]/Parent 2 0 R/Resources<<>>>>endobj\nxref\n0 4\n000000000"
+            b"0 65535 f\n0000000009 00000 n\n0000000052 00000 n\n0000000101 00000 n"
+            b"\ntrailer<</Size 4/Root 1 0 R>>\nstartxref\n178\n%%EOF"
+        )
+        return pdf_data, 200, {"Content-Type": "application/pdf"}
+
+    @router.get("/test-json-none")
+    async def test_json_none():
+        return None
+
     return router.urls
 
 

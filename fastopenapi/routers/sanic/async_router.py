@@ -35,6 +35,30 @@ class SanicRouter(BaseAdapter):
 
     def build_framework_response(self, response_obj: Response):
         """Build Sanic response"""
+        content_type = response_obj.headers.get("Content-Type", "application/json")
+
+        # Binary content
+        if isinstance(response_obj.content, bytes):
+            return response.raw(
+                response_obj.content,
+                status=response_obj.status_code,
+                headers=response_obj.headers,
+                content_type=content_type,
+            )
+
+        # String non-JSON content
+        if isinstance(response_obj.content, str) and content_type not in [
+            "application/json",
+            "text/json",
+        ]:
+            return response.text(
+                response_obj.content,
+                status=response_obj.status_code,
+                headers=response_obj.headers,
+                content_type=content_type,
+            )
+
+        # JSON content
         return response.json(
             response_obj.content,
             status=response_obj.status_code,

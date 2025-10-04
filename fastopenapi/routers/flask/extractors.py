@@ -1,9 +1,7 @@
-import io
 from typing import Any
 
-from fastopenapi.routers.extractors import (
-    BaseRequestDataExtractor,
-)
+from fastopenapi.core.types import FileUpload
+from fastopenapi.routers.extractors import BaseRequestDataExtractor
 
 
 class FlaskRequestDataExtractor(BaseRequestDataExtractor):
@@ -45,36 +43,19 @@ class FlaskRequestDataExtractor(BaseRequestDataExtractor):
         return dict(request.form) if hasattr(request, "form") else {}
 
     @classmethod
-    def _get_files(cls, request: Any) -> dict[str, bytes]:
-        """Extract files from Falcon request (WSGI/sync)."""
-        files: dict[str, bytes] = {}
-
-        content_type = (getattr(request, "content_type", "") or "").lower()
-        if "multipart/form-data" not in content_type:
-            return files
-
-        get_media = getattr(request, "get_media", None)
-        if get_media is None:
-            return files
-
-        form = get_media()
-        for part in form:
-            field_name = getattr(part, "name", None)
-
-            filename = getattr(part, "secure_filename", None) or getattr(
-                part, "filename", None
-            )
-            if not field_name or not filename:
-                continue
-
-            buf = io.BytesIO()
-            stream = part.stream
-            while True:
-                chunk = stream.read(64 * 1024)
-                if not chunk:
-                    break
-                buf.write(chunk)
-
-            files[field_name] = buf.getvalue()
-
+    def _get_files(cls, request: Any) -> dict[str, FileUpload | list[FileUpload]]:
+        """Extract files from Flask request"""
+        files = {}
+        for key in request.files.keys():
+            file_list = request.files.getlist(key)
+            uploads = []
+            for file_storage in file_list:
+                file_upload = FileUpload(
+                    filename=file_storage.filename or "unknown",
+                    content_type=file_storage.content_type,
+                    size=None,
+                    file=file_storage,
+                )
+                uploads.append(file_upload)
+            files[key] = uploads[0] if len(uploads) == 1 else uploads
         return files

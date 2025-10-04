@@ -168,6 +168,7 @@ class TestTornadoRequestDataExtractor:
     async def test_get_files(self):
         """Test files extraction"""
         request = Mock()
+        request.files = {}
 
         result = await TornadoRequestDataExtractor._get_files(request)
 
@@ -191,6 +192,7 @@ class TestTornadoRequestDataExtractor:
         body_args_mock = Mock()
         body_args_mock.items = Mock(return_value=[("form_field", [b"form_value"])])
         request.body_arguments = body_args_mock
+        request.files = {}
 
         env = RequestEnvelope(request=request, path_params=None)
 
@@ -204,3 +206,142 @@ class TestTornadoRequestDataExtractor:
         assert result.body == {"data": "test"}
         assert result.form_data == {"form_field": "form_value"}
         assert result.files == {}
+
+    @pytest.mark.asyncio
+    async def test_get_files_single_file(self):
+        """Test files extraction with single file"""
+        request = Mock()
+        request.files = {
+            "avatar": [
+                {
+                    "filename": "photo.jpg",
+                    "content_type": "image/jpeg",
+                    "body": b"fake image data",
+                }
+            ]
+        }
+
+        result = await TornadoRequestDataExtractor._get_files(request)
+
+        assert "avatar" in result
+        assert not isinstance(result["avatar"], list)
+        assert result["avatar"].filename == "photo.jpg"
+        assert result["avatar"].content_type == "image/jpeg"
+        assert result["avatar"].size == 15
+
+    @pytest.mark.asyncio
+    async def test_get_files_multiple_files_same_key(self):
+        """Test files extraction with multiple files for same key"""
+        request = Mock()
+        request.files = {
+            "docs": [
+                {
+                    "filename": "file1.pdf",
+                    "content_type": "application/pdf",
+                    "body": b"pdf content 1",
+                },
+                {
+                    "filename": "file2.pdf",
+                    "content_type": "application/pdf",
+                    "body": b"pdf content 2",
+                },
+                {
+                    "filename": "file3.pdf",
+                    "content_type": "application/pdf",
+                    "body": b"pdf content 3",
+                },
+            ]
+        }
+
+        result = await TornadoRequestDataExtractor._get_files(request)
+
+        assert "docs" in result
+        assert isinstance(result["docs"], list)
+        assert len(result["docs"]) == 3
+        assert result["docs"][0].filename == "file1.pdf"
+        assert result["docs"][1].filename == "file2.pdf"
+        assert result["docs"][2].filename == "file3.pdf"
+
+    @pytest.mark.asyncio
+    async def test_get_files_no_files_attr(self):
+        """Test files extraction when request has no files attribute"""
+        request = Mock(spec=[])  # Mock without files attribute
+
+        result = await TornadoRequestDataExtractor._get_files(request)
+
+        assert result == {}
+
+    @pytest.mark.asyncio
+    async def test_get_files_empty(self):
+        """Test files extraction when files dict is empty"""
+        request = Mock()
+        request.files = {}
+
+        result = await TornadoRequestDataExtractor._get_files(request)
+
+        assert result == {}
+
+    @pytest.mark.asyncio
+    async def test_get_files_none(self):
+        """Test files extraction when files is None"""
+        request = Mock()
+        request.files = None
+
+        result = await TornadoRequestDataExtractor._get_files(request)
+
+        assert result == {}
+
+    @pytest.mark.asyncio
+    async def test_get_files_missing_filename(self):
+        """Test files extraction when filename is missing (uses default)"""
+        request = Mock()
+        request.files = {
+            "upload": [
+                {
+                    "content_type": "text/plain",
+                    "body": b"content",
+                }
+            ]
+        }
+
+        result = await TornadoRequestDataExtractor._get_files(request)
+
+        assert "upload" in result
+        assert result["upload"].filename == "unknown"
+
+    @pytest.mark.asyncio
+    async def test_get_files_missing_body(self):
+        """Test files extraction when body is missing"""
+        request = Mock()
+        request.files = {
+            "upload": [
+                {
+                    "filename": "test.txt",
+                    "content_type": "text/plain",
+                }
+            ]
+        }
+
+        result = await TornadoRequestDataExtractor._get_files(request)
+
+        assert "upload" in result
+        assert result["upload"].size is None
+        assert result["upload"].file is None
+
+    @pytest.mark.asyncio
+    async def test_get_files_missing_content_type(self):
+        """Test files extraction when content_type is missing"""
+        request = Mock()
+        request.files = {
+            "upload": [
+                {
+                    "filename": "test.txt",
+                    "body": b"content",
+                }
+            ]
+        }
+
+        result = await TornadoRequestDataExtractor._get_files(request)
+
+        assert "upload" in result
+        assert result["upload"].content_type == "application/octet-stream"

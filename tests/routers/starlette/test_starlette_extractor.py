@@ -130,6 +130,8 @@ class TestStarletteRequestDataExtractor:
     async def test_get_files(self):
         """Test files extraction"""
         request = Mock()
+        request.headers = Mock()
+        request.headers.get = Mock(return_value="application/json")
 
         result = await StarletteRequestDataExtractor._get_files(request)
 
@@ -173,3 +175,180 @@ class TestStarletteRequestDataExtractor:
         assert result.body == {"data": "test"}
         assert result.form_data == {"form_field": "form_value"}
         assert result.files == {}
+
+    @pytest.mark.asyncio
+    async def test_get_form_data_skip_files(self):
+        """Test that files are skipped in form data extraction"""
+        request = Mock()
+        headers_mock = Mock()
+        headers_mock.get = Mock(return_value="multipart/form-data; boundary=something")
+        request.headers = headers_mock
+
+        # Mock file with filename attribute
+        mock_file = Mock()
+        mock_file.filename = "photo.jpg"
+
+        form_mock = Mock()
+        form_mock.items = Mock(
+            return_value=[
+                ("username", "john"),
+                ("avatar", mock_file),  # This should be skipped
+                ("email", "john@example.com"),
+            ]
+        )
+        request.form = AsyncMock(return_value=form_mock)
+
+        result = await StarletteRequestDataExtractor._get_form_data(request)
+
+        # Only non-file fields should be present
+        assert result == {"username": "john", "email": "john@example.com"}
+        assert "avatar" not in result
+
+    @pytest.mark.asyncio
+    async def test_get_files_single_file(self):
+        """Test files extraction with single file"""
+        request = Mock()
+        headers_mock = Mock()
+        headers_mock.get = Mock(return_value="multipart/form-data")
+        request.headers = headers_mock
+
+        mock_file = Mock()
+        mock_file.filename = "photo.jpg"
+        mock_file.content_type = "image/jpeg"
+        mock_file.size = 1024
+
+        form_mock = Mock()
+        form_mock.items = Mock(return_value=[("avatar", mock_file)])
+        request.form = AsyncMock(return_value=form_mock)
+
+        result = await StarletteRequestDataExtractor._get_files(request)
+
+        assert "avatar" in result
+        assert not isinstance(result["avatar"], list)
+        assert result["avatar"].filename == "photo.jpg"
+        assert result["avatar"].content_type == "image/jpeg"
+        assert result["avatar"].size == 1024
+
+    @pytest.mark.asyncio
+    async def test_get_files_multiple_files_same_key(self):
+        """Test files extraction with multiple files for same key"""
+        request = Mock()
+        headers_mock = Mock()
+        headers_mock.get = Mock(return_value="multipart/form-data")
+        request.headers = headers_mock
+
+        mock_file1 = Mock()
+        mock_file1.filename = "file1.pdf"
+        mock_file1.content_type = "application/pdf"
+        mock_file1.size = 500
+
+        mock_file2 = Mock()
+        mock_file2.filename = "file2.pdf"
+        mock_file2.content_type = "application/pdf"
+        mock_file2.size = 600
+
+        mock_file3 = Mock()
+        mock_file3.filename = "file3.pdf"
+        mock_file3.content_type = "application/pdf"
+        mock_file3.size = 700
+
+        form_mock = Mock()
+        form_mock.items = Mock(
+            return_value=[
+                ("docs", mock_file1),
+                ("docs", mock_file2),
+                ("docs", mock_file3),
+            ]
+        )
+        request.form = AsyncMock(return_value=form_mock)
+
+        result = await StarletteRequestDataExtractor._get_files(request)
+
+        assert "docs" in result
+        assert isinstance(result["docs"], list)
+        assert len(result["docs"]) == 3
+        assert result["docs"][0].filename == "file1.pdf"
+        assert result["docs"][1].filename == "file2.pdf"
+        assert result["docs"][2].filename == "file3.pdf"
+
+    @pytest.mark.asyncio
+    async def test_get_files_without_size_attr(self):
+        """Test files extraction when file object has no size attribute"""
+        request = Mock()
+        headers_mock = Mock()
+        headers_mock.get = Mock(return_value="multipart/form-data")
+        request.headers = headers_mock
+
+        mock_file = Mock(spec=["filename", "content_type"])  # No size attribute
+        mock_file.filename = "test.txt"
+        mock_file.content_type = "text/plain"
+
+        form_mock = Mock()
+        form_mock.items = Mock(return_value=[("upload", mock_file)])
+        request.form = AsyncMock(return_value=form_mock)
+
+        result = await StarletteRequestDataExtractor._get_files(request)
+
+        assert "upload" in result
+        assert result["upload"].size is None
+
+    @pytest.mark.asyncio
+    async def test_get_files_non_multipart(self):
+        """Test files extraction with non-multipart content type"""
+        request = Mock()
+        headers_mock = Mock()
+        headers_mock.get = Mock(return_value="application/json")
+        request.headers = headers_mock
+
+        result = await StarletteRequestDataExtractor._get_files(request)
+
+        assert result == {}
+
+    @pytest.mark.asyncio
+    async def test_get_files_mixed_form_data(self):
+        """Test files extraction skips non-file form fields"""
+        request = Mock()
+        headers_mock = Mock()
+        headers_mock.get = Mock(return_value="multipart/form-data")
+        request.headers = headers_mock
+
+        mock_file = Mock()
+        mock_file.filename = "document.pdf"
+        mock_file.content_type = "application/pdf"
+        mock_file.size = 2048
+
+        # Mock regular field without filename attribute
+        mock_field = Mock(spec=[])  # No filename attribute
+
+        form_mock = Mock()
+        form_mock.items = Mock(
+            return_value=[
+                ("title", mock_field),
+                ("document", mock_file),
+                ("description", mock_field),
+            ]
+        )
+        request.form = AsyncMock(return_value=form_mock)
+
+        result = await StarletteRequestDataExtractor._get_files(request)
+
+        # Only file should be extracted
+        assert len(result) == 1
+        assert "document" in result
+        assert result["document"].filename == "document.pdf"
+
+    @pytest.mark.asyncio
+    async def test_get_files_empty_form(self):
+        """Test files extraction with empty form"""
+        request = Mock()
+        headers_mock = Mock()
+        headers_mock.get = Mock(return_value="multipart/form-data")
+        request.headers = headers_mock
+
+        form_mock = Mock()
+        form_mock.items = Mock(return_value=[])
+        request.form = AsyncMock(return_value=form_mock)
+
+        result = await StarletteRequestDataExtractor._get_files(request)
+
+        assert result == {}

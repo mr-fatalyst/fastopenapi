@@ -13,7 +13,7 @@
 <p align="center">
   <img src="https://img.shields.io/github/license/mr-fatalyst/fastopenapi">
   <img src="https://github.com/mr-fatalyst/fastopenapi/actions/workflows/master.yml/badge.svg">
-  <img src="https://codecov.io/gh/mr-fatalyst/fastopenapi/branch/master/graph/badge.svg?token=USHR1I0CJB">
+  <img src="https://codecov.io/gh/mr-fatalyst/fastopenapi/branch/master/graph/badge.svg">
   <img src="https://img.shields.io/pypi/v/fastopenapi">
   <img src="https://img.shields.io/pypi/pyversions/fastopenapi">
   <img src="https://static.pepy.tech/badge/fastopenapi" alt="PyPI Downloads">

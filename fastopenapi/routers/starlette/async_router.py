@@ -43,8 +43,34 @@ class StarletteRouter(BaseAdapter):
         env = RequestEnvelope(request=request, path_params=None)
         return await router.handle_request_async(endpoint, env)
 
-    def build_framework_response(self, response: Response) -> JSONResponse:
+    def build_framework_response(
+        self, response: Response
+    ) -> StarletteResponse | JSONResponse:
         """Build Starlette response"""
+        content_type = response.headers.get("Content-Type", "application/json")
+
+        # Binary content
+        if isinstance(response.content, bytes):
+            return StarletteResponse(
+                content=response.content,
+                status_code=response.status_code,
+                headers=response.headers,
+                media_type=content_type,
+            )
+
+        # String non-JSON content
+        if isinstance(response.content, str) and content_type not in [
+            "application/json",
+            "text/json",
+        ]:
+            return StarletteResponse(
+                content=response.content,
+                status_code=response.status_code,
+                headers=response.headers,
+                media_type=content_type,
+            )
+
+        # JSON content
         return JSONResponse(
             response.content, status_code=response.status_code, headers=response.headers
         )

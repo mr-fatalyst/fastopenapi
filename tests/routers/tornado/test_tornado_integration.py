@@ -134,6 +134,75 @@ class TestTornadoIntegration(AsyncHTTPTestCase):
                     return None
             raise HTTPError(status_code=404, log_message="Not Found")
 
+        @router.get("/test-binary")
+        async def test_binary():
+            return (
+                b"\x00\x01\x02\x03\x04",
+                200,
+                {"Content-Type": "application/octet-stream"},
+            )
+
+        @router.get("/test-image")
+        async def test_image():
+            png_data = (
+                b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00"
+                b"\x00\x01\x08\x02\x00\x00\x00\x90wS\xde\x00\x00\x00\x0cIDATx"
+                b"\x9cc\x00\x01\x00\x00\x05\x00\x01\r\n-\xb4\x00\x00\x00\x00"
+                b"IEND\xaeB`\x82"
+            )
+            return (png_data, 200, {"Content-Type": "image/png"})
+
+        @router.get("/test-csv")
+        async def test_csv():
+            return (
+                "name,age,city\nJohn,30,NYC\nJane,25,LA",
+                200,
+                {"Content-Type": "text/csv"},
+            )
+
+        @router.get("/test-xml")
+        async def test_xml():
+            return (
+                "<?xml version='1.0'?><root><item>value</item></root>",
+                200,
+                {"Content-Type": "application/xml"},
+            )
+
+        @router.get("/test-text")
+        async def test_text():
+            return ("Hello, World!", 200, {"Content-Type": "text/plain"})
+
+        @router.get("/test-html")
+        async def test_html():
+            return (
+                "<html><body><h1>Test</h1></body></html>",
+                200,
+                {"Content-Type": "text/html"},
+            )
+
+        @router.get("/test-custom-headers")
+        async def test_custom_headers():
+            return (
+                {"message": "test"},
+                200,
+                {"X-Custom-Header": "CustomValue", "X-Request-ID": "12345"},
+            )
+
+        @router.get("/test-pdf")
+        async def test_pdf():
+            pdf_data = (
+                b"%PDF-1.0\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj 2 0 obj<<"
+                b"/Type/Pages/Kids[3 0 R]/Count 1>>endobj 3 0 obj<</Type/Page/MediaBox["
+                b"0 0 612 792]/Parent 2 0 R/Resources<<>>>>endobj\nxref\n0 4\n000000000"
+                b"0 65535 f\n0000000009 00000 n\n0000000052 00000 n\n0000000101 00000 n"
+                b"\ntrailer<</Size 4/Root 1 0 R>>\nstartxref\n178\n%%EOF"
+            )
+            return (pdf_data, 200, {"Content-Type": "application/pdf"})
+
+        @router.delete("/test-no-content", status_code=204)
+        async def test_no_content():
+            return None
+
         return app
 
     def parse_json(self, response):
@@ -383,3 +452,85 @@ class TestTornadoIntegration(AsyncHTTPTestCase):
         self.assertEqual(data["received_param1"], "first_value")
         self.assertTrue(isinstance(data["received_param2"], list))
         self.assertEqual(data["received_param2"], ["value1", "value2"])
+
+    @gen_test
+    async def test_binary_response(self):
+        """Test binary content response"""
+        response = await self.http_client.fetch(self.get_url("/test-binary"))
+        self.assertEqual(response.code, 200)
+        self.assertEqual(response.headers["Content-Type"], "application/octet-stream")
+        self.assertIsInstance(response.body, bytes)
+        self.assertEqual(response.body, b"\x00\x01\x02\x03\x04")
+
+    @gen_test
+    async def test_image_response(self):
+        """Test image binary response"""
+        response = await self.http_client.fetch(self.get_url("/test-image"))
+        self.assertEqual(response.code, 200)
+        self.assertEqual(response.headers["Content-Type"], "image/png")
+        self.assertIsInstance(response.body, bytes)
+
+    @gen_test
+    async def test_csv_response(self):
+        """Test CSV text response"""
+        response = await self.http_client.fetch(self.get_url("/test-csv"))
+        self.assertEqual(response.code, 200)
+        self.assertIn("text/csv", response.headers["Content-Type"])
+        text = response.body.decode("utf-8")
+        self.assertIn("name,age,city", text)
+        self.assertIn("John,30,NYC", text)
+
+    @gen_test
+    async def test_xml_response(self):
+        """Test XML text response"""
+        response = await self.http_client.fetch(self.get_url("/test-xml"))
+        self.assertEqual(response.code, 200)
+        self.assertIn("application/xml", response.headers["Content-Type"])
+        text = response.body.decode("utf-8")
+        self.assertIn("<root>", text)
+        self.assertIn("<item>value</item>", text)
+
+    @gen_test
+    async def test_plain_text_response(self):
+        """Test plain text response"""
+        response = await self.http_client.fetch(self.get_url("/test-text"))
+        self.assertEqual(response.code, 200)
+        self.assertIn("text/plain", response.headers["Content-Type"])
+        text = response.body.decode("utf-8")
+        self.assertEqual(text, "Hello, World!")
+
+    @gen_test
+    async def test_html_response(self):
+        """Test HTML text response"""
+        response = await self.http_client.fetch(self.get_url("/test-html"))
+        self.assertEqual(response.code, 200)
+        self.assertIn("text/html", response.headers["Content-Type"])
+        text = response.body.decode("utf-8")
+        self.assertIn("<html>", text)
+        self.assertIn("<body>", text)
+
+    @gen_test
+    async def test_custom_headers_in_response(self):
+        """Test custom headers are preserved"""
+        response = await self.http_client.fetch(self.get_url("/test-custom-headers"))
+        self.assertEqual(response.code, 200)
+        self.assertEqual(response.headers["X-Custom-Header"], "CustomValue")
+        self.assertEqual(response.headers["X-Request-Id"], "12345")
+
+    @gen_test
+    async def test_pdf_response(self):
+        """Test PDF binary response"""
+        response = await self.http_client.fetch(self.get_url("/test-pdf"))
+        self.assertEqual(response.code, 200)
+        self.assertEqual(response.headers["Content-Type"], "application/pdf")
+        self.assertIsInstance(response.body, bytes)
+        self.assertTrue(response.body.startswith(b"%PDF"))
+
+    @gen_test
+    async def test_no_content_204(self):
+        """Test 204 No Content response has no body"""
+        response = await self.http_client.fetch(
+            self.get_url("/test-no-content"), method="DELETE"
+        )
+        self.assertEqual(response.code, 204)
+        self.assertEqual(len(response.body), 0)

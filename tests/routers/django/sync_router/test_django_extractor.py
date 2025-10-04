@@ -131,6 +131,8 @@ class TestDjangoRequestDataExtractor:
     def test_get_files(self):
         """Test files extraction"""
         request = Mock()
+        request.FILES = Mock()
+        request.FILES.keys = Mock(return_value=[])
 
         result = DjangoRequestDataExtractor._get_files(request)
 
@@ -149,6 +151,8 @@ class TestDjangoRequestDataExtractor:
         request.POST = Mock()
         request.POST.keys = Mock(return_value=["form_field"])
         request.POST.getlist = Mock(return_value=["form_value"])
+        request.FILES = Mock()
+        request.FILES.keys = Mock(return_value=[])
 
         env = RequestEnvelope(request=request, path_params=None)
 
@@ -162,3 +166,120 @@ class TestDjangoRequestDataExtractor:
         assert result.body == {"data": "test"}
         assert result.form_data == {"form_field": "form_value"}
         assert result.files == {}
+
+    def test_get_files_single_file(self):
+        """Test files extraction with single file"""
+        request = Mock()
+
+        mock_file = Mock()
+        mock_file.name = "photo.jpg"
+        mock_file.content_type = "image/jpeg"
+        mock_file.size = 1024
+
+        files_mock = Mock()
+        files_mock.keys = Mock(return_value=["avatar"])
+        files_mock.getlist = Mock(return_value=[mock_file])
+        request.FILES = files_mock
+
+        result = DjangoRequestDataExtractor._get_files(request)
+
+        assert "avatar" in result
+        assert not isinstance(result["avatar"], list)
+        assert result["avatar"].filename == "photo.jpg"
+        assert result["avatar"].content_type == "image/jpeg"
+        assert result["avatar"].size == 1024
+
+    def test_get_files_multiple_files_same_key(self):
+        """Test files extraction with multiple files for same key"""
+        request = Mock()
+
+        mock_files = []
+        for i in range(1, 4):
+            mock_file = Mock()
+            mock_file.name = f"file{i}.pdf"
+            mock_file.content_type = "application/pdf"
+            mock_file.size = 500 * i
+            mock_files.append(mock_file)
+
+        files_mock = Mock()
+        files_mock.keys = Mock(return_value=["docs"])
+        files_mock.getlist = Mock(return_value=mock_files)
+        request.FILES = files_mock
+
+        result = DjangoRequestDataExtractor._get_files(request)
+
+        assert "docs" in result
+        assert isinstance(result["docs"], list)
+        assert len(result["docs"]) == 3
+        assert result["docs"][0].filename == "file1.pdf"
+        assert result["docs"][1].filename == "file2.pdf"
+        assert result["docs"][2].filename == "file3.pdf"
+
+    def test_get_files_no_files_attr(self):
+        """Test files extraction when request has no FILES attribute"""
+        request = Mock(spec=[])  # Mock without FILES attribute
+
+        result = DjangoRequestDataExtractor._get_files(request)
+
+        assert result == {}
+
+    def test_get_files_empty_files(self):
+        """Test files extraction with empty FILES"""
+        request = Mock()
+        files_mock = Mock()
+        files_mock.keys = Mock(return_value=[])
+        request.FILES = files_mock
+
+        result = DjangoRequestDataExtractor._get_files(request)
+
+        assert result == {}
+
+    def test_get_files_multiple_keys(self):
+        """Test files extraction with multiple different keys"""
+        request = Mock()
+
+        mock_avatar = Mock()
+        mock_avatar.name = "avatar.jpg"
+        mock_avatar.content_type = "image/jpeg"
+        mock_avatar.size = 2048
+
+        mock_doc = Mock()
+        mock_doc.name = "document.pdf"
+        mock_doc.content_type = "application/pdf"
+        mock_doc.size = 5120
+
+        files_mock = Mock()
+        files_mock.keys = Mock(return_value=["avatar", "document"])
+        files_mock.getlist = Mock(
+            side_effect=lambda k: [mock_avatar] if k == "avatar" else [mock_doc]
+        )
+        request.FILES = files_mock
+
+        result = DjangoRequestDataExtractor._get_files(request)
+
+        assert len(result) == 2
+        assert "avatar" in result
+        assert "document" in result
+        assert result["avatar"].filename == "avatar.jpg"
+        assert result["document"].filename == "document.pdf"
+
+    def test_get_query_params_empty(self):
+        """Test query parameters with empty GET"""
+        request = Mock()
+        request.GET = Mock()
+        request.GET.keys = Mock(return_value=[])
+
+        result = DjangoRequestDataExtractor._get_query_params(request)
+
+        assert result == {}
+
+    def test_get_form_data_multiple_values(self):
+        """Test form data with multiple values for same key"""
+        request = Mock()
+        request.POST = Mock()
+        request.POST.keys = Mock(return_value=["tags"])
+        request.POST.getlist = Mock(return_value=["tag1", "tag2", "tag3"])
+
+        result = DjangoRequestDataExtractor._get_form_data(request)
+
+        assert result == {"tags": ["tag1", "tag2", "tag3"]}

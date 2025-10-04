@@ -160,3 +160,79 @@ class TestAioHttpIntegration:
         assert data["received_param1"] == "first_value"
         assert isinstance(data["received_param2"], list)
         assert data["received_param2"] == ["value1", "value2"]
+
+    @pytest.mark.asyncio
+    async def test_binary_response(self, client):
+        """Test binary content response"""
+        resp = await client.get("/test-binary")
+        assert resp.status == 200
+        assert resp.headers["Content-Type"] == "application/octet-stream"
+        content = await resp.read()
+        assert isinstance(content, bytes)
+        assert content == b"\x00\x01\x02\x03\x04"
+
+    @pytest.mark.asyncio
+    async def test_image_response(self, client):
+        """Test image binary response"""
+        resp = await client.get("/test-image")
+        assert resp.status == 200
+        assert resp.headers["Content-Type"] == "image/png"
+        content = await resp.read()
+        assert isinstance(content, bytes)
+
+    @pytest.mark.asyncio
+    async def test_csv_response(self, client):
+        """Test CSV text response"""
+        resp = await client.get("/test-csv")
+        assert resp.status == 200
+        assert "text/csv" in resp.headers["Content-Type"]
+        text = await resp.text()
+        assert "name,age,city" in text
+        assert "John,30,NYC" in text
+
+    @pytest.mark.asyncio
+    async def test_xml_response(self, client):
+        """Test XML text response"""
+        resp = await client.get("/test-xml")
+        assert resp.status == 200
+        assert "application/xml" in resp.headers["Content-Type"]
+        text = await resp.text()
+        assert "<root>" in text
+        assert "<item>value</item>" in text
+
+    @pytest.mark.asyncio
+    async def test_plain_text_response(self, client):
+        """Test plain text response"""
+        resp = await client.get("/test-text")
+        assert resp.status == 200
+        assert "text/plain" in resp.headers["Content-Type"]
+        text = await resp.text()
+        assert text == "Hello, World!"
+
+    @pytest.mark.asyncio
+    async def test_html_response(self, client):
+        """Test HTML text response"""
+        resp = await client.get("/test-html")
+        assert resp.status == 200
+        assert "text/html" in resp.headers["Content-Type"]
+        text = await resp.text()
+        assert "<html>" in text
+        assert "<body>" in text
+
+    @pytest.mark.asyncio
+    async def test_custom_headers_in_response(self, client):
+        """Test custom headers are preserved"""
+        resp = await client.get("/test-custom-headers")
+        assert resp.status == 200
+        assert resp.headers["X-Custom-Header"] == "CustomValue"
+        assert resp.headers["X-Request-ID"] == "12345"
+
+    @pytest.mark.asyncio
+    async def test_pdf_response(self, client):
+        """Test PDF binary response"""
+        resp = await client.get("/test-pdf")
+        assert resp.status == 200
+        assert resp.headers["Content-Type"] == "application/pdf"
+        content = await resp.read()
+        assert isinstance(content, bytes)
+        assert content.startswith(b"%PDF")

@@ -67,6 +67,7 @@ class TestFalconAsyncRequestDataExtractor:
         """Test async files calls sync method"""
         request = Mock()
         request.files = {}
+        request.content_type = "application/json"
 
         result = await FalconAsyncRequestDataExtractor._get_files(request)
 

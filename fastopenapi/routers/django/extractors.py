@@ -2,6 +2,7 @@ from typing import Any
 
 from pydantic_core import from_json
 
+from fastopenapi.core.types import FileUpload
 from fastopenapi.routers.extractors import (
     BaseAsyncRequestDataExtractor,
     BaseRequestDataExtractor,
@@ -54,9 +55,23 @@ class DjangoRequestDataExtractor(BaseRequestDataExtractor):
         return {}
 
     @classmethod
-    def _get_files(cls, request: Any) -> dict:
-        """Extract files"""
-        return {}
+    def _get_files(cls, request: Any) -> dict[str, FileUpload | list[FileUpload]]:
+        """Extract files from Django request"""
+        files = {}
+        if hasattr(request, "FILES"):
+            for key in request.FILES.keys():
+                file_list = request.FILES.getlist(key)
+                uploads = []
+                for uploaded_file in file_list:
+                    file_upload = FileUpload(
+                        filename=uploaded_file.name,
+                        content_type=uploaded_file.content_type,
+                        size=uploaded_file.size,
+                        file=uploaded_file,
+                    )
+                    uploads.append(file_upload)
+                files[key] = uploads[0] if len(uploads) == 1 else uploads
+        return files
 
 
 class DjangoAsyncRequestDataExtractor(
@@ -74,6 +89,6 @@ class DjangoAsyncRequestDataExtractor(
         return super()._get_form_data(request)
 
     @classmethod
-    async def _get_files(cls, request: Any) -> dict:
+    async def _get_files(cls, request: Any) -> dict[str, FileUpload | list[FileUpload]]:
         """Extract files"""
         return super()._get_files(request)

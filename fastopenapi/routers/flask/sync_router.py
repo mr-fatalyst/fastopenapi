@@ -2,7 +2,7 @@ import inspect
 from collections.abc import Callable
 
 from flask import Response as FlaskResponse
-from flask import jsonify, request
+from flask import jsonify, make_response, request
 
 from fastopenapi.core.types import Response
 from fastopenapi.openapi.ui import render_redoc_ui, render_swagger_ui
@@ -43,8 +43,23 @@ class FlaskRouter(BaseAdapter):
 
     def build_framework_response(self, response: Response) -> FlaskResponse:
         """Build Flask response"""
-        flask_response = jsonify(response.content)
-        flask_response.status_code = response.status_code
+        content_type = response.headers.get("Content-Type", "application/json")
+
+        # Binary content
+        if isinstance(response.content, bytes):
+            flask_response = make_response(response.content)
+            flask_response.status_code = response.status_code
+        # String non-JSON content
+        elif isinstance(response.content, str) and content_type not in [
+            "application/json",
+            "text/json",
+        ]:
+            flask_response = make_response(response.content)
+            flask_response.status_code = response.status_code
+        # JSON content
+        else:
+            flask_response = jsonify(response.content)
+            flask_response.status_code = response.status_code
 
         for key, value in response.headers.items():
             flask_response.headers[key] = value

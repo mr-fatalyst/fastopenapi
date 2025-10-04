@@ -35,6 +35,8 @@ class TestDjangoAsyncRequestDataExtractor:
     async def test_get_files_calls_sync_method(self):
         """Test async files extraction calls sync method"""
         request = Mock()
+        request.FILES = Mock()
+        request.FILES.keys = Mock(return_value=[])
 
         result = await DjangoAsyncRequestDataExtractor._get_files(request)
 
@@ -54,6 +56,8 @@ class TestDjangoAsyncRequestDataExtractor:
         request.POST = Mock()
         request.POST.keys = Mock(return_value=["form_field"])
         request.POST.getlist = Mock(return_value=["form_value"])
+        request.FILES = Mock()
+        request.FILES.keys = Mock(return_value=[])
 
         env = RequestEnvelope(request=request, path_params=None)
 

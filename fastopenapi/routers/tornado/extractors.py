@@ -2,6 +2,7 @@ from typing import Any
 
 from pydantic_core import from_json
 
+from fastopenapi.core.types import FileUpload
 from fastopenapi.routers.extractors import BaseAsyncRequestDataExtractor
 
 
@@ -55,6 +56,23 @@ class TornadoRequestDataExtractor(BaseAsyncRequestDataExtractor):
         return form_data
 
     @classmethod
-    async def _get_files(cls, request: Any) -> dict[str, bytes]:
-        """Extract files from Quart request"""
-        return {}
+    async def _get_files(cls, request: Any) -> dict[str, FileUpload | list[FileUpload]]:
+        """Extract files from Tornado request"""
+        files = {}
+        if hasattr(request, "files") and request.files:
+            for key, file_list in request.files.items():
+                uploads = []
+                for tornado_file in file_list:
+                    file_upload = FileUpload(
+                        filename=tornado_file.get("filename", "unknown"),
+                        content_type=tornado_file.get("content_type"),
+                        size=(
+                            len(tornado_file["body"])
+                            if "body" in tornado_file
+                            else None
+                        ),
+                        file=tornado_file.get("body"),
+                    )
+                    uploads.append(file_upload)
+                files[key] = uploads[0] if len(uploads) == 1 else uploads
+        return files

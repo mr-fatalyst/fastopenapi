@@ -4,6 +4,6 @@ from fastopenapi.core.params import (
     Header,
 )
 from fastopenapi.core.router import BaseRouter
-from fastopenapi.core.types import Response
+from fastopenapi.core.types import FileUpload, Response
 
-__all__ = ["BaseRouter", "Header", "Cookie", "Form", "Response"]
+__all__ = ["BaseRouter", "Header", "Cookie", "Form", "Response", "FileUpload"]

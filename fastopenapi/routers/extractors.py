@@ -3,7 +3,7 @@ from typing import Any
 
 from pydantic_core import from_json
 
-from fastopenapi.core.types import RequestData
+from fastopenapi.core.types import FileUpload, RequestData
 from fastopenapi.routers.common import RequestEnvelope
 
 
@@ -42,7 +42,7 @@ class BaseRequestDataExtractor(ABC):
 
     @classmethod
     @abstractmethod
-    def _get_files(cls, request: Any) -> dict:
+    def _get_files(cls, request: Any) -> dict[str, FileUpload | list[FileUpload]]:
         """Extract files"""
 
     @staticmethod
@@ -97,7 +97,7 @@ class BaseAsyncRequestDataExtractor(BaseRequestDataExtractor, ABC):
 
     @classmethod
     @abstractmethod
-    async def _get_files(cls, request: Any) -> dict:
+    async def _get_files(cls, request: Any) -> dict[str, FileUpload | list[FileUpload]]:
         """Extract files"""
 
     @classmethod

@@ -1,6 +1,9 @@
-from unittest.mock import AsyncMock, Mock
+import json
+from io import BytesIO
+from unittest.mock import Mock
 
 import pytest
+from quart import Quart, request
 
 from fastopenapi.core.types import RequestData
 from fastopenapi.routers.common import RequestEnvelope
@@ -9,174 +12,304 @@ from fastopenapi.routers.quart.extractors import QuartRequestDataExtractor
 
 class TestQuartRequestDataExtractor:
 
-    def test_get_path_params(self):
+    @staticmethod
+    def create_app():
+        """Helper to create Quart app for testing"""
+        return Quart(__name__)
+
+    @pytest.mark.asyncio
+    async def test_get_path_params(self):
         """Test path parameters extraction"""
-        request = Mock()
-        request.path_params = {"id": "123", "slug": "test"}
+        app = self.create_app()
 
-        result = QuartRequestDataExtractor._get_path_params(request)
+        async with app.test_request_context("/users/123/posts/test"):
+            request.path_params = {"id": "123", "slug": "test"}
 
-        assert result == {"id": "123", "slug": "test"}
+            result = QuartRequestDataExtractor._get_path_params(request)
 
-    def test_get_path_params_missing(self):
+            assert result == {"id": "123", "slug": "test"}
+
+    @pytest.mark.asyncio
+    async def test_get_path_params_missing(self):
         """Test missing path parameters"""
-        request = Mock(spec=[])
+        app = self.create_app()
 
-        result = QuartRequestDataExtractor._get_path_params(request)
+        async with app.test_request_context("/"):
+            result = QuartRequestDataExtractor._get_path_params(request)
 
-        assert result == {}
+            assert result == {}
 
-    def test_get_query_params_single_values(self):
+    @pytest.mark.asyncio
+    async def test_get_query_params_single_values(self):
         """Test query parameters with single values"""
-        request = Mock()
-        request.args = Mock()
-        request.args.__iter__ = Mock(return_value=iter(["param1", "param2"]))
-        request.args.getlist = Mock(
-            side_effect=lambda k: ["value1"] if k == "param1" else ["value2"]
-        )
+        app = self.create_app()
 
-        result = QuartRequestDataExtractor._get_query_params(request)
+        async with app.test_request_context("/?param1=value1&param2=value2"):
+            result = QuartRequestDataExtractor._get_query_params(request)
 
-        assert result == {"param1": "value1", "param2": "value2"}
+            assert result == {"param1": "value1", "param2": "value2"}
 
-    def test_get_query_params_multiple_values(self):
+    @pytest.mark.asyncio
+    async def test_get_query_params_multiple_values(self):
         """Test query parameters with multiple values"""
-        request = Mock()
-        request.args = Mock()
-        request.args.__iter__ = Mock(return_value=iter(["tags"]))
-        request.args.getlist = Mock(return_value=["tag1", "tag2"])
+        app = self.create_app()
 
-        result = QuartRequestDataExtractor._get_query_params(request)
+        async with app.test_request_context("/?tags=tag1&tags=tag2"):
+            result = QuartRequestDataExtractor._get_query_params(request)
 
-        assert result == {"tags": ["tag1", "tag2"]}
+            assert result == {"tags": ["tag1", "tag2"]}
 
-    def test_get_headers(self):
+    @pytest.mark.asyncio
+    async def test_get_headers(self):
         """Test headers extraction"""
-        request = Mock()
-        request.headers = {
-            "Content-Type": "application/json",
-            "Authorization": "Bearer token",
-        }
+        app = self.create_app()
 
-        result = QuartRequestDataExtractor._get_headers(request)
+        async with app.test_request_context(
+            "/",
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": "Bearer token",
+            },
+        ):
+            result = QuartRequestDataExtractor._get_headers(request)
 
-        assert result == {
-            "Content-Type": "application/json",
-            "Authorization": "Bearer token",
-        }
+            assert result["Content-Type"] == "application/json"
+            assert result["Authorization"] == "Bearer token"
 
-    def test_get_cookies(self):
+    @pytest.mark.asyncio
+    async def test_get_cookies(self):
         """Test cookies extraction"""
-        request = Mock()
-        request.cookies = {"session": "abc123", "csrf": "token456"}
+        app = self.create_app()
 
-        result = QuartRequestDataExtractor._get_cookies(request)
+        async with app.test_request_context(
+            "/", headers={"Cookie": "session=abc123; csrf=token456"}
+        ):
+            result = QuartRequestDataExtractor._get_cookies(request)
 
-        assert result == {"session": "abc123", "csrf": "token456"}
+            assert result == {"session": "abc123", "csrf": "token456"}
 
     @pytest.mark.asyncio
     async def test_get_body_json(self):
         """Test JSON body extraction"""
-        request = Mock()
-        request.mimetype = "application/json"
-        request.get_json = AsyncMock(return_value={"key": "value"})
+        app = self.create_app()
 
-        result = await QuartRequestDataExtractor._get_body(request)
+        body_data = {"key": "value"}
+        async with app.test_request_context(
+            "/",
+            method="POST",
+            data=json.dumps(body_data),
+            headers={"Content-Type": "application/json"},
+        ):
+            result = await QuartRequestDataExtractor._get_body(request)
 
-        assert result == {"key": "value"}
-        request.get_json.assert_called_once_with(silent=True)
+            assert result == {"key": "value"}
 
     @pytest.mark.asyncio
     async def test_get_body_json_none(self):
         """Test JSON body returning None"""
-        request = Mock()
-        request.mimetype = "application/json"
-        request.get_json = AsyncMock(return_value=None)
+        app = self.create_app()
 
-        result = await QuartRequestDataExtractor._get_body(request)
+        async with app.test_request_context(
+            "/", method="POST", data="", headers={"Content-Type": "application/json"}
+        ):
+            result = await QuartRequestDataExtractor._get_body(request)
 
-        assert result == {}
+            assert result == {}
 
     @pytest.mark.asyncio
     async def test_get_body_non_json(self):
         """Test non-JSON body"""
-        request = Mock()
-        request.mimetype = "text/plain"
+        app = self.create_app()
 
-        result = await QuartRequestDataExtractor._get_body(request)
+        async with app.test_request_context(
+            "/",
+            method="POST",
+            data="plain text",
+            headers={"Content-Type": "text/plain"},
+        ):
+            result = await QuartRequestDataExtractor._get_body(request)
 
-        assert result == {}
+            assert result == {}
 
     @pytest.mark.asyncio
     async def test_get_body_no_mimetype(self):
         """Test body with no mimetype"""
-        request = Mock()
-        request.mimetype = None
+        app = self.create_app()
 
-        result = await QuartRequestDataExtractor._get_body(request)
+        async with app.test_request_context("/", method="POST"):
+            result = await QuartRequestDataExtractor._get_body(request)
 
-        assert result == {}
+            assert result == {}
 
     @pytest.mark.asyncio
     async def test_get_form_data(self):
         """Test form data extraction"""
-        request = Mock()
+        app = self.create_app()
 
-        form_mock = Mock()
-        form_mock.__iter__ = Mock(return_value=iter(["field1", "field2"]))
-        form_mock.__getitem__ = Mock(
-            side_effect=lambda k: "value1" if k == "field1" else "value2"
-        )
+        async with app.test_request_context(
+            "/",
+            method="POST",
+            form={"field1": "value1", "field2": "value2"},
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+        ):
+            result = await QuartRequestDataExtractor._get_form_data(request)
 
-        async def mock_form():
-            return form_mock
-
-        request.form = mock_form()
-
-        result = await QuartRequestDataExtractor._get_form_data(request)
-
-        assert result == {"field1": "value1", "field2": "value2"}
+            assert result == {"field1": "value1", "field2": "value2"}
 
     @pytest.mark.asyncio
     async def test_get_files(self):
         """Test files extraction"""
-        request = Mock()
+        app = self.create_app()
 
-        result = await QuartRequestDataExtractor._get_files(request)
+        async with app.test_request_context(
+            "/",
+            method="POST",
+            form={"upload": (BytesIO(b"file content"), "test.txt")},
+            headers={"Content-Type": "multipart/form-data"},
+        ):
+            result = await QuartRequestDataExtractor._get_files(request)
 
-        assert result == {}
+            assert isinstance(result, dict)
 
     @pytest.mark.asyncio
     async def test_extract_request_data_full(self):
         """Test full request data extraction"""
+        app = self.create_app()
+
+        body_data = {"data": "test"}
+        async with app.test_request_context(
+            "/?param=value",
+            method="POST",
+            data=json.dumps(body_data),
+            headers={"Content-Type": "application/json", "Cookie": "session=abc"},
+        ):
+            request.path_params = {"id": "123"}
+
+            env = RequestEnvelope(request=request, path_params=None)
+
+            result = await QuartRequestDataExtractor.extract_request_data(env)
+
+            assert isinstance(result, RequestData)
+            assert result.path_params == {"id": "123"}
+            assert result.query_params == {"param": "value"}
+            assert "content-type" in result.headers or "Content-Type" in result.headers
+            assert result.cookies == {"session": "abc"}
+            assert result.body == {"data": "test"}
+
+    @pytest.mark.asyncio
+    async def test_get_files_attribute_error(self):
+        """Test files extraction when request.files raises AttributeError"""
+        app = self.create_app()
+
+        async with app.test_request_context("/"):
+
+            original_files = request.files
+            delattr(request.__class__, "files")
+
+            try:
+                result = await QuartRequestDataExtractor._get_files(request)
+                assert result == {}
+            finally:
+                request.__class__.files = original_files
+
+    @pytest.mark.asyncio
+    async def test_get_files_runtime_error(self):
+        """Test files extraction when request.files raises RuntimeError"""
+        app = self.create_app()
+
+        async with app.test_request_context("/"):
+
+            def raise_runtime_error():
+                raise RuntimeError("Async context error")
+
+            type(request).files = property(lambda self: raise_runtime_error())
+
+            result = await QuartRequestDataExtractor._get_files(request)
+
+            assert result == {}
+
+    @pytest.mark.asyncio
+    async def test_get_files_single_file(self):
+        """Test extraction of single file"""
+        mock_file = Mock()
+        mock_file.filename = "test.txt"
+        mock_file.content_type = "text/plain"
+
+        mock_storage = Mock()
+        mock_storage.keys = Mock(return_value=["upload"])
+        mock_storage.getlist = Mock(return_value=[mock_file])
+
         request = Mock()
-        request.path_params = {"id": "123"}
-        request.args = Mock()
-        request.args.__iter__ = Mock(return_value=iter(["param"]))
-        request.args.getlist = Mock(return_value=["value"])
-        request.headers = {"Content-Type": "application/json"}
-        request.cookies = {"session": "abc"}
-        request.mimetype = "application/json"
-        request.get_json = AsyncMock(return_value={"data": "test"})
 
-        form_mock = Mock()
-        form_mock.__iter__ = Mock(return_value=iter(["form_field"]))
-        form_mock.__getitem__ = Mock(return_value="form_value")
+        async def mock_files_coroutine():
+            return mock_storage
 
-        async def mock_form():
-            return form_mock
+        request.files = mock_files_coroutine()
 
-        request.form = mock_form()
+        result = await QuartRequestDataExtractor._get_files(request)
 
-        env = RequestEnvelope(request=request, path_params=None)
+        assert "upload" in result
+        assert not isinstance(result["upload"], list)
+        assert result["upload"].filename == "test.txt"
 
-        result = await QuartRequestDataExtractor.extract_request_data(env)
+    @pytest.mark.asyncio
+    async def test_get_files_multiple_same_name(self):
+        """Test extraction of multiple files with same field name"""
+        from unittest.mock import Mock
 
-        assert isinstance(result, RequestData)
-        assert result.path_params == {"id": "123"}
-        assert result.query_params == {"param": "value"}
-        assert result.headers == {"content-type": "application/json"}
-        assert result.cookies == {"session": "abc"}
-        assert result.body == {"data": "test"}
-        assert result.form_data == {"form_field": "form_value"}
-        assert result.files == {}
+        mock_file1 = Mock()
+        mock_file1.filename = "file1.txt"
+        mock_file1.content_type = "text/plain"
+
+        mock_file2 = Mock()
+        mock_file2.filename = "file2.txt"
+        mock_file2.content_type = "text/plain"
+
+        mock_file3 = Mock()
+        mock_file3.filename = "file3.txt"
+        mock_file3.content_type = "text/plain"
+
+        mock_storage = Mock()
+        mock_storage.keys = Mock(return_value=["uploads"])
+        mock_storage.getlist = Mock(return_value=[mock_file1, mock_file2, mock_file3])
+
+        request = Mock()
+
+        async def mock_files_coroutine():
+            return mock_storage
+
+        request.files = mock_files_coroutine()
+
+        result = await QuartRequestDataExtractor._get_files(request)
+
+        assert "uploads" in result
+        assert isinstance(result["uploads"], list)
+        assert len(result["uploads"]) == 3
+        assert result["uploads"][0].filename == "file1.txt"
+        assert result["uploads"][1].filename == "file2.txt"
+        assert result["uploads"][2].filename == "file3.txt"
+
+    @pytest.mark.asyncio
+    async def test_get_files_filename_unknown(self):
+        """Test file upload without filename defaults to 'unknown'"""
+        from unittest.mock import Mock
+
+        mock_file = Mock()
+        mock_file.filename = None
+        mock_file.content_type = "application/octet-stream"
+
+        mock_storage = Mock()
+        mock_storage.keys = Mock(return_value=["file"])
+        mock_storage.getlist = Mock(return_value=[mock_file])
+
+        request = Mock()
+
+        async def mock_files_coroutine():
+            return mock_storage
+
+        request.files = mock_files_coroutine()
+
+        result = await QuartRequestDataExtractor._get_files(request)
+
+        assert "file" in result
+        assert result["file"].filename == "unknown"

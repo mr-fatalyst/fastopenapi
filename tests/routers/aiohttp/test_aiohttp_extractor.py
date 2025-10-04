@@ -146,10 +146,12 @@ class TestAioHttpRequestDataExtractor:
 
         part1 = Mock()
         part1.name = "field1"
+        part1.filename = None
         part1.text = AsyncMock(return_value="value1")
 
         part2 = Mock()
         part2.name = "field2"
+        part2.filename = None
         part2.text = AsyncMock(return_value="value2")
 
         async def mock_multipart_reader():
@@ -165,12 +167,81 @@ class TestAioHttpRequestDataExtractor:
     @pytest.mark.asyncio
     async def test_get_form_data_non_multipart(self):
         """Test non-multipart form data"""
-        request = Mock()
+        request = AsyncMock(return_value=Mock())
         request.content_type = "application/x-www-form-urlencoded"
 
         result = await AioHttpRequestDataExtractor._get_form_data(request)
 
         assert result == {}
+
+    @pytest.mark.asyncio
+    async def test_get_form_data_urlencoded_with_getall(self):
+        """Test form data extraction with getall method"""
+        request = Mock()
+        request.content_type = "application/x-www-form-urlencoded"
+
+        post_data = Mock()
+        post_data.__iter__ = Mock(return_value=iter(["field1", "field2", "tags"]))
+        post_data.getall = Mock(
+            side_effect=lambda k: (
+                ["value1"]
+                if k == "field1"
+                else ["value2"] if k == "field2" else ["tag1", "tag2"]
+            )
+        )
+
+        request.post = AsyncMock(return_value=post_data)
+
+        result = await AioHttpRequestDataExtractor._get_form_data(request)
+
+        assert result == {
+            "field1": "value1",
+            "field2": "value2",
+            "tags": ["tag1", "tag2"],
+        }
+
+    @pytest.mark.asyncio
+    async def test_get_files_multiple_files_same_name(self):
+        """Test extraction of multiple files with the same field name"""
+        request = Mock()
+        request.content_type = "multipart/form-data"
+
+        async def create_multipart_reader():
+            file_part1 = Mock()
+            file_part1.name = "upload"
+            file_part1.filename = "file1.txt"
+            file_part1.headers = {"Content-Type": "text/plain"}
+            file_part1.read = AsyncMock(return_value=b"content 1")
+
+            file_part2 = Mock()
+            file_part2.name = "upload"
+            file_part2.filename = "file2.txt"
+            file_part2.headers = {"Content-Type": "text/plain"}
+            file_part2.read = AsyncMock(return_value=b"content 2")
+
+            file_part3 = Mock()
+            file_part3.name = "upload"
+            file_part3.filename = "file3.txt"
+            file_part3.headers = {"Content-Type": "text/plain"}
+            file_part3.read = AsyncMock(return_value=b"content 3")
+
+            async def gen():
+                yield file_part1
+                yield file_part2
+                yield file_part3
+
+            return gen()
+
+        request.multipart = AsyncMock(side_effect=create_multipart_reader)
+
+        result = await AioHttpRequestDataExtractor._get_files(request)
+
+        assert "upload" in result
+        assert isinstance(result["upload"], list)
+        assert len(result["upload"]) == 3
+        assert result["upload"][0].filename == "file1.txt"
+        assert result["upload"][1].filename == "file2.txt"
+        assert result["upload"][2].filename == "file3.txt"
 
     @pytest.mark.asyncio
     async def test_get_files(self):
@@ -183,17 +254,38 @@ class TestAioHttpRequestDataExtractor:
 
     @pytest.mark.asyncio
     async def test_extract_request_data_full(self):
-        """Test full request data extraction"""
+        """Test full request data extraction with both form data and files"""
         request = Mock()
         request.match_info = {"id": "123"}
         request.query = Mock()
         request.query.__iter__ = Mock(return_value=iter(["param"]))
         request.query.getall = Mock(return_value=["value"])
-        request.headers = {"Content-Type": "application/json"}
+        request.headers = {"Content-Type": "multipart/form-data"}
         request.cookies = {"session": "abc"}
-        request.read = AsyncMock(return_value=b'{"data": "test"}')
-        request.json = AsyncMock(return_value={"data": "test"})
-        request.content_type = "application/json"
+        request.read = AsyncMock(return_value=b"")
+        request.content_type = "multipart/form-data"
+
+        async def create_multipart_reader():
+            # Mock form field (without filename)
+            form_part = Mock()
+            form_part.name = "field"
+            form_part.filename = None
+            form_part.text = AsyncMock(return_value="value")
+
+            # Mock file part (with filename)
+            file_part = Mock()
+            file_part.name = "upload"
+            file_part.filename = "test.txt"
+            file_part.headers = {"Content-Type": "text/plain"}
+            file_part.read = AsyncMock(return_value=b"file content")
+
+            async def gen():
+                yield form_part
+                yield file_part
+
+            return gen()
+
+        request.multipart = AsyncMock(side_effect=create_multipart_reader)
 
         env = RequestEnvelope(request=request, path_params=None)
 
@@ -202,11 +294,12 @@ class TestAioHttpRequestDataExtractor:
         assert isinstance(result, RequestData)
         assert result.path_params == {"id": "123"}
         assert result.query_params == {"param": "value"}
-        assert result.headers == {"content-type": "application/json"}  # normalized
+        assert result.headers == {"content-type": "multipart/form-data"}
         assert result.cookies == {"session": "abc"}
-        assert result.body == {"data": "test"}
-        assert result.form_data == {}
-        assert result.files == {}
+        assert result.body == {}
+        assert result.form_data == {"field": "value"}
+        assert "upload" in result.files
+        assert result.files["upload"].filename == "test.txt"
 
     @pytest.mark.asyncio
     async def test_extract_request_data_with_provided_path_params(self):

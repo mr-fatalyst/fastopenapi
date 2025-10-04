@@ -1,5 +1,6 @@
 from typing import Any
 
+from fastopenapi.core.types import FileUpload
 from fastopenapi.routers.extractors import BaseAsyncRequestDataExtractor
 
 
@@ -31,7 +32,11 @@ class SanicRequestDataExtractor(BaseAsyncRequestDataExtractor):
     @classmethod
     async def _get_body(cls, request: Any) -> dict | list | None:
         """Extract body"""
-        return request.json or {}
+        try:
+            data = request.json or {}
+        except Exception:
+            data = {}
+        return data
 
     @classmethod
     async def _get_form_data(cls, request: Any) -> dict:
@@ -39,10 +44,25 @@ class SanicRequestDataExtractor(BaseAsyncRequestDataExtractor):
         form_data = {}
         if hasattr(request, "form"):
             for key in request.form:
-                form_data[key] = request.form.get(key)
+                values = request.form.getlist(key)
+                form_data[key] = values[0] if len(values) == 1 else values
         return form_data
 
     @classmethod
-    async def _get_files(cls, request: Any) -> dict[str, bytes]:
-        """Extract files from Quart request"""
-        return {}
+    async def _get_files(cls, request: Any) -> dict[str, FileUpload | list[FileUpload]]:
+        """Extract files from Sanic request"""
+        files = {}
+        if hasattr(request, "files"):
+            for key in request.files.keys():
+                file_list = request.files.getlist(key)
+                uploads = []
+                for sanic_file in file_list:
+                    file_upload = FileUpload(
+                        filename=sanic_file.name,
+                        content_type=sanic_file.type,
+                        size=len(sanic_file.body) if sanic_file.body else None,
+                        file=sanic_file.body,
+                    )
+                    uploads.append(file_upload)
+                files[key] = uploads[0] if len(uploads) == 1 else uploads
+        return files
