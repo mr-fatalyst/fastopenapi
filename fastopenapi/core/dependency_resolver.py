@@ -19,21 +19,20 @@ class DependencyResolver:
     """
     Resolves dependency injection for endpoints with support for:
     - Recursive dependency resolution
-    - Caching with use_cache control
+    - Request-scoped caching (dependencies resolved once per request)
     - Circular dependency detection
     - Security scopes validation
     - Thread-safe operation
     """
 
     def __init__(self):
-        # Thread-safe cache for dependency results
-        self._cache_lock = threading.RLock()
-        self._cache: dict[tuple, Any] = {}
-
         # Request-scoped cache (cleared per request)
         self._request_cache = WeakKeyDictionary()
         self._request_cache_lock = threading.RLock()
-        self._execution_locks: dict[tuple, threading.Lock] = {}
+
+        # Execution locks per dependency function to prevent race conditions
+        self._execution_locks_lock = threading.Lock()
+        self._execution_locks: dict[int, threading.Lock] = {}
 
         # Dependency signature cache
         self._signature_cache: dict[Callable, dict] = {}
@@ -65,8 +64,9 @@ class DependencyResolver:
             return self._resolve_endpoint_dependencies(endpoint, request_data)
         finally:
             # Clean up request cache
-            if request_data in self._request_cache:
-                del self._request_cache[request_data]
+            with self._request_cache_lock:
+                if request_data in self._request_cache:
+                    del self._request_cache[request_data]
 
     def _resolve_endpoint_dependencies(
         self, endpoint: Callable, request_data: RequestData
@@ -143,7 +143,7 @@ class DependencyResolver:
 
         # Execute the dependency function first to get token data
         result = self._execute_dependency_function(
-            dependency_func, request_data, security.use_cache, param_name
+            dependency_func, request_data, param_name
         )
 
         # Extract provided scopes from result
@@ -175,50 +175,39 @@ class DependencyResolver:
     ) -> Any:
         """Resolve regular Depends dependency"""
         return self._execute_dependency_function(
-            dependency_func, request_data, depends.use_cache, param_name
+            dependency_func, request_data, param_name
         )
 
     def _make_cache_key(
         self, dependency_func: Callable, request_data: RequestData
     ) -> tuple:
+        """Create cache key for request-scoped cache"""
         return (id(dependency_func), id(request_data))
 
     def _get_request_cache(self, request_data: RequestData) -> dict:
+        """Get cache dictionary for current request"""
         return self._request_cache[request_data]
 
     def _try_get_cached(
-        self, cache_key: tuple, request_cache: dict, use_cache: bool
+        self, cache_key: tuple, request_cache: dict
     ) -> tuple[bool, Any]:
-        # request-scoped cache
+        """Try to get cached value from request-scoped cache"""
         with self._request_cache_lock:
             resolved = request_cache["resolved"]
             if cache_key in resolved:
                 return True, resolved[cache_key]
-
-        # global cache
-        if use_cache:
-            with self._cache_lock:
-                if cache_key in self._cache:
-                    result = self._cache[cache_key]
-                    with self._request_cache_lock:
-                        resolved[cache_key] = result
-                    return True, result
-
         return False, None
 
-    def _cache_result(
-        self, cache_key: tuple, result: Any, request_cache: dict, use_cache: bool
-    ) -> None:
+    def _cache_result(self, cache_key: tuple, result: Any, request_cache: dict) -> None:
+        """Store result in request-scoped cache"""
         with self._request_cache_lock:
             request_cache["resolved"][cache_key] = result
-        if use_cache:
-            with self._cache_lock:
-                self._cache[cache_key] = result
 
     @contextmanager
     def _resolving_guard(
         self, request_cache: dict, dependency_func: Callable, param_name: str
     ):
+        """Guard against circular dependencies"""
         resolving = request_cache["resolving"]
         if dependency_func in resolving:
             raise CircularDependencyError(
@@ -232,6 +221,7 @@ class DependencyResolver:
             resolving.discard(dependency_func)
 
     def _call_dependency(self, dependency_func: Callable, kwargs: dict) -> Any:
+        """Execute the dependency function"""
         try:
             if kwargs:
                 return dependency_func(**kwargs)
@@ -247,7 +237,6 @@ class DependencyResolver:
         self,
         dependency_func: Callable,
         request_data: RequestData,
-        use_cache: bool,
         param_name: str,
     ) -> Any:
         """
@@ -256,21 +245,22 @@ class DependencyResolver:
         cache_key = self._make_cache_key(dependency_func, request_data)
         request_cache = self._get_request_cache(request_data)
 
-        # First check
-        hit, value = self._try_get_cached(cache_key, request_cache, use_cache)
+        # First check (without lock)
+        hit, value = self._try_get_cached(cache_key, request_cache)
         if hit:
             return value
 
-        # Get/create lock for this function
-        with self._cache_lock:
-            if cache_key not in self._execution_locks:
-                self._execution_locks[cache_key] = threading.Lock()
-            func_lock = self._execution_locks[cache_key]
+        # Get or create lock for this function
+        func_id = id(dependency_func)
+        with self._execution_locks_lock:
+            if func_id not in self._execution_locks:
+                self._execution_locks[func_id] = threading.Lock()
+            func_lock = self._execution_locks[func_id]
 
-        # Synchronize execution
+        # Synchronize execution per function
         with func_lock:
-            # Second check
-            hit, value = self._try_get_cached(cache_key, request_cache, use_cache)
+            # Second check (double-checked locking pattern)
+            hit, value = self._try_get_cached(cache_key, request_cache)
             if hit:
                 return value
 
@@ -280,7 +270,7 @@ class DependencyResolver:
                     dependency_func, request_data
                 )
                 result = self._call_dependency(dependency_func, sub_dependencies or {})
-                self._cache_result(cache_key, result, request_cache, use_cache)
+                self._cache_result(cache_key, result, request_cache)
                 return result
 
     def _resolve_sub_dependencies(
@@ -355,27 +345,15 @@ class DependencyResolver:
             self._signature_cache[func] = sig.parameters
         return self._signature_cache[func]
 
-    def clear_cache(self):
-        """Clear the global dependency cache"""
-        with self._cache_lock:
-            self._cache.clear()
-
-    def clear_function_cache(self, dependency_func: Callable):
-        """Clear cache for a specific dependency function"""
-        with self._cache_lock:
-            keys_to_remove = [
-                key for key in self._cache.keys() if key[0] == id(dependency_func)
-            ]
-            for key in keys_to_remove:
-                del self._cache[key]
-
     def get_cache_stats(self) -> dict[str, int]:
         """Get cache statistics for monitoring"""
-        with self._cache_lock:
-            return {
-                "cache_size": len(self._cache),
-                "active_requests": len(self._request_cache),
-            }
+        with self._execution_locks_lock:
+            locks_count = len(self._execution_locks)
+
+        return {
+            "active_requests": len(self._request_cache),
+            "execution_locks": locks_count,
+        }
 
 
 # Global dependency resolver instance
@@ -388,11 +366,6 @@ def resolve_dependencies(
 ) -> dict[str, Any]:
     """Convenience function to resolve dependencies"""
     return dependency_resolver.resolve_dependencies(endpoint, request_data)
-
-
-def clear_dependency_cache():
-    """Clear the global dependency cache"""
-    dependency_resolver.clear_cache()
 
 
 def get_dependency_stats() -> dict[str, int]:

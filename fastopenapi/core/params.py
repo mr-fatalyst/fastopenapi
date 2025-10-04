@@ -537,16 +537,12 @@ class File(Form):
 class Depends:
     """Dependency injection marker"""
 
-    def __init__(
-        self, dependency: Callable[..., Any] | None = None, *, use_cache: bool = True
-    ):
+    def __init__(self, dependency: Callable[..., Any] | None = None):
         self.dependency = dependency
-        self.use_cache = use_cache
 
     def __repr__(self) -> str:
         name = getattr(self.dependency, "__name__", type(self.dependency).__name__)
-        cache_info = "" if self.use_cache else ", use_cache=False"
-        return f"{self.__class__.__name__}({name}{cache_info})"
+        return f"{self.__class__.__name__}({name})"
 
 
 class Security(Depends):
@@ -557,9 +553,8 @@ class Security(Depends):
         dependency: Callable[..., Any] | None = None,
         *,
         scopes: Sequence[str] | None = None,
-        use_cache: bool = True,
     ):
-        super().__init__(dependency=dependency, use_cache=use_cache)
+        super().__init__(dependency=dependency)
         self.scopes = list(scopes) if scopes else []
 
 

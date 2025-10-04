@@ -7,7 +7,6 @@ import pytest
 
 from fastopenapi.core.dependency_resolver import (
     DependencyResolver,
-    clear_dependency_cache,
     get_dependency_stats,
     resolve_dependencies,
 )
@@ -34,15 +33,9 @@ class TestDependencyResolver:
             body={"data": "test"},
         )
 
-    def teardown_method(self):
-        """Cleanup after each test"""
-        self.resolver.clear_cache()
-
     def test_init(self):
         """Test DependencyResolver initialization"""
         resolver = DependencyResolver()
-        assert resolver._cache == {}
-        assert isinstance(resolver._cache_lock, type(threading.RLock()))
         assert isinstance(resolver._request_cache, WeakKeyDictionary)
         assert resolver._signature_cache == {}
 
@@ -69,28 +62,6 @@ class TestDependencyResolver:
 
         assert result == {}
 
-    def test_resolve_dependencies_with_caching(self):
-        """Test dependency caching works"""
-        call_count = 0
-
-        def cached_dep():
-            nonlocal call_count
-            call_count += 1
-            return f"result_{call_count}"
-
-        def endpoint(dep: str = Depends(cached_dep)):
-            return dep
-
-        # First call
-        result1 = self.resolver.resolve_dependencies(endpoint, self.request_data)
-        assert result1 == {"dep": "result_1"}
-        assert call_count == 1
-
-        # Second call - should use cache
-        result2 = self.resolver.resolve_dependencies(endpoint, self.request_data)
-        assert result2 == {"dep": "result_1"}
-        assert call_count == 1  # Not incremented
-
     def test_resolve_dependencies_without_caching(self):
         """Test dependency without caching"""
         call_count = 0
@@ -100,7 +71,7 @@ class TestDependencyResolver:
             call_count += 1
             return f"result_{call_count}"
 
-        def endpoint(dep: str = Depends(uncached_dep, use_cache=False)):
+        def endpoint(dep: str = Depends(uncached_dep)):
             return dep
 
         # First call
@@ -357,30 +328,6 @@ class TestDependencyResolver:
         assert sig1 is sig2
         assert test_func in self.resolver._signature_cache
 
-    def test_cache_operations(self):
-        """Test cache operations"""
-
-        def test_dep():
-            return "cached_result"
-
-        def endpoint(dep: str = Depends(test_dep)):
-            return dep
-
-        # Resolve to populate cache
-        self.resolver.resolve_dependencies(endpoint, self.request_data)
-
-        # Check cache stats
-        stats = self.resolver.get_cache_stats()
-        assert stats["cache_size"] > 0
-
-        # Clear specific function cache
-        self.resolver.clear_function_cache(test_dep)
-
-        # Clear all cache
-        self.resolver.clear_cache()
-        stats_after_clear = self.resolver.get_cache_stats()
-        assert stats_after_clear["cache_size"] == 0
-
     def test_request_cache_cleanup(self):
         """Test request cache cleanup after resolution"""
 
@@ -516,13 +463,6 @@ class TestDependencyResolver:
         result = resolve_dependencies(endpoint, self.request_data)
         assert result == {"dep": "global_test"}
 
-        # Test global cache operations
-        stats_before = get_dependency_stats()
-        clear_dependency_cache()
-        stats_after = get_dependency_stats()
-
-        assert stats_after["cache_size"] <= stats_before["cache_size"]
-
     def test_resolving_guard_context_manager(self):
         """Test _resolving_guard context manager behavior"""
 
@@ -545,10 +485,9 @@ class TestDependencyResolver:
         request_cache = {"resolved": {}}
 
         # Test with caching enabled
-        self.resolver._cache_result(cache_key, result, request_cache, True)
+        self.resolver._cache_result(cache_key, result, request_cache)
 
         assert request_cache["resolved"][cache_key] == result
-        assert cache_key in self.resolver._cache
 
     def test_try_get_cached_request_scope(self):
         """Test _try_get_cached with request-scoped cache hit"""
@@ -556,37 +495,231 @@ class TestDependencyResolver:
         expected_result = "cached_value"
         request_cache = {"resolved": {cache_key: expected_result}}
 
-        hit, value = self.resolver._try_get_cached(cache_key, request_cache, True)
+        hit, value = self.resolver._try_get_cached(cache_key, request_cache)
 
         assert hit is True
         assert value == expected_result
-
-    def test_try_get_cached_global_scope(self):
-        """Test _try_get_cached with global cache hit"""
-        cache_key = ("test", "key")
-        expected_result = "global_cached_value"
-        request_cache = {"resolved": {}}
-
-        # Populate global cache
-        with self.resolver._cache_lock:
-            self.resolver._cache[cache_key] = expected_result
-
-        hit, value = self.resolver._try_get_cached(cache_key, request_cache, True)
-
-        assert hit is True
-        assert value == expected_result
-        # Should warm request cache
-        assert request_cache["resolved"][cache_key] == expected_result
 
     def test_try_get_cached_no_hit(self):
         """Test _try_get_cached with no cache hit"""
         cache_key = ("test", "key")
         request_cache = {"resolved": {}}
 
-        hit, value = self.resolver._try_get_cached(cache_key, request_cache, True)
+        hit, value = self.resolver._try_get_cached(cache_key, request_cache)
 
         assert hit is False
         assert value is None
+
+    def test_cache_hit_without_lock(self):
+        """Test that cached value is returned immediately without executing function"""
+        call_count = 0
+
+        def test_dep():
+            nonlocal call_count
+            call_count += 1
+            return f"result_{call_count}"
+
+        def endpoint(dep: str = Depends(test_dep)):
+            return dep
+
+        # First call - should execute function
+        result1 = self.resolver.resolve_dependencies(endpoint, self.request_data)
+        assert result1 == {"dep": "result_1"}
+        assert call_count == 1
+
+        # Manually add value to request cache for second call
+        # This simulates the "first check without lock" scenario
+        new_request = RequestData(
+            path_params={},
+            query_params={},
+            headers={},
+            cookies={},
+            body={},
+        )
+
+        # Initialize request cache
+        with self.resolver._request_cache_lock:
+            self.resolver._request_cache[new_request] = {
+                "resolved": {},
+                "resolving": set(),
+            }
+
+        # Pre-populate cache
+        cache_key = self.resolver._make_cache_key(test_dep, new_request)
+        with self.resolver._request_cache_lock:
+            self.resolver._request_cache[new_request]["resolved"][
+                cache_key
+            ] = "cached_value"
+
+        # Second call with new request - should hit cache without calling function
+        result2 = self.resolver.resolve_dependencies(endpoint, new_request)
+        assert result2 == {"dep": "cached_value"}
+        assert call_count == 1  # Function was not called again
+
+    def test_get_cache_stats(self):
+        """Test get_cache_stats returns correct statistics"""
+        # Initial state
+        stats = self.resolver.get_cache_stats()
+        assert "active_requests" in stats
+        assert "execution_locks" in stats
+        initial_locks = stats["execution_locks"]
+
+        def test_dep():
+            return "result"
+
+        def endpoint(dep: str = Depends(test_dep)):
+            return dep
+
+        # Create first request
+        request1 = RequestData(
+            path_params={"id": "1"},
+            query_params={},
+            headers={},
+            cookies={},
+            body={},
+        )
+
+        # Initialize but don't resolve yet
+        with self.resolver._request_cache_lock:
+            self.resolver._request_cache[request1] = {
+                "resolved": {},
+                "resolving": set(),
+            }
+
+        # Check active requests increased
+        stats = self.resolver.get_cache_stats()
+        assert stats["active_requests"] == 1
+
+        # Create second request
+        request2 = RequestData(
+            path_params={"id": "2"},
+            query_params={},
+            headers={},
+            cookies={},
+            body={},
+        )
+
+        with self.resolver._request_cache_lock:
+            self.resolver._request_cache[request2] = {
+                "resolved": {},
+                "resolving": set(),
+            }
+
+        # Check active requests increased
+        stats = self.resolver.get_cache_stats()
+        assert stats["active_requests"] == 2
+
+        # Resolve dependencies to create execution locks
+        self.resolver.resolve_dependencies(endpoint, request1)
+
+        # Check execution locks created
+        stats = self.resolver.get_cache_stats()
+        assert stats["execution_locks"] >= initial_locks
+
+        # Clean up
+        with self.resolver._request_cache_lock:
+            if request1 in self.resolver._request_cache:
+                del self.resolver._request_cache[request1]
+            if request2 in self.resolver._request_cache:
+                del self.resolver._request_cache[request2]
+
+    def test_get_cache_stats_empty(self):
+        """Test get_cache_stats with no active requests"""
+        resolver = DependencyResolver()
+        stats = resolver.get_cache_stats()
+
+        assert stats["active_requests"] == 0
+        assert stats["execution_locks"] == 0
+
+    def test_get_cache_stats_after_request_cleanup(self):
+        """Test get_cache_stats after request cache cleanup"""
+
+        def test_dep():
+            return "result"
+
+        def endpoint(dep: str = Depends(test_dep)):
+            return dep
+
+        # Resolve dependencies
+        self.resolver.resolve_dependencies(endpoint, self.request_data)
+
+        # After resolution, request cache should be cleaned up
+        stats = self.resolver.get_cache_stats()
+        assert stats["active_requests"] == 0
+
+    def test_global_get_dependency_stats(self):
+        """Test global get_dependency_stats function"""
+
+        def test_dep():
+            return "global_stats_test"
+
+        def endpoint(dep: str = Depends(test_dep)):
+            return dep
+
+        # Resolve using global function
+        resolve_dependencies(endpoint, self.request_data)
+
+        # Get stats using global function
+        stats = get_dependency_stats()
+
+        assert isinstance(stats, dict)
+        assert "active_requests" in stats
+        assert "execution_locks" in stats
+        assert stats["active_requests"] >= 0
+        assert stats["execution_locks"] >= 0
+
+    def test_execution_locks_accumulation(self):
+        """Test that execution locks are created for different functions"""
+
+        def dep1():
+            return "dep1"
+
+        def dep2():
+            return "dep2"
+
+        def dep3():
+            return "dep3"
+
+        def endpoint(
+            d1: str = Depends(dep1), d2: str = Depends(dep2), d3: str = Depends(dep3)
+        ):
+            return f"{d1}_{d2}_{d3}"
+
+        initial_stats = self.resolver.get_cache_stats()
+        initial_locks = initial_stats["execution_locks"]
+
+        # Resolve dependencies - should create locks for each unique function
+        self.resolver.resolve_dependencies(endpoint, self.request_data)
+
+        final_stats = self.resolver.get_cache_stats()
+        final_locks = final_stats["execution_locks"]
+
+        # Should have created at least 3 new locks (one per dependency function)
+        assert final_locks >= initial_locks + 3
+
+    def test_request_cache_hit_performance(self):
+        """Test that cache hit prevents function re-execution within same request"""
+        execution_log = []
+
+        def tracked_dep():
+            execution_log.append("executed")
+            return "result"
+
+        def dep_with_subdep(sub: str = Depends(tracked_dep)):
+            return f"main_{sub}"
+
+        def endpoint(
+            dep1: str = Depends(tracked_dep),
+            dep2: str = Depends(dep_with_subdep),
+        ):
+            return f"{dep1}_{dep2}"
+
+        # tracked_dep is used directly and as sub-dependency
+        # It should only execute once within the same request
+        self.resolver.resolve_dependencies(endpoint, self.request_data)
+
+        # tracked_dep should only be called once due to request-scoped caching
+        assert len(execution_log) == 1
 
     def test_call_dependency_success(self):
         """Test _call_dependency with successful execution"""

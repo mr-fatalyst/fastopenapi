@@ -374,7 +374,6 @@ class TestDepends:
         """Test Depends initialization with minimal parameters"""
         depends = Depends()
         assert depends.dependency is None
-        assert depends.use_cache is True
 
     def test_depends_init_with_function(self):
         """Test Depends with dependency function"""
@@ -384,17 +383,6 @@ class TestDepends:
 
         depends = Depends(test_dependency)
         assert depends.dependency is test_dependency
-        assert depends.use_cache is True
-
-    def test_depends_init_without_cache(self):
-        """Test Depends with caching disabled"""
-
-        def test_dependency():
-            return "test_result"
-
-        depends = Depends(test_dependency, use_cache=False)
-        assert depends.dependency is test_dependency
-        assert depends.use_cache is False
 
     def test_depends_repr_with_function(self):
         """Test Depends string representation with function"""
@@ -404,15 +392,6 @@ class TestDepends:
 
         depends = Depends(test_dependency)
         assert repr(depends) == "Depends(test_dependency)"
-
-    def test_depends_repr_without_cache(self):
-        """Test Depends string representation without cache"""
-
-        def test_dependency():
-            return "test_result"
-
-        depends = Depends(test_dependency, use_cache=False)
-        assert repr(depends) == "Depends(test_dependency, use_cache=False)"
 
     def test_depends_repr_with_class(self):
         """Test Depends string representation with class"""
@@ -440,7 +419,6 @@ class TestSecurity:
         """Test Security initialization with minimal parameters"""
         security = Security()
         assert security.dependency is None
-        assert security.use_cache is True
         assert security.scopes == []
 
     def test_security_init_with_function(self):
@@ -451,7 +429,6 @@ class TestSecurity:
 
         security = Security(auth_dependency)
         assert security.dependency is auth_dependency
-        assert security.use_cache is True
         assert security.scopes == []
 
     def test_security_init_with_scopes(self):
@@ -463,7 +440,6 @@ class TestSecurity:
         scopes = ["read", "write", "admin"]
         security = Security(auth_dependency, scopes=scopes)
         assert security.dependency is auth_dependency
-        assert security.use_cache is True
         assert security.scopes == scopes
 
     def test_security_init_full(self):
@@ -473,9 +449,8 @@ class TestSecurity:
             return {"user": "john"}
 
         scopes = ["read", "write"]
-        security = Security(auth_dependency, scopes=scopes, use_cache=False)
+        security = Security(auth_dependency, scopes=scopes)
         assert security.dependency is auth_dependency
-        assert security.use_cache is False
         assert security.scopes == scopes
 
     def test_security_scopes_none_to_empty_list(self):
