@@ -4,9 +4,11 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable
 from typing import Any
 
+from pydantic import BaseModel, TypeAdapter, ValidationError
+
 from fastopenapi.core.router import BaseRouter
 from fastopenapi.core.types import Response
-from fastopenapi.errors.exceptions import APIError
+from fastopenapi.errors.exceptions import APIError, InternalServerError
 from fastopenapi.resolution.resolver import ParameterResolver
 from fastopenapi.response.builder import ResponseBuilder
 from fastopenapi.routers.common import RequestEnvelope
@@ -42,12 +44,33 @@ class BaseAdapter(BaseRouter, ABC):
         pattern, replacement = cls.PATH_CONVERSIONS
         return re.sub(pattern, replacement, path)
 
+    @staticmethod
+    def _validate_response(result, response_model):
+        try:
+            if isinstance(response_model, type) and issubclass(
+                response_model, BaseModel
+            ):
+                if isinstance(result, response_model):
+                    return result
+                return response_model.model_validate(result)
+            else:
+                adapter = TypeAdapter(response_model)
+                return adapter.validate_python(result)
+        except ValidationError as e:
+            raise InternalServerError(
+                message="Incorrect response type",
+                details=f"Response validation failed: {e}",
+            )
+
     def handle_request(self, endpoint: Callable, env: RequestEnvelope) -> Any:
         """Handle synchronous request"""
         try:
             request_data = self.extractor_cls.extract_request_data(env)
             kwargs = self.req_param_resolver_cls.resolve(endpoint, request_data)
             result = endpoint(**kwargs)
+            response_model = endpoint.__route_meta__.get("response_model")
+            if response_model:
+                result = self._validate_response(result, response_model)
             if self.is_framework_response(result):
                 return result
             else:
@@ -75,6 +98,9 @@ class BaseAdapter(BaseRouter, ABC):
                 result = await endpoint(**kwargs)
             else:
                 result = endpoint(**kwargs)
+            response_model = endpoint.__route_meta__.get("response_model")
+            if response_model:
+                result = self._validate_response(result, response_model)
             if self.is_framework_response(result):
                 return result
             else:

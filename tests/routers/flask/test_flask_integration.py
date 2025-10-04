@@ -14,6 +14,14 @@ class TestFlaskIntegration:
         assert result[0]["name"] == "Item 1"
         assert result[1]["name"] == "Item 2"
 
+    def test_get_items_invalid(self, client):
+        """Test fetching all items invalid"""
+        response = client.get("/items-invalid")
+
+        assert response.status_code == 500
+        result = from_json(response.text)
+        assert result["error"]["message"] == "Incorrect response type"
+
     def test_get_headers(self, client):
         """Test fetching all items"""
         response = client.get(

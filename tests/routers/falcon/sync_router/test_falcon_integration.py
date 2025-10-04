@@ -14,6 +14,13 @@ class TestFalconIntegration:
             )
             assert err_msg in str(excinfo.value)
 
+    def test_get_items_invalid(self, sync_client):
+        """Test retrieving all items with wrong model"""
+        resp = sync_client.get("/items-invalid")
+        assert resp.status_code == 500
+        data = from_json(resp.text)
+        assert data["error"]["message"] == "Incorrect response type"
+
     def test_echo_headers(self, sync_client):
         """Test that headers from echo response are set"""
         response = sync_client.get(

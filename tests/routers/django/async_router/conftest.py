@@ -50,12 +50,16 @@ def urls(items_db):  # noqa: C901
     @router.get("/items", response_model=list[ItemResponse], tags=["items"])
     async def get_items():
         """Get all items"""
+        return [ItemResponse(**item) for item in items_db]
+
+    @router.get("/items-invalid", response_model=list[ItemResponse], tags=["items"])
+    async def get_items_invalid():
         return [Item(**item) for item in items_db]
 
     @router.get("/items-sync", response_model=list[ItemResponse], tags=["items"])
     def get_items_sync():
         """Get all items"""
-        return [Item(**item) for item in items_db]
+        return [ItemResponse(**item) for item in items_db]
 
     @router.get("/items-fail", response_model=list[ItemResponse], tags=["items"])
     async def get_items_fail():
@@ -67,7 +71,7 @@ def urls(items_db):  # noqa: C901
         """Get an item by ID"""
         for item in items_db:
             if item["id"] == item_id:
-                return Item(**item)
+                return ItemResponse(**item)
         raise Http404(f"Item with id {item_id} not found")
 
     @router.post("/items", response_model=ItemResponse, status_code=201, tags=["items"])
@@ -76,7 +80,7 @@ def urls(items_db):  # noqa: C901
         new_id = max(item["id"] for item in items_db) + 1
         new_item = {"id": new_id, "name": item.name, "description": item.description}
         items_db.append(new_item)
-        return Item(**new_item)
+        return ItemResponse(**new_item)
 
     @router.put("/items/{item_id}", response_model=ItemResponse, tags=["items"])
     async def update_item(item_id: int, item: CreateItemRequest):
@@ -85,7 +89,7 @@ def urls(items_db):  # noqa: C901
             if existing_item["id"] == item_id:
                 existing_item["name"] = item.name
                 existing_item["description"] = item.description
-                return Item(**existing_item)
+                return ItemResponse(**existing_item)
         raise Http404(f"Item with id {item_id} not found")
 
     @router.delete("/items/{item_id}", status_code=204, tags=["items"])

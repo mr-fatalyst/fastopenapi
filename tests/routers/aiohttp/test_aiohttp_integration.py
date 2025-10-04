@@ -14,6 +14,14 @@ class TestAioHttpIntegration:
         assert data[1]["name"] == "Item 2"
 
     @pytest.mark.asyncio
+    async def test_get_items_invalid(self, client):
+        """Test retrieving all items with wrong model"""
+        resp = await client.get("/items-invalid")
+        assert resp.status == 500
+        data = await resp.json()
+        assert data["error"]["message"] == "Incorrect response type"
+
+    @pytest.mark.asyncio
     async def test_get_items_sync(self, client):
         """Test retrieving all items (synchronous endpoint)"""
         resp = await client.get("/items-sync")
@@ -35,6 +43,16 @@ class TestAioHttpIntegration:
     async def test_get_item(self, client):
         """Test retrieving item by ID"""
         resp = await client.get("/items/1")
+        assert resp.status == 200
+        data = await resp.json()
+        assert data["id"] == 1
+        assert data["name"] == "Item 1"
+        assert data["description"] == "Description 1"
+
+    @pytest.mark.asyncio
+    async def test_get_item_dict(self, client):
+        """Test retrieving item by ID"""
+        resp = await client.get("/items-dict/1")
         assert resp.status == 200
         data = await resp.json()
         assert data["id"] == 1

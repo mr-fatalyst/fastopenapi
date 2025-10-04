@@ -76,10 +76,14 @@ class TestTornadoIntegration(AsyncHTTPTestCase):
 
         @router.get("/items-sync", response_model=list[ItemResponse], tags=["items"])
         def get_items_sync():
-            return [Item(**item) for item in self.items_db]
+            return [ItemResponse(**item) for item in self.items_db]
 
         @router.get("/items", response_model=list[ItemResponse], tags=["items"])
         async def get_items():
+            return [ItemResponse(**item) for item in self.items_db]
+
+        @router.get("/items-invalid", response_model=list[ItemResponse], tags=["items"])
+        async def get_items_invalid():
             return [Item(**item) for item in self.items_db]
 
         @router.get("/items-fail", response_model=list[ItemResponse], tags=["items"])
@@ -90,7 +94,7 @@ class TestTornadoIntegration(AsyncHTTPTestCase):
         async def get_item(item_id: int):
             for item in self.items_db:
                 if item["id"] == item_id:
-                    return Item(**item)
+                    return ItemResponse(**item)
             raise HTTPError(status_code=404, log_message="Not Found")
 
         @router.post(
@@ -104,7 +108,7 @@ class TestTornadoIntegration(AsyncHTTPTestCase):
                 "description": item.description,
             }
             self.items_db.append(new_item)
-            return Item(**new_item)
+            return ItemResponse(**new_item)
 
         @router.patch("/items/{item_id}", response_model=ItemResponse, tags=["items"])
         async def update_item(item_id: int, item: CreateItemRequest):
@@ -114,7 +118,7 @@ class TestTornadoIntegration(AsyncHTTPTestCase):
                         existing_item["name"] = item.name
                     if item.description:
                         existing_item["description"] = item.description
-                    return Item(**existing_item)
+                    return ItemResponse(**existing_item)
             raise HTTPError(status_code=404, log_message="Not Found")
 
         @router.put("/items/{item_id}", response_model=ItemResponse, tags=["items"])
@@ -123,7 +127,7 @@ class TestTornadoIntegration(AsyncHTTPTestCase):
                 if existing_item["id"] == item_id:
                     existing_item["name"] = item.name
                     existing_item["description"] = item.description
-                    return Item(**existing_item)
+                    return ItemResponse(**existing_item)
             raise HTTPError(status_code=404, log_message="Not Found")
 
         @router.delete("/items/{item_id}", status_code=204, tags=["items"])
@@ -260,6 +264,15 @@ class TestTornadoIntegration(AsyncHTTPTestCase):
         self.assertEqual(len(result), 2)
         self.assertEqual(result[0]["name"], "Item 1")
         self.assertEqual(result[1]["name"], "Item 2")
+
+    @gen_test
+    async def test_get_items_invalid(self):
+        response = await self.http_client.fetch(
+            self.get_url("/items-invalid"), raise_error=False
+        )
+        self.assertEqual(response.code, 500)
+        result = self.parse_json(response)
+        self.assertEqual(result["error"]["message"], "Incorrect response type")
 
     @gen_test
     async def test_get_items_sync(self):

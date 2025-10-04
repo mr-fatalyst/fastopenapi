@@ -16,6 +16,15 @@ class TestQuartIntegration:
         assert result[1]["name"] == "Item 2"
 
     @pytest.mark.asyncio
+    async def test_get_items_invalid(self, client):
+        """Test fetching all items invalid"""
+        response = await client.get("/items-invalid")
+
+        assert response.status_code == 500
+        result = await response.get_json()
+        assert result["error"]["message"] == "Incorrect response type"
+
+    @pytest.mark.asyncio
     async def test_get_items_fail(self, client):
         """Test fetching all items with an error"""
         response = await client.get("/items-fail")

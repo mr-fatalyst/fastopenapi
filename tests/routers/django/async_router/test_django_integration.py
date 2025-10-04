@@ -14,6 +14,14 @@ class TestAsyncDjangoIntegration:
         assert result[1]["name"] == "Item 2"
 
     @pytest.mark.asyncio
+    async def test_get_items_invalid(self, client):
+        """Test retrieving all items with wrong model"""
+        resp = await client.get("/items-invalid")
+        assert resp.status_code == 500
+        data = resp.json()
+        assert data["error"]["message"] == "Incorrect response type"
+
+    @pytest.mark.asyncio
     async def test_get_items_fail(self, client):
         """Test fetching all items with an error"""
         response = await client.get("/items-fail")

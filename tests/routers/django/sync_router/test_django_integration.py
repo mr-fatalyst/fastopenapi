@@ -12,6 +12,13 @@ class TestDjangoIntegration:
         assert result[0]["name"] == "Item 1"
         assert result[1]["name"] == "Item 2"
 
+    def test_get_items_invalid(self, client):
+        """Test retrieving all items with wrong model"""
+        resp = client.get("/items-invalid")
+        assert resp.status_code == 500
+        data = resp.json()
+        assert data["error"]["message"] == "Incorrect response type"
+
     def test_get_items_async(self, client):
         """Test fetching an item by ID"""
         with pytest.raises(Exception) as excinfo:

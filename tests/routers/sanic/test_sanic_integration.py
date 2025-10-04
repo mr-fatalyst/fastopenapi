@@ -15,6 +15,15 @@ class TestSanicIntegration:
         assert result[0]["name"] == "Item 1"
         assert result[1]["name"] == "Item 2"
 
+    @pytest.mark.asyncio
+    async def test_get_items_invalid(self, client):
+        """Test fetching all items invalid"""
+        _, response = await client.get("/items-invalid")
+
+        assert response.status_code == 500
+        result = from_json(response.text)
+        assert result["error"]["message"] == "Incorrect response type"
+
     def test_get_items_sync(self, sync_client):
         """Test fetching all items"""
         _, response = sync_client.get("/items-sync")
