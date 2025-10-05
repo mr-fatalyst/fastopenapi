@@ -1,5 +1,7 @@
 from typing import Any
 
+from pydantic_core import from_json
+
 from fastopenapi.core.types import FileUpload
 from fastopenapi.routers.extractors import BaseAsyncRequestDataExtractor
 
@@ -31,13 +33,15 @@ class AioHttpRequestDataExtractor(BaseAsyncRequestDataExtractor):
 
     @classmethod
     async def _get_body(cls, request: Any) -> dict | list | None:
+        """Extract JSON body"""
         try:
             body_bytes = await request.read()
             if body_bytes:
-                return await request.json()
+                return from_json(body_bytes)
+            else:
+                return {}
         except Exception:
-            pass
-        return {}
+            return {}
 
     @classmethod
     async def _get_form_data(cls, request: Any) -> dict:

@@ -48,15 +48,12 @@ class ParameterResolver:
     _signature_cache: dict[Callable, MappingProxyType] = {}
 
     @classmethod
-    def _get_signature(cls, endpoint) -> typing.ItemsView:
+    def _get_signature(cls, endpoint) -> MappingProxyType[str, inspect.Parameter]:
         """Get cached signature parameters for endpoint"""
-        cached_params = cls._signature_cache.get(endpoint)
-        if cached_params:
-            return cached_params.items()
-        else:
+        if endpoint not in cls._signature_cache:
             sig = inspect.signature(endpoint)
             cls._signature_cache[endpoint] = sig.parameters
-        return cls._signature_cache[endpoint].items()
+        return cls._signature_cache[endpoint]
 
     @classmethod
     def resolve(cls, endpoint: Callable, request_data: RequestData) -> dict[str, Any]:
@@ -95,17 +92,33 @@ class ParameterResolver:
 
     @classmethod
     def _process_parameters(
-        cls, params: typing.ItemsView, request_data: RequestData
+        cls,
+        params: MappingProxyType[str, inspect.Parameter],
+        request_data: RequestData,
     ) -> tuple[dict[str, Any], dict[str, tuple], dict[str, Any]]:
         """Process all endpoint parameters"""
         regular_kwargs = {}
         model_fields = {}
         model_values = {}
 
-        for name, param in params:
+        for name, param in params.items():
             # Skip dependency parameters - already resolved
             if isinstance(param.default, (Depends, Security)):
                 continue
+
+            # Handle Pydantic models separately (direct validation without wrapper)
+            if cls._is_pydantic_model(param.annotation):
+                source = cls._determine_source(name, param, request_data.path_params)
+                data = (
+                    request_data.body
+                    if source == ParameterSource.BODY
+                    else request_data.query_params
+                )
+                resolved_model = cls._resolve_pydantic_model(
+                    param.annotation, data, name
+                )
+                regular_kwargs[name] = resolved_model
+                continue  # Don't add to model_fields
 
             processed_param = cls._process_single_parameter(name, param, request_data)
 

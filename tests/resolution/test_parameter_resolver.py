@@ -135,7 +135,7 @@ class TestParameterResolver:
         }
 
         regular, model_fields, model_values = ParameterResolver._process_parameters(
-            params_dict.items(), request_data
+            params_dict, request_data
         )
 
         assert "dep" not in regular
@@ -153,7 +153,7 @@ class TestParameterResolver:
         }
 
         regular, model_fields, model_values = ParameterResolver._process_parameters(
-            params_dict.items(), request_data
+            params_dict, request_data
         )
 
         assert "token" not in regular

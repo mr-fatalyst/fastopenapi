@@ -2,6 +2,7 @@ import functools
 from collections.abc import Callable
 
 from aiohttp import web
+from pydantic_core import to_json
 
 from fastopenapi.core.types import Response
 from fastopenapi.openapi.ui import render_redoc_ui, render_swagger_ui
@@ -62,8 +63,14 @@ class AioHttpRouter(BaseAdapter):
             )
 
         # JSON content (dict, list, None)
-        return web.json_response(
-            response.content, status=response.status_code, headers=response.headers
+        body_bytes = to_json(response.content)
+        return web.Response(
+            body=body_bytes,
+            status=response.status_code,
+            headers={
+                **response.headers,
+                "Content-Type": content_type or "application/json",
+            },
         )
 
     def is_framework_response(self, response: Response | web.Response) -> bool:

@@ -114,7 +114,6 @@ class TestAioHttpRequestDataExtractor:
 
         assert result == {"key": "value"}
         request.read.assert_called_once()
-        request.json.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_get_body_empty(self):
