@@ -1,6 +1,7 @@
 import functools
 from collections.abc import Callable
 
+from pydantic_core import to_json
 from starlette.applications import Starlette
 from starlette.responses import (
     HTMLResponse,
@@ -70,9 +71,18 @@ class StarletteRouter(BaseAdapter):
                 media_type=content_type or "text/plain",
             )
 
+        if response.status_code in (204, 304):
+            response.headers.pop("Content-Type", None)
+            return StarletteResponse(
+                status_code=response.status_code, headers=response.headers
+            )
+
         # JSON content
-        return JSONResponse(
-            response.content, status_code=response.status_code, headers=response.headers
+        return StarletteResponse(
+            content=to_json(response.content),
+            status_code=response.status_code,
+            headers=response.headers,
+            media_type=content_type or "application/json",
         )
 
     def is_framework_response(self, response: Response | StarletteResponse) -> bool:

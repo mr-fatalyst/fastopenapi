@@ -3,6 +3,7 @@ from typing import Any
 
 from pydantic_core import from_json
 
+from fastopenapi.core.constants import NO_BODY_METHODS
 from fastopenapi.core.types import FileUpload, RequestData
 from fastopenapi.routers.common import RequestEnvelope
 
@@ -76,9 +77,17 @@ class BaseRequestDataExtractor(ABC):
             query_params=cls._get_query_params(request),
             headers=cls._normalize_headers(cls._get_headers(request)),
             cookies=cls._get_cookies(request),
-            body=cls._get_body(request),
-            form_data=cls._get_form_data(request),
-            files=cls._get_files(request),
+            body=(
+                cls._get_body(request) if request.method not in NO_BODY_METHODS else {}
+            ),
+            form_data=(
+                cls._get_form_data(request)
+                if request.method not in NO_BODY_METHODS
+                else {}
+            ),
+            files=(
+                cls._get_files(request) if request.method not in NO_BODY_METHODS else {}
+            ),
         )
 
 
@@ -112,7 +121,19 @@ class BaseAsyncRequestDataExtractor(BaseRequestDataExtractor, ABC):
             query_params=cls._get_query_params(request),
             headers=cls._normalize_headers(cls._get_headers(request)),
             cookies=cls._get_cookies(request),
-            body=await cls._get_body(request),
-            form_data=await cls._get_form_data(request),
-            files=await cls._get_files(request),
+            body=(
+                await cls._get_body(request)
+                if request.method not in NO_BODY_METHODS
+                else {}
+            ),
+            form_data=(
+                await cls._get_form_data(request)
+                if request.method not in NO_BODY_METHODS
+                else {}
+            ),
+            files=(
+                await cls._get_files(request)
+                if request.method not in NO_BODY_METHODS
+                else {}
+            ),
         )
