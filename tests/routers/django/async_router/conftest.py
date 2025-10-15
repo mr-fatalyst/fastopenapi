@@ -5,7 +5,8 @@ from django.test import AsyncClient
 from django.urls import clear_url_caches, path
 from pydantic import BaseModel
 
-from fastopenapi import Cookie, DjangoAsyncRouter, Form, Header, Path, Query
+from fastopenapi import Cookie, Form, Header, Path, Query
+from fastopenapi.routers import DjangoAsyncRouter
 
 
 class Item(BaseModel):

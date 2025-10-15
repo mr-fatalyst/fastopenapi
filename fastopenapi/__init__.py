@@ -10,34 +10,11 @@ from fastopenapi.core.params import (
     Query,
     Security,
 )
-from fastopenapi.core.router import BaseRouter
 from fastopenapi.core.types import Response
-from fastopenapi.routers import (
-    AioHttpRouter,
-    DjangoAsyncRouter,
-    DjangoRouter,
-    FalconRouter,
-    FlaskRouter,
-    QuartRouter,
-    SanicRouter,
-    StarletteRouter,
-    TornadoRouter,
-)
 
 __all__ = [
     "__version__",
-    "BaseRouter",
     "Response",
-    # adapters
-    "AioHttpRouter",
-    "DjangoRouter",
-    "DjangoAsyncRouter",
-    "FalconRouter",
-    "FlaskRouter",
-    "QuartRouter",
-    "SanicRouter",
-    "StarletteRouter",
-    "TornadoRouter",
     # params
     "Query",
     "Path",

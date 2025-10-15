@@ -55,7 +55,7 @@ class TornadoRouter(BaseAdapter):
         return response
 
     def is_framework_response(self, response: Response) -> bool:
-        # TODO I have to think about this
+        # I think we don't work with Tornado Response. It's always False.
         return False
 
     def _register_docs_endpoints(self):

@@ -89,7 +89,6 @@ class BaseAdapter(BaseRouter, ABC):
             if self.is_framework_response(result):
                 return result
             if route_meta.get("status_code") == 204:
-                # TODO add logs here
                 return self.build_framework_response(
                     Response(status_code=204, content=None)
                 )
@@ -125,7 +124,6 @@ class BaseAdapter(BaseRouter, ABC):
             if self.is_framework_response(result):
                 return result
             if route_meta.get("status_code") == 204:
-                # TODO add logs here
                 return self.build_framework_response(
                     Response(status_code=204, content=None)
                 )

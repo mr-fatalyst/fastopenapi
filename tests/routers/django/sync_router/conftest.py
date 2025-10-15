@@ -5,7 +5,8 @@ from django.test import Client
 from django.urls import clear_url_caches, path
 from pydantic import BaseModel
 
-from fastopenapi import Cookie, DjangoRouter, Form, Header, Path, Query
+from fastopenapi import Cookie, Form, Header, Path, Query
+from fastopenapi.routers import DjangoRouter
 
 
 class Item(BaseModel):

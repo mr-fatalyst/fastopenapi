@@ -68,7 +68,7 @@ pip install fastopenapi[django]
 
 - ![AIOHTTP](https://img.shields.io/badge/AioHttp-0078D7?style=flat&logo=python&logoColor=white)
   <details>
-    <summary>Click to expand the Falcon Example</summary>
+    <summary>Click to expand the AioHTTP Example</summary>
     
     ```python
     from aiohttp import web
@@ -100,14 +100,44 @@ pip install fastopenapi[django]
     <summary>Click to expand the Falcon Example</summary>
     
     ```python
+    from falcon import App
+    from pydantic import BaseModel
+    from wsgiref.simple_server import make_server
+    
+    from fastopenapi.routers import FalconRouter
+    
+    app = App()
+    router = FalconRouter(app=app)
+    
+    
+    class HelloResponse(BaseModel):
+        message: str
+    
+    
+    @router.get("/hello", tags=["Hello"], status_code=200, response_model=HelloResponse)
+    def hello(name: str):
+        """Say hello from Falcon"""
+        return HelloResponse(message=f"Hello, {name}! It's Falcon!")
+    
+    
+    if __name__ == "__main__":
+        with make_server("", 8000, app) as httpd:
+            print("Serving on port 8000...")
+            httpd.serve_forever()
+    ```
+  </details>
+  <details>
+    <summary>Click to expand the Falcon Async Example</summary>
+    
+    ```python
     import falcon.asgi
     import uvicorn
     from pydantic import BaseModel
     
-    from fastopenapi.routers import FalconRouter
+    from fastopenapi.routers import FalconAsyncRouter
     
     app = falcon.asgi.App()
-    router = FalconRouter(app=app)
+    router = FalconAsyncRouter(app=app)
     
     
     class HelloResponse(BaseModel):
@@ -380,7 +410,7 @@ If you have suggestions or find a bug, please open an issue or create a pull req
 
 <p align="center">
   <a href="https://www.jetbrains.com/">
-    <img src="https://resources.jetbrains.com/storage/products/company/brand/logos/jetbrains.png" alt="JetBrains logo" width="120"/>
+    <img src="https://resources.jetbrains.com/storage/products/company/brand/logos/jetbrains.png" alt="JetBrains logo" width="120" style="background:white; padding:10px;"/>
   </a>
 </p>
 <p align="center">
