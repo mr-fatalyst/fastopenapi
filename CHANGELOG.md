@@ -4,10 +4,52 @@ All notable changes to FastOpenAPI are documented in this file.
 
 FastOpenAPI follows the [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) format.
 
-## [0.8.0] - Unreleased
+## [1.0.0b1] - Unreleased
 
 ### Added
-- `DjangoRouter` for integration with the `Django` framework.
+
+- **Dependency Injection system** with `Depends` and `Security` classes for automatic dependency resolution
+- Request-scoped dependency caching with circular dependency detection
+- Security scopes validation with OAuth2 support
+- **FastAPI-style parameter classes**: `Query`, `Path`, `Header`, `Cookie`, `Body`, `Form`, `File`
+- Full Pydantic v2 validation support for all parameter types (gt, ge, lt, le, min_length, max_length, pattern, etc)
+- Parameter documentation support (description, examples, deprecated flags)
+- Pre-defined parameter types: `PositiveInt`, `NonNegativeInt`, `PositiveFloat`, `NonEmptyStr`, `LimitedStr`
+- `FileUpload` class for framework-agnostic file handling with `.read()` and `.aread()` methods
+- `RequestData` unified container for request data across all frameworks
+- `Response` class for custom responses with headers and status codes
+- **Django support** with `DjangoRouter` (sync) and `DjangoAsyncRouter` (async)
+- Built-in OpenAPI security scheme definitions: Bearer JWT, API Key (header/query), Basic Auth, OAuth2
+- Configurable security schemes via `security_scheme` parameter in router constructor
+- Automatic security scheme integration in OpenAPI documentation
+- `APIError.from_exception()` method for converting any exception to standardized format
+- Thread-safe caching for parameter models, function signatures, and Pydantic schemas
+- Modular architecture with dedicated packages: `core/`, `errors/`, `openapi/`, `resolution/`, `response/`, `routers/`
+- `RouteInfo` dataclass for type-safe route metadata
+- Enhanced OpenAPI schema generation with `SchemaBuilder`, `ParameterProcessor`, and `ResponseBuilder` helper classes
+- Comprehensive error schema generation in OpenAPI documentation
+- Support for all parameter sources in OpenAPI (path, query, header, cookie, body, form, file)
+
+### Changed
+
+- **Complete architecture refactor** from monolithic to modular design using composition over inheritance
+- Router implementation changed from inheritance-based to composition-based using `BaseAdapter` pattern
+- Moved parameter resolution from `BaseRouter.resolve_endpoint_params()` to dedicated `ParameterResolver` class
+- Moved OpenAPI generation from `BaseRouter.generate_openapi()` to dedicated `OpenAPIGenerator` class
+- Moved response serialization from `BaseRouter._serialize_response()` to `ResponseBuilder` class
+- Split OpenAPI generation into focused helper classes for better separation of concerns
+- Reorganized error handling from `error_handler.py` module to `errors/` package
+- Split `base_router.py` into multiple focused modules with single responsibility
+- Route metadata structure changed from tuple to `RouteInfo` dataclass for better type safety
+- Router constructor signature updated with `security_scheme` parameter (default: `SecuritySchemeType.BEARER_JWT`)
+
+### Deprecated
+
+- Importing from `fastopenapi.error_handler` module (use `from fastopenapi.errors import ...` instead) - will show deprecation warning
+
+### Removed
+- `BaseRouter.generate_openapi()` method (use `router.openapi` property instead)
+- Internal API methods for custom router developers: `resolve_endpoint_params()` and `_serialize_response()`
 
 
 ## [0.7.0] - 2025-04-27
