@@ -79,6 +79,29 @@ class ParameterResolver:
 
         return kwargs
 
+    @classmethod
+    async def resolve_async(
+        cls, endpoint: Callable, request_data: RequestData
+    ) -> dict[str, Any]:
+        params = cls._get_signature(endpoint)
+        kwargs = {}
+
+        # Async dependencies
+        kwargs.update(await cls._resolve_dependencies_async(endpoint, request_data))
+
+        # Sync parameters
+        regular_kwargs, model_fields, model_values = cls._process_parameters(
+            params, request_data
+        )
+        kwargs.update(regular_kwargs)
+
+        if model_fields:
+            kwargs.update(
+                cls._validate_parameters(endpoint, model_fields, model_values)
+            )
+
+        return kwargs
+
     @staticmethod
     def _resolve_dependencies(
         endpoint: Callable, request_data: RequestData
@@ -86,6 +109,19 @@ class ParameterResolver:
         """Resolve endpoint dependencies"""
         try:
             return dependency_resolver.resolve_dependencies(endpoint, request_data)
+        except Exception:
+            # Re-raise dependency errors as-is
+            raise
+
+    @staticmethod
+    async def _resolve_dependencies_async(
+        endpoint: Callable, request_data: RequestData
+    ) -> dict[str, Any]:
+        """Resolve endpoint dependencies"""
+        try:
+            return await dependency_resolver.resolve_dependencies_async(
+                endpoint, request_data
+            )
         except Exception:
             # Re-raise dependency errors as-is
             raise

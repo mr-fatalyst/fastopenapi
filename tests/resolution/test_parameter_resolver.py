@@ -120,6 +120,24 @@ class TestParameterResolver:
             with pytest.raises(RuntimeError, match="Dependency error"):
                 ParameterResolver._resolve_dependencies(endpoint, request_data)
 
+    @pytest.mark.asyncio
+    async def test_async_resolve_dependencies_error_propagation(
+        self, request_data: RequestData
+    ) -> None:
+        """Test that dependency errors are propagated"""
+
+        def endpoint() -> None:
+            pass
+
+        with patch(
+            "fastopenapi.resolution.resolver.dependency_resolver.resolve_dependencies_async",  # noqa: E501
+            side_effect=RuntimeError("Dependency error"),
+        ):
+            with pytest.raises(RuntimeError, match="Dependency error"):
+                await ParameterResolver._resolve_dependencies_async(
+                    endpoint, request_data
+                )
+
     def test_process_parameters_with_depends(self, request_data: RequestData) -> None:
         """Test that Depends parameters are skipped in processing"""
 

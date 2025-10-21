@@ -787,3 +787,643 @@ class TestDependencyResolver:
         assert "Failed to resolve dependency 'dep'" in str(exc.value)
         assert isinstance(exc.value.__cause__, Exception)
         assert isinstance(exc.value.__cause__, TypeError)
+
+    # ==========================================
+    # ASYNC TESTS - точные копии sync тестов
+    # ==========================================
+
+    @pytest.mark.asyncio
+    async def test_resolve_dependencies_async_simple(self):
+        """Async version of test_resolve_dependencies_simple"""
+
+        async def simple_dep():
+            return "dependency_result"
+
+        def endpoint(dep: str = Depends(simple_dep)):
+            return f"endpoint_{dep}"
+
+        result = await self.resolver.resolve_dependencies_async(
+            endpoint, self.request_data
+        )
+        assert result == {"dep": "dependency_result"}
+
+    @pytest.mark.asyncio
+    async def test_resolve_dependencies_async_no_dependencies(self):
+        """Async version of test_resolve_dependencies_no_dependencies"""
+
+        def endpoint(param: str):
+            return f"endpoint_{param}"
+
+        result = await self.resolver.resolve_dependencies_async(
+            endpoint, self.request_data
+        )
+        assert result == {}
+
+    @pytest.mark.asyncio
+    async def test_resolve_dependencies_async_without_caching(self):
+        """Async version of test_resolve_dependencies_without_caching"""
+        call_count = 0
+
+        async def uncached_dep():
+            nonlocal call_count
+            call_count += 1
+            return f"result_{call_count}"
+
+        def endpoint(dep: str = Depends(uncached_dep)):
+            return dep
+
+        # First call
+        result1 = await self.resolver.resolve_dependencies_async(
+            endpoint, self.request_data
+        )
+        assert result1 == {"dep": "result_1"}
+        assert call_count == 1
+
+        # Second call - should not use cache
+        result2 = await self.resolver.resolve_dependencies_async(
+            endpoint, self.request_data
+        )
+        assert result2 == {"dep": "result_2"}
+        assert call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_resolve_security_dependency_async_with_scopes(self):
+        """Async version of test_resolve_security_dependency_with_scopes"""
+
+        async def auth_dep():
+            return {"user": "john", "scopes": ["read", "write"]}
+
+        def endpoint(user_data: dict = Security(auth_dep, scopes=["read"])):
+            return user_data
+
+        result = await self.resolver.resolve_dependencies_async(
+            endpoint, self.request_data
+        )
+        assert result == {"user_data": {"user": "john", "scopes": ["read", "write"]}}
+
+    @pytest.mark.asyncio
+    async def test_resolve_security_dependency_async_insufficient_scopes(self):
+        """Async version of test_resolve_security_dependency_insufficient_scopes"""
+
+        async def auth_dep():
+            return {"user": "john", "scopes": ["read"]}
+
+        def endpoint(user_data: dict = Security(auth_dep, scopes=["read", "write"])):
+            return user_data
+
+        with pytest.raises(SecurityError, match="Insufficient scopes"):
+            await self.resolver.resolve_dependencies_async(endpoint, self.request_data)
+
+    @pytest.mark.asyncio
+    async def test_resolve_security_dependency_async_no_scopes_in_result(self):
+        """Async version of test_resolve_security_dependency_no_scopes_in_result"""
+
+        async def auth_dep():
+            return {"user": "john"}
+
+        def endpoint(user_data: dict = Security(auth_dep, scopes=["read"])):
+            return user_data
+
+        with pytest.raises(SecurityError, match="Insufficient scopes"):
+            await self.resolver.resolve_dependencies_async(endpoint, self.request_data)
+
+    @pytest.mark.asyncio
+    async def test_resolve_security_dependency_async_no_required_scopes(self):
+        """Async version of test_resolve_security_dependency_no_required_scopes"""
+
+        async def auth_dep():
+            return {"user": "john"}
+
+        def endpoint(user_data: dict = Security(auth_dep, scopes=[])):
+            return user_data
+
+        result = await self.resolver.resolve_dependencies_async(
+            endpoint, self.request_data
+        )
+        assert result == {"user_data": {"user": "john"}}
+
+    @pytest.mark.asyncio
+    async def test_circular_dependency_detection_async(self):
+        """Async version of test_circular_dependency_detection"""
+
+        async def dep_a(b_dep: str = None):
+            if b_dep is None:
+                pass
+            return f"a_{b_dep or 'default'}"
+
+        original_resolve = self.resolver._resolve_single_dependency_async
+
+        async def mock_resolve(
+            dependency, request_data, param_name=None, param_annotation=None
+        ):
+            if dependency.dependency.__name__ == "dep_a":
+                request_cache = self.resolver._get_request_cache(request_data)
+                request_cache["resolving"].add(dependency.dependency)
+                return await original_resolve(
+                    dependency, request_data, param_name, param_annotation
+                )
+            return await original_resolve(
+                dependency, request_data, param_name, param_annotation
+            )
+
+        with patch.object(
+            self.resolver, "_resolve_single_dependency_async", side_effect=mock_resolve
+        ):
+
+            def endpoint(a: str = Depends(dep_a)):
+                return a
+
+            with pytest.raises(
+                CircularDependencyError, match="Circular dependency detected"
+            ):
+                await self.resolver.resolve_dependencies_async(
+                    endpoint, self.request_data
+                )
+
+    @pytest.mark.asyncio
+    async def test_nested_dependencies_async(self):
+        """Async version of test_nested_dependencies"""
+
+        async def level1_dep():
+            return "level1"
+
+        async def level2_dep(l1: str = Depends(level1_dep)):
+            return f"level2_{l1}"
+
+        async def level3_dep(l2: str = Depends(level2_dep)):
+            return f"level3_{l2}"
+
+        def endpoint(l3: str = Depends(level3_dep)):
+            return l3
+
+        result = await self.resolver.resolve_dependencies_async(
+            endpoint, self.request_data
+        )
+        assert result == {"l3": "level3_level2_level1"}
+
+    @pytest.mark.asyncio
+    async def test_dependency_function_failure_async(self):
+        """Async version of test_dependency_function_failure"""
+
+        async def failing_dep():
+            raise ValueError("Dependency failed")
+
+        def endpoint(dep: str = Depends(failing_dep)):
+            return dep
+
+        with pytest.raises(
+            DependencyError, match="Dependency function 'failing_dep' failed"
+        ):
+            await self.resolver.resolve_dependencies_async(endpoint, self.request_data)
+
+    @pytest.mark.asyncio
+    async def test_dependency_api_error_propagation_async(self):
+        """Async version of test_dependency_api_error_propagation"""
+
+        async def failing_dep():
+            raise APIError("Custom API error")
+
+        def endpoint(dep: str = Depends(failing_dep)):
+            return dep
+
+        with pytest.raises(APIError, match="Custom API error"):
+            await self.resolver.resolve_dependencies_async(endpoint, self.request_data)
+
+    @pytest.mark.asyncio
+    async def test_dependency_without_function_async(self):
+        """Async version of test_dependency_without_function"""
+
+        def endpoint(dep=Depends()):
+            return dep
+
+        with pytest.raises(DependencyError, match="No dependency function specified"):
+            await self.resolver.resolve_dependencies_async(endpoint, self.request_data)
+
+    @pytest.mark.asyncio
+    async def test_dependency_with_type_annotation_as_function_async(self):
+        """Async version of test_dependency_with_type_annotation_as_function"""
+
+        def endpoint(dep: str = Depends()):
+            return dep
+
+        with patch.object(
+            self.resolver,
+            "_execute_dependency_function_async",
+            return_value="from_annotation",
+        ):
+            result = await self.resolver.resolve_dependencies_async(
+                endpoint, self.request_data
+            )
+            assert result == {"dep": "from_annotation"}
+
+    @pytest.mark.asyncio
+    async def test_resolve_sub_dependencies_async_with_regular_params(self):
+        """Async version of test_resolve_sub_dependencies_with_regular_params"""
+
+        async def sub_dep():
+            return "sub_result"
+
+        async def main_dep(sub: str = Depends(sub_dep), regular_param: str = "default"):
+            return f"{sub}_{regular_param}"
+
+        def endpoint(main: str = Depends(main_dep)):
+            return main
+
+        with patch(
+            "fastopenapi.resolution.resolver.ParameterResolver"
+        ) as mock_resolver:
+            mock_resolver.resolve.return_value = {"regular_param": "resolved_value"}
+            result = await self.resolver.resolve_dependencies_async(
+                endpoint, self.request_data
+            )
+            assert "main" in result
+
+    @pytest.mark.asyncio
+    async def test_resolve_sub_dependencies_async_parameter_resolver_failure(self):
+        """Async version of test_resolve_sub_dependencies_parameter_resolver_failure"""
+
+        async def dep_with_required_param(required_param: str):
+            return f"result_{required_param}"
+
+        def endpoint(dep: str = Depends(dep_with_required_param)):
+            return dep
+
+        with patch(
+            "fastopenapi.resolution.resolver.ParameterResolver"
+        ) as mock_resolver:
+            mock_resolver.resolve.side_effect = Exception("Resolver failed")
+            with pytest.raises(
+                DependencyError, match="Failed to resolve required parameter"
+            ):
+                await self.resolver.resolve_dependencies_async(
+                    endpoint, self.request_data
+                )
+
+    @pytest.mark.asyncio
+    async def test_resolve_sub_dependencies_async_with_defaults(self):
+        """Async version of test_resolve_sub_dependencies_with_defaults"""
+
+        async def dep_with_defaults(param1: str = "default1", param2: int = 42):
+            return f"{param1}_{param2}"
+
+        def endpoint(dep: str = Depends(dep_with_defaults)):
+            return dep
+
+        with patch(
+            "fastopenapi.resolution.resolver.ParameterResolver"
+        ) as mock_resolver:
+            mock_resolver.resolve.side_effect = Exception("Resolver failed")
+            result = await self.resolver.resolve_dependencies_async(
+                endpoint, self.request_data
+            )
+            assert result == {"dep": "default1_42"}
+
+    @pytest.mark.asyncio
+    async def test_request_cache_cleanup_async(self):
+        """Async version of test_request_cache_cleanup"""
+
+        async def test_dep():
+            return "result"
+
+        def endpoint(dep: str = Depends(test_dep)):
+            return dep
+
+        initial_cache_count = len(self.resolver._request_cache)
+        await self.resolver.resolve_dependencies_async(endpoint, self.request_data)
+        final_cache_count = len(self.resolver._request_cache)
+        assert final_cache_count == initial_cache_count
+
+    @pytest.mark.asyncio
+    async def test_multiple_dependencies_same_endpoint_async(self):
+        """Async version of test_multiple_dependencies_same_endpoint"""
+
+        async def dep1():
+            return "dep1_result"
+
+        async def dep2():
+            return "dep2_result"
+
+        async def dep3():
+            return "dep3_result"
+
+        def endpoint(
+            d1: str = Depends(dep1), d2: str = Depends(dep2), d3: str = Security(dep3)
+        ):
+            return f"{d1}_{d2}_{d3}"
+
+        result = await self.resolver.resolve_dependencies_async(
+            endpoint, self.request_data
+        )
+        assert result == {"d1": "dep1_result", "d2": "dep2_result", "d3": "dep3_result"}
+
+    @pytest.mark.asyncio
+    async def test_dependency_returning_none_async(self):
+        """Async version of test_dependency_returning_none"""
+
+        async def none_dep():
+            return None
+
+        def endpoint(dep=Depends(none_dep)):
+            return dep
+
+        result = await self.resolver.resolve_dependencies_async(
+            endpoint, self.request_data
+        )
+        assert result == {"dep": None}
+
+    @pytest.mark.asyncio
+    async def test_dependency_with_complex_return_type_async(self):
+        """Async version of test_dependency_with_complex_return_type"""
+
+        async def complex_dep():
+            return {"nested": {"data": [1, 2, 3]}, "value": 42}
+
+        def endpoint(dep: dict = Depends(complex_dep)):
+            return dep
+
+        result = await self.resolver.resolve_dependencies_async(
+            endpoint, self.request_data
+        )
+        assert result == {"dep": {"nested": {"data": [1, 2, 3]}, "value": 42}}
+
+    @pytest.mark.asyncio
+    async def test_resolve_endpoint_dependencies_async_exception_handling(self):
+        """Async version of test_resolve_endpoint_dependencies_exception_handling"""
+
+        async def failing_dep():
+            raise RuntimeError("Generic error")
+
+        def endpoint(dep: str = Depends(failing_dep)):
+            return dep
+
+        with pytest.raises(
+            DependencyError, match="Dependency function 'failing_dep' failed"
+        ):
+            await self.resolver.resolve_dependencies_async(endpoint, self.request_data)
+
+    @pytest.mark.asyncio
+    async def test_global_async_convenience_functions(self):
+        """Async version of test_global_convenience_functions"""
+        from fastopenapi.core.dependency_resolver import resolve_dependencies_async
+
+        async def test_dep():
+            return "global_test"
+
+        def endpoint(dep: str = Depends(test_dep)):
+            return dep
+
+        result = await resolve_dependencies_async(endpoint, self.request_data)
+        assert result == {"dep": "global_test"}
+
+    @pytest.mark.asyncio
+    async def test_cache_hit_without_lock_async(self):
+        """Async version of test_cache_hit_without_lock"""
+        call_count = 0
+
+        async def test_dep():
+            nonlocal call_count
+            call_count += 1
+            return f"result_{call_count}"
+
+        def endpoint(dep: str = Depends(test_dep)):
+            return dep
+
+        # First call - should execute function
+        result1 = await self.resolver.resolve_dependencies_async(
+            endpoint, self.request_data
+        )
+        assert result1 == {"dep": "result_1"}
+        assert call_count == 1
+
+        # Manually add value to request cache for second call
+        new_request = RequestData(
+            path_params={},
+            query_params={},
+            headers={},
+            cookies={},
+            body={},
+        )
+
+        # Initialize request cache
+        with self.resolver._request_cache_lock:
+            self.resolver._request_cache[new_request] = {
+                "resolved": {},
+                "resolving": set(),
+            }
+
+        # Pre-populate cache
+        cache_key = self.resolver._make_cache_key(test_dep, new_request)
+        with self.resolver._request_cache_lock:
+            self.resolver._request_cache[new_request]["resolved"][
+                cache_key
+            ] = "cached_value"
+
+        # Second call with new request - should hit cache without calling function
+        result2 = await self.resolver.resolve_dependencies_async(endpoint, new_request)
+        assert result2 == {"dep": "cached_value"}
+        assert call_count == 1  # Function was not called again
+
+    @pytest.mark.asyncio
+    async def test_request_cache_hit_performance_async(self):
+        """Async version of test_request_cache_hit_performance"""
+        execution_log = []
+
+        async def tracked_dep():
+            execution_log.append("executed")
+            return "result"
+
+        async def dep_with_subdep(sub: str = Depends(tracked_dep)):
+            return f"main_{sub}"
+
+        def endpoint(
+            dep1: str = Depends(tracked_dep), dep2: str = Depends(dep_with_subdep)
+        ):
+            return f"{dep1}_{dep2}"
+
+        # tracked_dep is used directly and as sub-dependency
+        # It should only execute once within the same request
+        await self.resolver.resolve_dependencies_async(endpoint, self.request_data)
+
+        # tracked_dep should only be called once due to request-scoped caching
+        assert len(execution_log) == 1
+
+    @pytest.mark.asyncio
+    async def test_call_dependency_async_success(self):
+        """Test _call_dependency_async with successful execution"""
+
+        async def test_dep(arg1, arg2):
+            return f"{arg1}_{arg2}"
+
+        kwargs = {"arg1": "hello", "arg2": "world"}
+        result = await self.resolver._call_dependency_async(test_dep, kwargs)
+        assert result == "hello_world"
+
+    @pytest.mark.asyncio
+    async def test_call_dependency_sync_success(self):
+        """Test _call_dependency_async with successful execution"""
+
+        def test_dep(arg1, arg2):
+            return f"{arg1}_{arg2}"
+
+        kwargs = {"arg1": "hello", "arg2": "world"}
+        result = await self.resolver._call_dependency_async(test_dep, kwargs)
+        assert result == "hello_world"
+
+    @pytest.mark.asyncio
+    async def test_call_dependency_async_no_args(self):
+        """Test _call_dependency_async with no arguments"""
+
+        async def test_dep():
+            return "no_args"
+
+        result = await self.resolver._call_dependency_async(test_dep, {})
+        assert result == "no_args"
+
+    @pytest.mark.asyncio
+    async def test_call_dependency_async_api_error_propagation(self):
+        """Test _call_dependency_async propagates APIError"""
+
+        async def failing_dep():
+            raise APIError("API Error")
+
+        with pytest.raises(APIError):
+            await self.resolver._call_dependency_async(failing_dep, {})
+
+    @pytest.mark.asyncio
+    async def test_call_dependency_async_dependency_error_propagation(self):
+        """Test _call_dependency_async propagates DependencyError"""
+
+        async def failing_dep():
+            raise DependencyError("Dependency Error")
+
+        with pytest.raises(DependencyError):
+            await self.resolver._call_dependency_async(failing_dep, {})
+
+    @pytest.mark.asyncio
+    async def test_call_dependency_async_generic_error_wrapping(self):
+        """Test _call_dependency_async wraps generic exceptions"""
+
+        async def failing_dep():
+            raise ValueError("Generic error")
+
+        with pytest.raises(
+            DependencyError, match="Dependency function 'failing_dep' failed"
+        ):
+            await self.resolver._call_dependency_async(failing_dep, {})
+
+    @pytest.mark.asyncio
+    async def test_dependency_error_wrapped_async(self):
+        """Async version of test_dependency_error_wrapped"""
+
+        class DummyRequest:
+            pass
+
+        def endpoint(dep: "NotCallable" = Depends()):  # noqa: F821
+            return "ok"
+
+        resolver = DependencyResolver()
+        req = DummyRequest()
+
+        with pytest.raises(DependencyError) as exc:
+            await resolver.resolve_dependencies_async(endpoint, req)
+
+        assert "Failed to resolve dependency 'dep'" in str(exc.value)
+        assert isinstance(exc.value.__cause__, Exception)
+        assert isinstance(exc.value.__cause__, TypeError)
+
+    @pytest.mark.asyncio
+    async def test_mixed_sync_async_dependencies(self):
+        """Test mixing sync and async dependencies"""
+
+        def sync_dep():
+            return "sync"
+
+        async def async_dep():
+            return "async"
+
+        def endpoint(s: str = Depends(sync_dep), a: str = Depends(async_dep)):
+            return f"{s}_{a}"
+
+        result = await self.resolver.resolve_dependencies_async(
+            endpoint, self.request_data
+        )
+        assert result == {"s": "sync", "a": "async"}
+
+    @pytest.mark.asyncio
+    async def test_async_double_checked_locking_second_check_hit(self):
+        """Test second cache check (inside lock) finds value and returns it"""
+
+        async def test_dep():
+            return "should_not_execute"
+
+        # Initialize cache manually
+        with self.resolver._request_cache_lock:
+            self.resolver._request_cache[self.request_data] = {
+                "resolved": {},
+                "resolving": set(),
+            }
+
+        self.resolver._make_cache_key(test_dep, self.request_data)
+        self.resolver._get_request_cache(self.request_data)
+
+        # Mock _try_get_cached to return miss first, then hit
+        call_count = {"count": 0}
+
+        def mock_try_get_cached(key, cache):
+            call_count["count"] += 1
+            if call_count["count"] == 1:
+                # First check (before lock) - miss
+                return (False, None)
+            else:
+                # Second check (inside lock) - HIT
+                return (True, "from_second_check")
+
+        with patch.object(
+            self.resolver, "_try_get_cached", side_effect=mock_try_get_cached
+        ):
+            # Call the internal method directly to avoid outer cleanup
+            result = await self.resolver._execute_dependency_function_async(
+                test_dep, self.request_data, "dep"
+            )
+
+            # Should return value from second check without executing function
+            assert result == "from_second_check"
+            assert call_count["count"] == 2  # Called twice
+
+    @pytest.mark.asyncio
+    async def test_async_cleanup_when_cache_already_deleted(self):
+        """Test finally cleanup when request_data already removed from cache"""
+
+        async def test_dep():
+            return "result"
+
+        def endpoint(dep: str = Depends(test_dep)):
+            return dep
+
+        # Mock _resolve_endpoint_dependencies_async to delete cache during execution
+        original_resolve = self.resolver._resolve_endpoint_dependencies_async
+
+        async def mock_resolve(endpoint, request_data):
+            result = await original_resolve(endpoint, request_data)
+
+            # Delete cache BEFORE finally block runs
+            with self.resolver._request_cache_lock:
+                if request_data in self.resolver._request_cache:
+                    del self.resolver._request_cache[request_data]
+
+            return result
+
+        with patch.object(
+            self.resolver,
+            "_resolve_endpoint_dependencies_async",
+            side_effect=mock_resolve,
+        ):
+            result = await self.resolver.resolve_dependencies_async(
+                endpoint, self.request_data
+            )
+
+            # Should complete successfully even though cache was already deleted
+            assert result == {"dep": "result"}
+
+            # Verify cache is not present
+            assert self.request_data not in self.resolver._request_cache

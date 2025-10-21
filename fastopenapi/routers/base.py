@@ -112,7 +112,9 @@ class BaseAdapter(BaseRouter, ABC):
         """Handle asynchronous request"""
         try:
             request_data = await self.extractor_async_cls.extract_request_data(env)
-            kwargs = self.req_param_resolver_cls.resolve(endpoint, request_data)
+            kwargs = await self.req_param_resolver_cls.resolve_async(
+                endpoint, request_data
+            )
             if inspect.iscoroutinefunction(endpoint):
                 result = await endpoint(**kwargs)
             else:

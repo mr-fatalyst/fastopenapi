@@ -10,10 +10,12 @@ from fastopenapi.core.params import (
     Query,
     Security,
 )
-from fastopenapi.core.types import Response
+from fastopenapi.core.types import FileUpload, Response
 
 __all__ = [
     "__version__",
+    # types
+    "FileUpload",
     "Response",
     # params
     "Query",
