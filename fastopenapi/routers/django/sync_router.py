@@ -72,6 +72,10 @@ class DjangoRouter(BaseAdapter):
         """Build Django response"""
         content_type = response.headers.get("Content-Type")
 
+        if response.status_code in (204, 304):
+            http_response = HttpResponse(status=response.status_code)
+            return http_response
+
         # Binary content
         if isinstance(response.content, bytes):
             http_response = HttpResponse(

@@ -789,7 +789,7 @@ class TestDependencyResolver:
         assert isinstance(exc.value.__cause__, TypeError)
 
     # ==========================================
-    # ASYNC TESTS - точные копии sync тестов
+    # ASYNC TESTS - copy of sync tests
     # ==========================================
 
     @pytest.mark.asyncio

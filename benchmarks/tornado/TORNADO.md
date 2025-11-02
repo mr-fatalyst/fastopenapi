@@ -1,45 +1,78 @@
-# Tornado Benchmark
+================================================================================
 
----
+# SUMMARY: Median Results Across All Rounds
 
-## Testing Original Implementation
-```
-Original - Running 10000 iterations per endpoint
---------------------------------------------------
-GET all records: 9.3412 sec total, 0.93 ms per request
-GET one record: 9.5527 sec total, 0.96 ms per request
-POST new record: 9.9068 sec total, 0.99 ms per request
-PUT record: 9.8596 sec total, 0.99 ms per request
-PATCH record: 9.8612 sec total, 0.99 ms per request
-DELETE record: 19.0970 sec total, 1.91 ms per request
-```
----
+================================================================================
 
-## Testing FastOpenAPI Implementation
+## Framework Pure
 
-```
-FastOpenAPI - Running 10000 iterations per endpoint
---------------------------------------------------
-GET all records: 9.5980 sec total, 0.96 ms per request
-GET one record: 9.9557 sec total, 1.00 ms per request
-POST new record: 10.2566 sec total, 1.03 ms per request
-PUT record: 10.4081 sec total, 1.04 ms per request
-PATCH record: 10.2608 sec total, 1.03 ms per request
-DELETE record: 19.9923 sec total, 2.00 ms per request
-```
+| Endpoint | RPS (median) | p95 (ms) |
+|:---------|-------------:|---------:|
+| `GET all records` | 5829 | 3.63 |
+| `GET one record` | 5647 | 3.69 |
+| `POST new record` | 5436 | 3.73 |
+| `PUT record` | 5513 | 3.72 |
+| `PATCH record` | 5561 | 3.75 |
+| `DELETE record` | 5632 | 3.81 |
 
----
+## Framework + Validators
 
-## Performance Comparison (10000 iterations)
+| Endpoint | RPS (median) | p95 (ms) |
+|:---------|-------------:|---------:|
+| `GET all records` | 5476 | 3.83 |
+| `GET one record` | 5361 | 3.88 |
+| `POST new record` | 5189 | 3.99 |
+| `PUT record` | 5143 | 3.99 |
+| `PATCH record` | 5289 | 3.87 |
+| `DELETE record` | 5955 | 3.51 |
 
-| Endpoint                 | Original | FastOpenAPI | Difference |
-|--------------------------|----------|-------------|------------|
-| GET all records          | 0.93 ms  | 0.96 ms     | 0.03 ms (+2.7%)  |
-| GET one record           | 0.96 ms  | 1.00 ms     | 0.04 ms (+4.2%)  |
-| POST new record          | 0.99 ms  | 1.03 ms     | 0.03 ms (+3.5%)  |
-| PUT record               | 0.99 ms  | 1.04 ms     | 0.05 ms (+5.6%)  |
-| PATCH record             | 0.99 ms  | 1.03 ms     | 0.04 ms (+4.1%)  |
-| DELETE record            | 1.91 ms  | 2.00 ms     | 0.09 ms (+4.7%)  |
+## Framework + FastOpenAPI
+
+| Endpoint | RPS (median) | p95 (ms) |
+|:---------|-------------:|---------:|
+| `GET all records` | 4637 | 4.57 |
+| `GET one record` | 4161 | 5.04 |
+| `POST new record` | 4183 | 4.89 |
+| `PUT record` | 3915 | 5.28 |
+| `PATCH record` | 3979 | 5.17 |
+| `DELETE record` | 4519 | 4.59 |
+
+## FastAPI
+
+| Endpoint | RPS (median) | p95 (ms) |
+|:---------|-------------:|---------:|
+| `GET all records` | 11711 | 1.82 |
+| `GET one record` | 10003 | 2.01 |
+| `POST new record` | 7729 | 2.54 |
+| `PUT record` | 7393 | 2.65 |
+| `PATCH record` | 7336 | 2.68 |
+| `DELETE record` | 10957 | 1.91 |
+
+================================================================================
+
+## Framework — Performance Comparison (Pure = 100% baseline)
+
+### Requests Per Second (higher is better)
+
+| Endpoint | Pure | +Validators | Δ% | +FastOpenAPI | Δ% | FastAPI | Δ% |
+|---------|-----:|------------:|---:|-------------:|---:|--------:|---:|
+| `GET all records` | 5829 | 5476 | -6.0% | 4637 | -20.4% | 11711 | +100.9% |
+| `GET one record` | 5647 | 5361 | -5.1% | 4161 | -26.3% | 10003 | +77.1% |
+| `POST new record` | 5436 | 5189 | -4.6% | 4183 | -23.1% | 7729 | +42.2% |
+| `PUT record` | 5513 | 5143 | -6.7% | 3915 | -29.0% | 7393 | +34.1% |
+| `PATCH record` | 5561 | 5289 | -4.9% | 3979 | -28.5% | 7336 | +31.9% |
+| `DELETE record` | 5632 | 5955 | +5.7% | 4519 | -19.8% | 10957 | +94.6% |
+
+### p95 Latency (lower is better)
+
+| Endpoint | Pure (ms) | +Validators | Δ% | +FastOpenAPI | Δ% | FastAPI | Δ% |
+|---------|----------:|------------:|---:|-------------:|---:|--------:|---:|
+| `GET all records` | 3.63 | 3.83 | +5.6% | 4.57 | +26.1% | 1.82 | -49.8% |
+| `GET one record` | 3.69 | 3.88 | +5.0% | 5.04 | +36.4% | 2.01 | -45.7% |
+| `POST new record` | 3.73 | 3.99 | +7.0% | 4.89 | +31.3% | 2.54 | -31.7% |
+| `PUT record` | 3.72 | 3.99 | +7.1% | 5.28 | +41.8% | 2.65 | -28.9% |
+| `PATCH record` | 3.75 | 3.87 | +3.2% | 5.17 | +37.6% | 2.68 | -28.6% |
+| `DELETE record` | 3.81 | 3.51 | -7.9% | 4.59 | +20.6% | 1.91 | -49.8% |
 
 ---
 

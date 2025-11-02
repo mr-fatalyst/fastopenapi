@@ -1,189 +1,108 @@
-import time
-import uuid
-from typing import Any
+import asyncio
+import gc
+import random
+import statistics
 
-import requests
-
-
-def benchmark_endpoint(method, url, data=None, iterations=100):
-    headers = {"Content-Type": "application/json"}
-    start = time.time()
-
-    # Special case for DELETE - create a resource first for each iteration
-    if method == "DELETE":
-        base_url = url.rsplit("/", 1)[0]  # Get the collection URL
-
-        for _ in range(iterations):
-            # Create a resource to delete
-            record_data = {
-                "title": f"Temp Record {uuid.uuid4()}",
-                "description": "To be deleted",
-                "completed": False,
-            }
-
-            create_response = requests.post(base_url, json=record_data, headers=headers)
-            if create_response.status_code < 400:
-                record_id = create_response.json()["id"]
-                delete_url = f"{base_url}/{record_id}"
-                requests.delete(delete_url, headers=headers)
-
-    # Regular benchmark for all operations
-    elif method == "POST":
-        # For POST, create unique items each time
-        for _ in range(iterations):
-            unique_data = data.copy()
-            unique_data["title"] = f"{data['title']} {uuid.uuid4()}"
-            requests.post(url, json=unique_data, headers=headers)
-
-    else:
-        # For other operations (GET, PUT, PATCH), use standard approach
-        for _ in range(iterations):
-            if data and method in ["PUT", "PATCH"]:
-                requests.request(method, url, json=data, headers=headers)
-            else:
-                requests.request(method, url, headers=headers)
-
-    duration = time.time() - start
-    avg_ms = (duration / iterations) * 1000
-
-    return duration, avg_ms
+from benchmarks.common import APIBenchmark, compare_results, print_results
+from benchmarks.common.benchmark_base import (
+    BenchmarkResult,
+    gc_disabled,
+    reset_if_available,
+)
 
 
-def run_benchmarks(base_url, label, iterations=100):
-    # Create test data
-    record_data = {
-        "title": "Test Record",
-        "description": "This is a test record for benchmarking",
-        "completed": False,
-    }
+async def main():
+    iterations = 10000
+    concurrency = 20
+    warmup = 100
 
-    # Create a record to use for single item endpoints
-    create_response = requests.post(
-        f"{base_url}/records",
-        json=record_data,
-        headers={"Content-Type": "application/json"},
-    )
-
-    record_id = create_response.json()["id"]
-
-    # Define tests to run
-    tests = [
-        {"name": "GET all records", "method": "GET", "endpoint": "/records"},
-        {
-            "name": "GET one record",
-            "method": "GET",
-            "endpoint": f"/records/{record_id}",
-        },
-        {
-            "name": "POST new record",
-            "method": "POST",
-            "endpoint": "/records",
-            "data": record_data,
-        },
-        {
-            "name": "PUT record",
-            "method": "PUT",
-            "endpoint": f"/records/{record_id}",
-            "data": record_data,
-        },
-        {
-            "name": "PATCH record",
-            "method": "PATCH",
-            "endpoint": f"/records/{record_id}",
-            "data": {"title": "Updated Record"},
-        },
-        {
-            "name": "DELETE record",
-            "method": "DELETE",
-            "endpoint": f"/records/{record_id}",
-        },
+    apps = [
+        ("http://localhost:8000", "Framework Pure"),
+        ("http://localhost:8001", "Framework + Validators"),
+        ("http://localhost:8002", "Framework + FastOpenAPI"),
+        ("http://localhost:8003", "FastAPI"),
     ]
 
-    results = {}
-    print(f"\n{label} - Running {iterations} iterations per endpoint")
-    print("-" * 50)
+    rounds = 5
+    aggregated: dict[str, list[dict[str, object]]] = {label: [] for _, label in apps}
 
-    for test in tests:
-        name = test["name"]
-        method = test["method"]
-        endpoint = test["endpoint"]
-        data = test.get("data")
+    for r in range(1, rounds + 1):
+        order = apps[:]
+        random.shuffle(order)
 
-        url = base_url + endpoint
+        print(f"\n{'#' * 80}")
+        print(f"# ROUND {r}/{rounds}")
+        print(f"{'#' * 80}\n")
 
-        try:
-            duration, avg_ms = benchmark_endpoint(method, url, data, iterations)
-            print(f"{name}: {duration:.4f} sec total, {avg_ms:.2f} ms per request")
-            results[name] = {"duration": duration, "avg_ms": avg_ms}
-        except Exception as e:
-            print(f"{name}: ERROR - {str(e)}")
-            results[name] = {"error": str(e)}
+        for base_url, label in order:
+            print(f"\n> Testing: {label}...")
 
-    return results
+            await reset_if_available(base_url)
+            with gc_disabled():
+                benchmark = APIBenchmark(base_url, concurrency=concurrency)
+                results = await benchmark.run_full_benchmark(
+                    iterations=iterations, warmup=warmup
+                )
+            print_results(results, f"{label} (round {r})", concurrency)
+            aggregated[label].append(results)
 
+            gc.collect()
+            await asyncio.sleep(2)
 
-def run_benchmarks_for_apps(apps: list[tuple[str, str]]) -> dict[str, Any]:
-    result = {}
-    for url, name in apps:
-        try:
-            print(f"\nTesting {name} Implementation")
-            result[name] = run_benchmarks(url, name, iterations)
-        except Exception as e:
-            print(f"Error testing {name} implementation: {str(e)}")
-    return result
+    def summarize(label_results):
+        """Calculate median RPS and p95 across all rounds"""
+        names = list(label_results[0].keys())
+        summary = {}
+        for name in names:
+            rps_vals = [res[name].rps for res in label_results]
+            p95_vals = [res[name].p95 for res in label_results]
+            summary[name] = {
+                "rps_med": statistics.median(rps_vals),
+                "p95_med": statistics.median(p95_vals),
+            }
+        return summary
 
+    def create_median_results(median_summary):
+        """Convert median summary to BenchmarkResult objects for comparison"""
+        results = {}
+        for endpoint, values in median_summary.items():
+            # Create a minimal BenchmarkResult with only needed fields
+            result = BenchmarkResult(
+                endpoint=endpoint,
+                method="",
+                duration=0,
+                total_requests=0,
+                successful=0,
+                failed=0,
+                rps=values["rps_med"],
+                latencies=[values["p95_med"]],  # Use p95 as single latency point
+            )
+            results[endpoint] = result
+        return results
 
-def compare_results(results: dict[str, Any]):
-    if len(results) == 2:
-        print(f"\nPerformance Comparison ({iterations} iterations)")
-        print("=" * 70)
-        print(
-            f"{'Endpoint':<25} {'Original':<15} {'FastOpenAPI':<15} {'Difference':<15}"
+    print("\n" + "=" * 80)
+    print("\n# SUMMARY: Median Results Across All Rounds\n")
+    print("=" * 80)
+
+    medians = {label: summarize(runs) for label, runs in aggregated.items()}
+
+    for label, items in medians.items():
+        print(f"\n## {label}\n")
+        print("| Endpoint | RPS (median) | p95 (ms) |")
+        print("|:---------|-------------:|---------:|")
+        for endpoint, vals in items.items():
+            print(f"| `{endpoint}` | {vals['rps_med']:.0f} | {vals['p95_med']:.2f} |")
+
+    # Compare using median values instead of last round
+    if all(len(runs) == rounds for runs in aggregated.values()):
+        pure_median = create_median_results(medians["Framework Pure"])
+        valid_median = create_median_results(medians["Framework + Validators"])
+        foapi_median = create_median_results(medians["Framework + FastOpenAPI"])
+        fastapi_median = create_median_results(medians["FastAPI"])
+        compare_results(
+            pure_median, valid_median, foapi_median, fastapi_median, "Framework"
         )
-        print("-" * 70)
-
-        for endpoint in results["Original"]:
-            if endpoint in results["FastOpenAPI"]:
-                if (
-                    "error" not in results["Original"][endpoint]
-                    and "error" not in results["FastOpenAPI"][endpoint]
-                ):
-                    orig_ms = results["Original"][endpoint]["avg_ms"]
-                    fast_ms = results["FastOpenAPI"][endpoint]["avg_ms"]
-                    diff = fast_ms - orig_ms
-                    diff_percent = (diff / orig_ms) * 100 if orig_ms > 0 else 0
-
-                    print(
-                        f"{endpoint:<25} {orig_ms:.2f} ms"
-                        f"{'':<8} {fast_ms:.2f} ms"
-                        f"{'':<8} {diff:.2f} ms ({diff_percent:+.1f}%)"
-                    )
-                else:
-                    if "error" in results["Original"][endpoint]:
-                        print(f"{endpoint:<25} ERROR{'':<16} ", end="")
-                        if "error" in results["FastOpenAPI"][endpoint]:
-                            print(f"ERROR{'':<16} N/A")
-                        else:
-                            print(
-                                f"{results['FastOpenAPI'][endpoint]['avg_ms']:.2f} ms"
-                                f"{'':<8} N/A"
-                            )
-                    else:
-                        print(
-                            f"{endpoint:<25} "
-                            f"{results['Original'][endpoint]['avg_ms']:.2f} ms"
-                            f"{'':<8} ERROR{'':<16} N/A"
-                        )
 
 
 if __name__ == "__main__":
-    iterations = 10000
-    # Apps for tests
-    apps = [
-        ("http://localhost:8000", "Original"),
-        ("http://localhost:8001", "FastOpenAPI"),
-    ]
-    # Run benchmarks
-    results = run_benchmarks_for_apps(apps)
-    # Compare results
-    compare_results(results)
+    asyncio.run(main())
