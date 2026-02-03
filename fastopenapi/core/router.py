@@ -38,8 +38,10 @@ class BaseRouter:
         version: str = "0.1.0",
         description: str = "API documentation",
         security_scheme: SecuritySchemeType | None = SecuritySchemeType.BEARER_JWT,
+        blueprint: Any = None,
     ):
         self.app = app
+        self.blueprint = blueprint
         self.docs_url = docs_url
         self.redoc_url = redoc_url
         self.openapi_url = openapi_url
@@ -56,8 +58,9 @@ class BaseRouter:
             scheme_name = SECURITY_SCHEME_NAMES[security_scheme]
             self._security_schemes = {scheme_name: SECURITY_SCHEMES[security_scheme]}
 
-        # Register documentation endpoints if app is provided
-        if self.app is not None and all([docs_url, redoc_url, openapi_url]):
+        # Register documentation endpoints if app or blueprint is provided
+        registration_target = blueprint or app
+        if registration_target is not None and all([docs_url, redoc_url, openapi_url]):
             self._register_docs_endpoints()
 
     def add_route(self, path: str, method: str, endpoint: Callable):

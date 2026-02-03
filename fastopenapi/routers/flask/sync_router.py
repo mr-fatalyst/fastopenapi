@@ -19,10 +19,12 @@ class FlaskRouter(BaseAdapter):
     extractor_cls = FlaskRequestDataExtractor
 
     def add_route(self, path: str, method: str, endpoint: Callable):
-        """Add route to Flask application"""
+        """Add route to Flask application or blueprint"""
         super().add_route(path, method, endpoint)
 
-        if self.app is not None:
+        # Use blueprint if available, otherwise fall back to app
+        registration_target = self.blueprint or self.app
+        if registration_target is not None:
             flask_path = self._convert_path_for_framework(path)
 
             def view_func(**path_params):
@@ -37,7 +39,7 @@ class FlaskRouter(BaseAdapter):
                 return self.handle_request(endpoint, env)
 
             rule_endpoint = f"{endpoint.__name__}:{method.upper()}:{flask_path}"
-            self.app.add_url_rule(
+            registration_target.add_url_rule(
                 flask_path, rule_endpoint, view_func, methods=[method.upper()]
             )
 
@@ -71,17 +73,19 @@ class FlaskRouter(BaseAdapter):
 
     def _register_docs_endpoints(self):
         """Register documentation endpoints"""
+        # Use blueprint if available, otherwise fall back to app
+        registration_target = self.blueprint or self.app
 
-        @self.app.route(self.openapi_url, methods=["GET"])
+        @registration_target.route(self.openapi_url, methods=["GET"])
         def openapi_view():
             return jsonify(self.openapi)
 
-        @self.app.route(self.docs_url, methods=["GET"])
+        @registration_target.route(self.docs_url, methods=["GET"])
         def docs_view():
             html = render_swagger_ui(self.openapi_url)
             return FlaskResponse(html, mimetype="text/html")
 
-        @self.app.route(self.redoc_url, methods=["GET"])
+        @registration_target.route(self.redoc_url, methods=["GET"])
         def redoc_view():
             html = render_redoc_ui(self.openapi_url)
             return FlaskResponse(html, mimetype="text/html")
