@@ -55,3 +55,9 @@ jobs:
         run: |
           poetry build
           poetry publish
+
+  docs:
+    needs: deploy-prod
+    uses: ./.github/workflows/docs.yml
+    with:
+      version: ${{ github.ref_name }}

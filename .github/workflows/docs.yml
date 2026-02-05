@@ -1,0 +1,60 @@
+name: Deploy docs
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: 'Version to deploy (e.g., v0.1.0)'
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to deploy (e.g., v0.1.0)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install mkdocs-material mike
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Extract version number
+        id: version
+        run: |
+          # v0.1.0 -> 0.1
+          VERSION="${{ inputs.version }}"
+          VERSION="${VERSION#v}"
+          VERSION="${VERSION%.*}"
+          echo "short=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Deploy docs
+        run: |
+          mike deploy ${{ steps.version.outputs.short }} latest --update-aliases --push
+          mike set-default latest --push
+
+      - name: Ensure CNAME exists
+        run: |
+          git checkout gh-pages
+          echo "fastopenapi.fatalyst.dev" > CNAME
+          git add CNAME
+          git diff --cached --quiet || git commit -m "Add CNAME"
+          git push origin gh-pages

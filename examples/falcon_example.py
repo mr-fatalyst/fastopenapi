@@ -1,10 +1,10 @@
-import falcon.asgi
 import uvicorn
+from falcon.asgi import App
 from pydantic import BaseModel
 
 from fastopenapi.routers import FalconAsyncRouter
 
-app = falcon.asgi.App()
+app = App()
 router = FalconAsyncRouter(app=app)
 
 
