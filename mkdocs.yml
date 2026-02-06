@@ -50,25 +50,61 @@ theme:
   language: en
 
 nav:
-  - FastOpenAPI: index.md
+  - Home: index.md
+
   - Getting Started:
       - Installation: getting_started/installation.md
       - Quickstart: getting_started/quickstart.md
-      - Usage: getting_started/usage.md
+      - Core Concepts: getting_started/core_concepts.md
+
+  - User Guide:
+      - Routing: guide/routing.md
+      - Request Parameters: guide/request_parameters.md
+      - Request Body: guide/request_body.md
+      - Response Handling: guide/response_handling.md
+      - Validation: guide/validation.md
+      - Dependencies: guide/dependencies.md
+      - Security: guide/security.md
+      - Error Handling: guide/error_handling.md
+
   - Frameworks:
+      - Overview: frameworks/overview.md
       - AIOHTTP: frameworks/aiohttp.md
+      - Django: frameworks/django.md
       - Falcon: frameworks/falcon.md
       - Flask: frameworks/flask.md
       - Quart: frameworks/quart.md
       - Sanic: frameworks/sanic.md
       - Starlette: frameworks/starlette.md
       - Tornado: frameworks/tornado.md
+
+  - Examples:
+      - CRUD API: examples/crud_api.md
+      - File Uploads: examples/file_uploads.md
+      - Authentication: examples/authentication.md
+      - Multi-Router Apps: examples/multi_router.md
+      - Async Patterns: examples/async_tasks.md
+
   - Advanced:
-      - Advanced Usage: advanced/advanced_usage.md
-      - API Reference: advanced/api_reference.md
-  - Contributing: contributing.md
-  - Changelog: changelog.md
-  - FAQ: faq.md
+      - Architecture: advanced/architecture.md
+      - Architecture Quick Guide: advanced/architecture_quick_reference.md
+      - Custom Routers: advanced/custom_routers.md
+      - OpenAPI Customization: advanced/openapi_customization.md
+      - Performance: advanced/performance.md
+      - Testing: advanced/testing.md
+
+  - API Reference:
+      - Parameters: api_reference/parameters.md
+      - Dependencies: api_reference/dependencies.md
+      - Responses: api_reference/responses.md
+      - Errors: api_reference/errors.md
+      - Routers: api_reference/routers.md
+      - Types: api_reference/types.md
+
+  - Community:
+      - Contributing: community/contributing.md
+      - Changelog: community/changelog.md
+      - FAQ: community/faq.md
 
 markdown_extensions:
   - pymdownx.highlight:
@@ -91,6 +127,10 @@ markdown_extensions:
   - tables
   - toc:
       permalink: true
+
+extra_javascript:
+  - https://unpkg.com/mermaid@10/dist/mermaid.min.js
+  - javascripts/mermaid-init.js
 
 extra:
   version:

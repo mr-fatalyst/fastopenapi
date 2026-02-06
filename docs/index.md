@@ -23,19 +23,185 @@
 
 ---
 
-## About
+## What is FastOpenAPI?
 
-**FastOpenAPI** is a Python library for seamlessly generating and integrating OpenAPI schemas using Pydantic models across multiple web frameworks. Inspired by FastAPI, it aims to provide a similar developer-friendly experience for frameworks like AIOHTTP, Falcon, Flask, Quart, Sanic, Starlette, and Tornado. With FastOpenAPI, you can add interactive API documentation and request/response validation to your existing web application without switching frameworks.
+FastOpenAPI brings FastAPI-style developer experience to frameworks like Flask, Django, Starlette, AIOHTTP, and others. It provides:
 
-FastOpenAPI is currently in active development (pre-1.0). While it's already usable, expect potential breaking changes as the project evolves. We welcome feedback and contributions to improve stability and add new features.
+- **Automatic OpenAPI schema generation** from your route definitions
+- **Interactive API documentation** (Swagger UI and ReDoc)
+- **Request validation** using Pydantic models
+- **Response serialization** with type safety
+- **Framework-agnostic approach** - use with your preferred web framework
 
-## Features
+Inspired by [FastAPI](https://fastapi.tiangolo.com/), FastOpenAPI aims to provide similar functionality for developers who need to work with existing frameworks or prefer not to adopt a full framework switch.
 
-- **Auto-generated OpenAPI schemas** – Define your API routes and data models, and FastOpenAPI will automatically generate a complete OpenAPI (Swagger) schema.
-- **Pydantic v2 support** – Leverage Pydantic models for data validation and serialization. Both request payloads and responses can be validated with Pydantic, ensuring correct data types.
-- **Multi-framework integration** – Includes out-of-the-box support for AIOHTTP, Falcon, Flask, Quart, Sanic, Starlette, and Tornado. This lets you use FastOpenAPI with your preferred web framework seamlessly.
-- **FastAPI-style routing** – Use decorator-based routing (e.g. `@router.get`, `@router.post`) similar to FastAPI’s `APIRouter`. This proxy routing provides a familiar interface for defining endpoints and automatically ties into the framework’s routing.
-- **Interactive docs UIs** – Automatically serves Swagger UI at `/docs` and ReDoc at `/redoc` in your application for interactive API exploration and documentation.
-- **Request validation and error handling** – Invalid inputs are caught and returned as HTTP errors with JSON error messages. Custom exception classes are provided for common API errors (400 Bad Request, 404 Not Found, etc.) to simplify error handling.
+## Key Features
 
-Use the navigation to explore the documentation. Start with **Installation** and **Quickstart** to get **FastOpenAPI** up and running, then see **Usage** for deeper examples. Framework-specific guides provide instructions for each supported framework. For advanced topics (like extending FastOpenAPI or understanding its architecture), check out **Advanced Usage** and the **API Reference**. If you want to contribute or see what’s changed in each release, see the **Contributing** and **Changelog** sections. Finally, our **FAQ** addresses common questions.
+### Multi-Framework Support
+
+FastOpenAPI supports 8 popular Python web frameworks out of the box:
+
+- **AIOHTTP** - Async HTTP client/server framework
+- **Django** - High-level web framework (sync and async)
+- **Falcon** - Minimalist ASGI/WSGI framework (sync and async)
+- **Flask** - Lightweight WSGI framework
+- **Quart** - Async version of Flask
+- **Sanic** - Async web framework built for speed
+- **Starlette** - Lightweight ASGI framework
+- **Tornado** - Async networking library
+
+### FastAPI-Style API
+
+Use familiar decorator-based routing and parameter declarations:
+
+```python
+from fastopenapi import Query, Path, Body
+from fastopenapi.routers import FlaskRouter
+from pydantic import BaseModel
+
+router = FlaskRouter(app=app)
+
+class User(BaseModel):
+    name: str
+    email: str
+
+@router.get("/users/{user_id}")
+def get_user(user_id: int = Path(..., description="User ID")):
+    return {"user_id": user_id}
+
+@router.post("/users", response_model=User)
+def create_user(user: User = Body(...)):
+    return user
+```
+
+### Automatic Documentation
+
+Once configured, your API documentation is automatically available:
+
+- **Swagger UI**: `http://localhost:8000/docs`
+- **ReDoc**: `http://localhost:8000/redoc`
+- **OpenAPI JSON**: `http://localhost:8000/openapi.json`
+
+### Pydantic v2 Integration
+
+Leverage Pydantic v2 for:
+
+- Request body validation
+- Response model validation
+- Automatic JSON Schema generation
+- Type coercion and error messages
+
+### Advanced Features
+
+**Dependency Injection**
+```python
+from fastopenapi import Depends
+
+def get_db():
+    db = Database()
+    try:
+        yield db
+    finally:
+        db.close()
+
+@router.get("/items")
+def list_items(db = Depends(get_db)):
+    return db.get_items()
+```
+
+**Security Schemes**
+```python
+from fastopenapi import Security
+
+router = FlaskRouter(
+    app=app,
+    security_scheme=SecuritySchemeType.BEARER_JWT
+)
+
+@router.get("/protected")
+def protected_endpoint(token: str = Security()):
+    return {"message": "Access granted"}
+```
+
+**File Uploads**
+```python
+from fastopenapi import File, FileUpload
+
+@router.post("/upload")
+async def upload_file(file: FileUpload = File(...)):
+    content = await file.aread()
+    return {"filename": file.filename, "size": len(content)}
+```
+
+## Project Status
+
+FastOpenAPI is currently in **beta** (version 1.0.0b1). The API is stable, but minor changes may occur before the 1.0.0 release. We welcome feedback and contributions to help improve the library.
+
+## Quick Example
+
+Here's a complete working example with Flask:
+
+```python
+from flask import Flask
+from pydantic import BaseModel
+from fastopenapi.routers import FlaskRouter
+
+app = Flask(__name__)
+router = FlaskRouter(app=app, title="My API", version="1.0.0")
+
+class Item(BaseModel):
+    name: str
+    price: float
+    description: str | None = None
+
+@router.get("/")
+def root():
+    return {"message": "Hello, FastOpenAPI!"}
+
+@router.post("/items", response_model=Item, status_code=201)
+def create_item(item: Item):
+    return item
+
+if __name__ == "__main__":
+    app.run(port=8000)
+```
+
+Run the app and visit `http://localhost:8000/docs` to see your interactive API documentation.
+
+## When to Use FastOpenAPI
+
+**Use FastOpenAPI when:**
+
+- You have an existing application in Flask, Django, or another supported framework
+- You need OpenAPI documentation without switching frameworks
+- You want FastAPI-style DX but can't use FastAPI
+- You're building a library that needs to support multiple frameworks
+- You prefer the flexibility of choosing your own framework
+
+**Consider FastAPI when:**
+
+- You're starting a new project from scratch
+- You want a complete, batteries-included async framework
+- You need built-in features like background tasks, WebSockets, and GraphQL support
+- You need maximum performance with ASGI and modern async features
+- You want the largest ecosystem, extensive documentation, and active community
+
+## Next Steps
+
+Ready to get started? Head over to:
+
+- [Installation](getting_started/installation.md) - Install FastOpenAPI
+- [Quickstart](getting_started/quickstart.md) - Build your first API in 5 minutes
+- [Core Concepts](getting_started/core_concepts.md) - Understand the basics
+- [User Guide](guide/routing.md) - Learn all the features
+
+## Community and Support
+
+- **GitHub**: [mr-fatalyst/fastopenapi](https://github.com/mr-fatalyst/fastopenapi)
+- **Issues**: [Report bugs or request features](https://github.com/mr-fatalyst/fastopenapi/issues)
+- **Discussions**: [Ask questions and share ideas](https://github.com/mr-fatalyst/fastopenapi/discussions)
+
+## License
+
+FastOpenAPI is licensed under the MIT License. See the [LICENSE](https://github.com/mr-fatalyst/fastopenapi/blob/master/LICENSE) file for details.
+
