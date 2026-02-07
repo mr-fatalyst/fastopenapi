@@ -101,6 +101,57 @@ class TestBaseRouter:
         assert len(self.router._routes) == 2
         assert self.router._routes[1].path == "/other"
 
+    def test_include_router_merges_security_schemes(self):
+        """Test that include_router merges security schemes from sub-router"""
+        other_router = BaseRouter(security_scheme=None)
+        other_router._security_schemes = {"ApiKey": {"type": "apiKey", "in": "header"}}
+
+        # Parent has no security schemes
+        parent = BaseRouter(security_scheme=None)
+        assert parent._security_schemes is None
+
+        parent.include_router(other_router)
+        assert parent._security_schemes == {
+            "ApiKey": {"type": "apiKey", "in": "header"}
+        }
+
+    def test_include_router_merges_security_schemes_both(self):
+        """Test merging when both routers have security schemes"""
+        from fastopenapi.core.constants import SecuritySchemeType
+
+        parent = BaseRouter(security_scheme=SecuritySchemeType.BEARER_JWT)
+        assert parent._security_schemes is not None
+
+        other = BaseRouter(security_scheme=None)
+        other._security_schemes = {"ApiKey": {"type": "apiKey", "in": "header"}}
+
+        parent.include_router(other)
+        assert "BearerAuth" in parent._security_schemes
+        assert "ApiKey" in parent._security_schemes
+
+    def test_include_router_merges_global_security(self):
+        """Test that include_router merges global security from sub-router"""
+        parent = BaseRouter(security_scheme=None)
+        parent._global_security = [{"BearerJWT": []}]
+
+        other = BaseRouter(security_scheme=None)
+        other._global_security = [{"ApiKey": []}, {"BearerJWT": []}]
+
+        parent.include_router(other)
+        # Should have both, no duplicates
+        assert {"BearerJWT": []} in parent._global_security
+        assert {"ApiKey": []} in parent._global_security
+        assert len(parent._global_security) == 2
+
+    def test_include_router_no_security_no_change(self):
+        """Test include_router with sub-router without security"""
+        parent = BaseRouter(security_scheme=None)
+        other = BaseRouter(security_scheme=None)
+
+        parent.include_router(other)
+        assert parent._security_schemes is None
+        assert parent._global_security == []
+
     def test_http_method_decorators(self):
         # Test all HTTP method decorators
 

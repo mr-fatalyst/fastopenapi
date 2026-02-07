@@ -76,6 +76,17 @@ class BaseRouter:
             )
             self.add_route(path, route.method, route.endpoint)
 
+        # Merge security schemes
+        if other._security_schemes:
+            if self._security_schemes is None:
+                self._security_schemes = {}
+            self._security_schemes.update(other._security_schemes)
+
+        # Merge global security
+        for sec in other._global_security:
+            if sec not in self._global_security:
+                self._global_security.append(sec)
+
     def get_routes(self) -> list[RouteInfo]:
         """Get all registered routes"""
         return self._routes
