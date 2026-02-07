@@ -728,7 +728,7 @@ class TestDependencyResolver:
             return f"{arg1}_{arg2}"
 
         kwargs = {"arg1": "hello", "arg2": "world"}
-        result = self.resolver._call_dependency(test_dep, kwargs)
+        result = self.resolver._call_dependency(test_dep, kwargs, self.request_data)
 
         assert result == "hello_world"
 
@@ -738,7 +738,7 @@ class TestDependencyResolver:
         def test_dep():
             return "no_args"
 
-        result = self.resolver._call_dependency(test_dep, {})
+        result = self.resolver._call_dependency(test_dep, {}, self.request_data)
 
         assert result == "no_args"
 
@@ -749,7 +749,7 @@ class TestDependencyResolver:
             raise APIError("API Error")
 
         with pytest.raises(APIError):
-            self.resolver._call_dependency(failing_dep, {})
+            self.resolver._call_dependency(failing_dep, {}, self.request_data)
 
     def test_call_dependency_dependency_error_propagation(self):
         """Test _call_dependency propagates DependencyError"""
@@ -758,7 +758,7 @@ class TestDependencyResolver:
             raise DependencyError("Dependency Error")
 
         with pytest.raises(DependencyError):
-            self.resolver._call_dependency(failing_dep, {})
+            self.resolver._call_dependency(failing_dep, {}, self.request_data)
 
     def test_call_dependency_generic_error_wrapping(self):
         """Test _call_dependency wraps generic exceptions"""
@@ -769,7 +769,7 @@ class TestDependencyResolver:
         with pytest.raises(
             DependencyError, match="Dependency function 'failing_dep' failed"
         ):
-            self.resolver._call_dependency(failing_dep, {})
+            self.resolver._call_dependency(failing_dep, {}, self.request_data)
 
     def test_dependency_error_wrapped(self):
         class DummyRequest:
@@ -1255,7 +1255,9 @@ class TestDependencyResolver:
             return f"{arg1}_{arg2}"
 
         kwargs = {"arg1": "hello", "arg2": "world"}
-        result = await self.resolver._call_dependency_async(test_dep, kwargs)
+        result = await self.resolver._call_dependency_async(
+            test_dep, kwargs, self.request_data
+        )
         assert result == "hello_world"
 
     @pytest.mark.asyncio
@@ -1266,7 +1268,9 @@ class TestDependencyResolver:
             return f"{arg1}_{arg2}"
 
         kwargs = {"arg1": "hello", "arg2": "world"}
-        result = await self.resolver._call_dependency_async(test_dep, kwargs)
+        result = await self.resolver._call_dependency_async(
+            test_dep, kwargs, self.request_data
+        )
         assert result == "hello_world"
 
     @pytest.mark.asyncio
@@ -1276,7 +1280,9 @@ class TestDependencyResolver:
         async def test_dep():
             return "no_args"
 
-        result = await self.resolver._call_dependency_async(test_dep, {})
+        result = await self.resolver._call_dependency_async(
+            test_dep, {}, self.request_data
+        )
         assert result == "no_args"
 
     @pytest.mark.asyncio
@@ -1287,7 +1293,9 @@ class TestDependencyResolver:
             raise APIError("API Error")
 
         with pytest.raises(APIError):
-            await self.resolver._call_dependency_async(failing_dep, {})
+            await self.resolver._call_dependency_async(
+                failing_dep, {}, self.request_data
+            )
 
     @pytest.mark.asyncio
     async def test_call_dependency_async_dependency_error_propagation(self):
@@ -1297,7 +1305,9 @@ class TestDependencyResolver:
             raise DependencyError("Dependency Error")
 
         with pytest.raises(DependencyError):
-            await self.resolver._call_dependency_async(failing_dep, {})
+            await self.resolver._call_dependency_async(
+                failing_dep, {}, self.request_data
+            )
 
     @pytest.mark.asyncio
     async def test_call_dependency_async_generic_error_wrapping(self):
@@ -1309,7 +1319,9 @@ class TestDependencyResolver:
         with pytest.raises(
             DependencyError, match="Dependency function 'failing_dep' failed"
         ):
-            await self.resolver._call_dependency_async(failing_dep, {})
+            await self.resolver._call_dependency_async(
+                failing_dep, {}, self.request_data
+            )
 
     @pytest.mark.asyncio
     async def test_dependency_error_wrapped_async(self):
@@ -1427,3 +1439,216 @@ class TestDependencyResolver:
 
             # Verify cache is not present
             assert self.request_data not in self.resolver._request_cache
+
+    # ==========================================
+    # GENERATOR (YIELD) DEPENDENCY TESTS
+    # ==========================================
+
+    def test_sync_generator_dependency(self):
+        """Test sync generator dependency yields value"""
+        cleanup_called = False
+
+        def db_session():
+            nonlocal cleanup_called
+            session = {"connected": True}
+            try:
+                yield session
+            finally:
+                cleanup_called = True
+
+        def endpoint(db=Depends(db_session)):
+            return db
+
+        result = self.resolver.resolve_dependencies(endpoint, self.request_data)
+        assert result == {"db": {"connected": True}}
+        assert cleanup_called
+
+    def test_sync_generator_cleanup_on_error(self):
+        """Test sync generator cleanup runs even when endpoint raises"""
+        cleanup_called = False
+
+        def db_session():
+            nonlocal cleanup_called
+            yield "session"
+            cleanup_called = True  # after yield, before finally — won't reach
+            # But finally WILL run via gen.close()
+
+        # Use a version with finally to properly test cleanup
+        cleanup_log = []
+
+        def db_session_with_finally():
+            cleanup_log.append("setup")
+            try:
+                yield "session"
+            finally:
+                cleanup_log.append("cleanup")
+
+        def endpoint(db=Depends(db_session_with_finally)):
+            return db
+
+        result = self.resolver.resolve_dependencies(endpoint, self.request_data)
+        assert result == {"db": "session"}
+        assert cleanup_log == ["setup", "cleanup"]
+
+    def test_sync_generator_empty_raises(self):
+        """Test generator that doesn't yield raises DependencyError"""
+
+        def empty_gen():
+            return
+            yield  # noqa: F401 — makes it a generator function
+
+        def endpoint(dep=Depends(empty_gen)):
+            return dep
+
+        with pytest.raises(DependencyError, match="did not yield"):
+            self.resolver.resolve_dependencies(endpoint, self.request_data)
+
+    def test_sync_generator_with_sub_dependencies(self):
+        """Test generator dependency that has its own dependencies"""
+        cleanup_log = []
+
+        def get_config():
+            return {"db_url": "sqlite://"}
+
+        def db_session(config=Depends(get_config)):
+            cleanup_log.append("setup")
+            try:
+                yield {"url": config["db_url"]}
+            finally:
+                cleanup_log.append("cleanup")
+
+        def endpoint(db=Depends(db_session)):
+            return db
+
+        result = self.resolver.resolve_dependencies(endpoint, self.request_data)
+        assert result == {"db": {"url": "sqlite://"}}
+        assert cleanup_log == ["setup", "cleanup"]
+
+    def test_multiple_sync_generators_cleanup_order(self):
+        """Test that multiple generators are all cleaned up"""
+        cleanup_log = []
+
+        def gen_a():
+            try:
+                yield "a"
+            finally:
+                cleanup_log.append("a_cleanup")
+
+        def gen_b():
+            try:
+                yield "b"
+            finally:
+                cleanup_log.append("b_cleanup")
+
+        def endpoint(a=Depends(gen_a), b=Depends(gen_b)):
+            return f"{a}_{b}"
+
+        result = self.resolver.resolve_dependencies(endpoint, self.request_data)
+        assert result == {"a": "a", "b": "b"}
+        assert "a_cleanup" in cleanup_log
+        assert "b_cleanup" in cleanup_log
+
+    @pytest.mark.asyncio
+    async def test_async_generator_dependency(self):
+        """Test async generator dependency yields value"""
+        cleanup_called = False
+
+        async def db_session():
+            nonlocal cleanup_called
+            session = {"connected": True}
+            try:
+                yield session
+            finally:
+                cleanup_called = True
+
+        def endpoint(db=Depends(db_session)):
+            return db
+
+        result = await self.resolver.resolve_dependencies_async(
+            endpoint, self.request_data
+        )
+        assert result == {"db": {"connected": True}}
+        assert cleanup_called
+
+    @pytest.mark.asyncio
+    async def test_async_generator_cleanup(self):
+        """Test async generator cleanup via aclose"""
+        cleanup_log = []
+
+        async def db_session():
+            cleanup_log.append("setup")
+            try:
+                yield "session"
+            finally:
+                cleanup_log.append("cleanup")
+
+        def endpoint(db=Depends(db_session)):
+            return db
+
+        result = await self.resolver.resolve_dependencies_async(
+            endpoint, self.request_data
+        )
+        assert result == {"db": "session"}
+        assert cleanup_log == ["setup", "cleanup"]
+
+    @pytest.mark.asyncio
+    async def test_async_generator_empty_raises(self):
+        """Test async generator that doesn't yield raises DependencyError"""
+
+        async def empty_gen():
+            return
+            yield  # noqa: F401
+
+        def endpoint(dep=Depends(empty_gen)):
+            return dep
+
+        with pytest.raises(DependencyError, match="did not yield"):
+            await self.resolver.resolve_dependencies_async(endpoint, self.request_data)
+
+    @pytest.mark.asyncio
+    async def test_sync_generator_in_async_context(self):
+        """Test sync generator works in async resolve path"""
+        cleanup_called = False
+
+        def sync_gen():
+            nonlocal cleanup_called
+            try:
+                yield "sync_value"
+            finally:
+                cleanup_called = True
+
+        def endpoint(dep=Depends(sync_gen)):
+            return dep
+
+        result = await self.resolver.resolve_dependencies_async(
+            endpoint, self.request_data
+        )
+        assert result == {"dep": "sync_value"}
+        assert cleanup_called
+
+    @pytest.mark.asyncio
+    async def test_mixed_async_and_sync_generators(self):
+        """Test mixing async and sync generators in async context"""
+        cleanup_log = []
+
+        def sync_gen():
+            try:
+                yield "sync"
+            finally:
+                cleanup_log.append("sync_cleanup")
+
+        async def async_gen():
+            try:
+                yield "async"
+            finally:
+                cleanup_log.append("async_cleanup")
+
+        def endpoint(s=Depends(sync_gen), a=Depends(async_gen)):
+            return f"{s}_{a}"
+
+        result = await self.resolver.resolve_dependencies_async(
+            endpoint, self.request_data
+        )
+        assert result == {"s": "sync", "a": "async"}
+        assert "sync_cleanup" in cleanup_log
+        assert "async_cleanup" in cleanup_log

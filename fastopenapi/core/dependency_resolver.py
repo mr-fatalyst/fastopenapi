@@ -59,11 +59,22 @@ class DependencyResolver:
                 self._request_cache[request_data] = {
                     "resolved": {},
                     "resolving": set(),
+                    "generators": [],
                 }
 
         try:
             return self._resolve_endpoint_dependencies(endpoint, request_data)
         finally:
+            # Get generators before deleting cache
+            with self._request_cache_lock:
+                cache = self._request_cache.get(request_data, {})
+                generators = list(cache.get("generators", []))
+            # Close generators (triggers finally blocks)
+            for gen in generators:
+                try:
+                    gen.close()
+                except Exception:
+                    pass
             # Clean up request cache
             with self._request_cache_lock:
                 if request_data in self._request_cache:
@@ -201,16 +212,57 @@ class DependencyResolver:
                 sub_dependencies = self._resolve_sub_dependencies(
                     dependency_func, request_data
                 )
-                result = self._call_dependency(dependency_func, sub_dependencies or {})
+                result = self._call_dependency(
+                    dependency_func, sub_dependencies or {}, request_data
+                )
                 self._cache_result(cache_key, result, request_cache)
                 return result
 
-    def _call_dependency(self, dependency_func: Callable, kwargs: dict) -> Any:
+    def _call_sync_generator(
+        self,
+        dependency_func: Callable,
+        kwargs: dict,
+        request_data: RequestData,
+    ) -> Any:
+        """Execute a sync generator dependency: yield value and save for cleanup."""
+        gen = dependency_func(**kwargs)
+        try:
+            value = next(gen)
+        except StopIteration:
+            raise DependencyError(
+                f"Generator dependency " f"'{dependency_func.__name__}' did not yield"
+            )
+        self._get_request_cache(request_data)["generators"].append(gen)
+        return value
+
+    async def _call_async_generator(
+        self,
+        dependency_func: Callable,
+        kwargs: dict,
+        request_data: RequestData,
+    ) -> Any:
+        """Execute an async generator dependency: yield value and save for cleanup."""
+        gen = dependency_func(**kwargs)
+        try:
+            value = await gen.__anext__()
+        except StopAsyncIteration:
+            raise DependencyError(
+                f"Generator dependency " f"'{dependency_func.__name__}' did not yield"
+            )
+        self._get_request_cache(request_data)["generators"].append(gen)
+        return value
+
+    def _call_dependency(
+        self,
+        dependency_func: Callable,
+        kwargs: dict,
+        request_data: RequestData,
+    ) -> Any:
         """Execute the dependency function"""
         try:
-            if kwargs:
-                return dependency_func(**kwargs)
-            return dependency_func()
+            if inspect.isgeneratorfunction(dependency_func):
+                return self._call_sync_generator(dependency_func, kwargs, request_data)
+            return dependency_func(**kwargs)
         except (DependencyError, APIError):
             raise
         except Exception as e:
@@ -304,6 +356,7 @@ class DependencyResolver:
                 self._request_cache[request_data] = {
                     "resolved": {},
                     "resolving": set(),
+                    "generators": [],
                 }
 
         try:
@@ -311,6 +364,19 @@ class DependencyResolver:
                 endpoint, request_data
             )
         finally:
+            # Get generators before deleting cache
+            with self._request_cache_lock:
+                cache = self._request_cache.get(request_data, {})
+                generators = list(cache.get("generators", []))
+            # Close generators (triggers finally blocks)
+            for gen in generators:
+                try:
+                    if inspect.isasyncgen(gen):
+                        await gen.aclose()
+                    else:
+                        gen.close()
+                except Exception:
+                    pass
             # Clean up request cache
             with self._request_cache_lock:
                 if request_data in self._request_cache:
@@ -438,28 +504,30 @@ class DependencyResolver:
                     dependency_func, request_data
                 )
                 result = await self._call_dependency_async(
-                    dependency_func, sub_dependencies or {}
+                    dependency_func, sub_dependencies or {}, request_data
                 )
                 self._cache_result(cache_key, result, request_cache)
                 return result
 
     async def _call_dependency_async(
-        self, dependency_func: Callable, kwargs: dict
+        self,
+        dependency_func: Callable,
+        kwargs: dict,
+        request_data: RequestData,
     ) -> Any:
         """
         Execute the dependency function (async - handles both sync and async funcs)
         """
         try:
+            if inspect.isasyncgenfunction(dependency_func):
+                return await self._call_async_generator(
+                    dependency_func, kwargs, request_data
+                )
+            if inspect.isgeneratorfunction(dependency_func):
+                return self._call_sync_generator(dependency_func, kwargs, request_data)
             if inspect.iscoroutinefunction(dependency_func):
-                # Async function
-                if kwargs:
-                    return await dependency_func(**kwargs)
-                return await dependency_func()
-            else:
-                # Sync function - call directly
-                if kwargs:
-                    return dependency_func(**kwargs)
-                return dependency_func()
+                return await dependency_func(**kwargs)
+            return dependency_func(**kwargs)
         except (DependencyError, APIError):
             raise
         except Exception as e:
