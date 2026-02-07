@@ -17,7 +17,7 @@ from fastopenapi.core.params import (
     Security,
 )
 from fastopenapi.core.types import RequestData
-from fastopenapi.errors.exceptions import BadRequestError, ValidationError
+from fastopenapi.errors.exceptions import ValidationError
 from fastopenapi.resolution.resolver import ParameterResolver, ProcessedParameter
 
 
@@ -206,7 +206,7 @@ class TestParameterResolver:
             annotation=str,
         )
 
-        with pytest.raises(BadRequestError, match="Missing required parameter"):
+        with pytest.raises(ValidationError, match="Missing required parameter"):
             ParameterResolver._process_single_parameter(
                 "missing_param", param, request_data
             )
@@ -1022,7 +1022,7 @@ class TestParameterResolver:
         model_fields = {"age": (int, ...)}
         model_values = {"age": "not a number"}
 
-        with pytest.raises(BadRequestError, match="Error parsing parameter"):
+        with pytest.raises(ValidationError, match="Error parsing parameter"):
             ParameterResolver._validate_parameters(endpoint, model_fields, model_values)
 
     def test_validate_parameters_empty_errors_list(self) -> None:
@@ -1049,7 +1049,7 @@ class TestParameterResolver:
             mock_instance.model_dump.side_effect = validation_error
             mock_create.return_value = mock_model
 
-            with pytest.raises(BadRequestError, match="Parameter validation failed"):
+            with pytest.raises(ValidationError, match="Parameter validation failed"):
                 ParameterResolver._validate_parameters(
                     endpoint, model_fields, model_values
                 )

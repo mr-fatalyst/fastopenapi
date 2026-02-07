@@ -22,7 +22,7 @@ from fastopenapi.core.params import (
     Security,
 )
 from fastopenapi.core.types import RequestData
-from fastopenapi.errors.exceptions import BadRequestError, ValidationError
+from fastopenapi.errors.exceptions import ValidationError
 
 
 class ProcessedParameter:
@@ -189,7 +189,7 @@ class ParameterResolver:
         # Handle missing required parameters
         if value is None and cls._is_required_param(param):
             param_name = cls._get_param_name(name, param)
-            raise BadRequestError(f"Missing required parameter: '{param_name}'")
+            raise ValidationError(f"Missing required parameter: '{param_name}'")
         elif value is None:
             value = cls._get_default_value(param)
 
@@ -512,8 +512,8 @@ class ParameterResolver:
             if errors:
                 error_info = errors[0]
                 param_name = str(error_info.get("loc", [""])[0])
-                raise BadRequestError(
+                raise ValidationError(
                     f"Error parsing parameter '{param_name}'",
                     str(error_info.get("msg", "")),
                 )
-            raise BadRequestError("Parameter validation failed", str(e))
+            raise ValidationError("Parameter validation failed", str(e))

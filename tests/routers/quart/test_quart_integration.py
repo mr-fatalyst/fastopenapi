@@ -49,7 +49,7 @@ class TestQuartIntegration:
         """Test fetching an item with an incorrect ID type"""
         response = await client.get("/items/abc")
 
-        assert response.status_code == 400
+        assert response.status_code == 422
         result = await response.get_json()
         assert result["error"]["message"] == ("Error parsing parameter 'item_id'")
 

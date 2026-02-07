@@ -63,7 +63,7 @@ class TestAioHttpIntegration:
     async def test_get_item_bad_request(self, client):
         """Test retrieving item with incorrect parameter type"""
         resp = await client.get("/items/abc")
-        assert resp.status == 400
+        assert resp.status == 422
         data = await resp.json()
         assert "Error parsing parameter" in data["error"]["message"]
 

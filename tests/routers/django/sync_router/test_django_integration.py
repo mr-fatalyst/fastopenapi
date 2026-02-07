@@ -51,7 +51,7 @@ class TestDjangoIntegration:
         """Test fetching an item with an incorrect ID type"""
         response = client.get("/items/abc")
 
-        assert response.status_code == 400
+        assert response.status_code == 422
         result = response.json()
         assert result["error"]["message"] == ("Error parsing parameter 'item_id'")
 
@@ -240,7 +240,7 @@ class TestDjangoIntegration:
         """Test query parameter validation with out of range values"""
         response = client.get("/test-query-validation?page=200")
 
-        assert response.status_code == 400
+        assert response.status_code == 422
         result = response.json()
         assert "Error parsing parameter" in result["error"]["message"]
 
@@ -248,7 +248,7 @@ class TestDjangoIntegration:
         """Test query parameter validation with string too short"""
         response = client.get("/test-query-validation?search=ab")
 
-        assert response.status_code == 400
+        assert response.status_code == 422
         result = response.json()
         assert "Error parsing parameter" in result["error"]["message"]
 
@@ -265,7 +265,7 @@ class TestDjangoIntegration:
         """Test path parameter validation error"""
         response = client.get("/test-path/0/items/10")
 
-        assert response.status_code == 400
+        assert response.status_code == 422
         result = response.json()
         assert "Error parsing parameter" in result["error"]["message"]
 
@@ -312,7 +312,7 @@ class TestDjangoIntegration:
             },
         )
 
-        assert response.status_code == 400
+        assert response.status_code == 422
         result = response.json()
         assert "Error parsing parameter" in result["error"]["message"]
 
@@ -326,7 +326,7 @@ class TestDjangoIntegration:
             },
         )
 
-        assert response.status_code == 400
+        assert response.status_code == 422
         result = response.json()
         assert "Missing required parameter" in result["error"]["message"]
 

@@ -81,7 +81,7 @@ class TestFalconIntegration:
         """Test fetching an item with an incorrect ID type"""
         response = sync_client.simulate_get("/items/abc")
 
-        assert response.status_code == 400
+        assert response.status_code == 422
         result = from_json(response.text)
         assert result["error"]["message"] == ("Error parsing parameter 'item_id'")
 

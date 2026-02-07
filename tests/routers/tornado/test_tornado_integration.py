@@ -313,7 +313,7 @@ class TestTornadoIntegration(AsyncHTTPTestCase):
         response = await self.http_client.fetch(
             self.get_url("/items/abc"), raise_error=False
         )
-        self.assertEqual(response.code, 400)
+        self.assertEqual(response.code, 422)
         result = self.parse_json(response)
         self.assertIn("Error parsing parameter", result["error"]["message"])
 
