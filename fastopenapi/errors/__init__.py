@@ -3,9 +3,12 @@ from fastopenapi.errors.exceptions import (
     AuthenticationError,
     AuthorizationError,
     BadRequestError,
+    CircularDependencyError,
+    DependencyError,
     InternalServerError,
     ResourceConflictError,
     ResourceNotFoundError,
+    SecurityError,
     ServiceUnavailableError,
     ValidationError,
 )
@@ -22,4 +25,7 @@ __all__ = [
     "ResourceConflictError",
     "InternalServerError",
     "ServiceUnavailableError",
+    "DependencyError",
+    "CircularDependencyError",
+    "SecurityError",
 ]
