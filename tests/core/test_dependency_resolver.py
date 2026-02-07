@@ -291,6 +291,24 @@ class TestDependencyResolver:
             ):
                 self.resolver.resolve_dependencies(endpoint, self.request_data)
 
+    def test_resolve_sub_dependencies_api_error_propagation(self):
+        """Test that APIError from ParameterResolver propagates without wrapping"""
+        from fastopenapi.errors.exceptions import ValidationError
+
+        def dep_with_param(required_param: str):
+            return f"result_{required_param}"
+
+        def endpoint(dep: str = Depends(dep_with_param)):
+            return dep
+
+        with patch(
+            "fastopenapi.resolution.resolver.ParameterResolver"
+        ) as mock_resolver:
+            mock_resolver.resolve.side_effect = ValidationError("Bad param")
+
+            with pytest.raises(ValidationError, match="Bad param"):
+                self.resolver.resolve_dependencies(endpoint, self.request_data)
+
     def test_resolve_sub_dependencies_with_defaults(self):
         """Test sub-dependencies with default values"""
 
@@ -1066,6 +1084,27 @@ class TestDependencyResolver:
             with pytest.raises(
                 DependencyError, match="Failed to resolve required parameter"
             ):
+                await self.resolver.resolve_dependencies_async(
+                    endpoint, self.request_data
+                )
+
+    @pytest.mark.asyncio
+    async def test_resolve_sub_dependencies_async_api_error_propagation(self):
+        """Test that APIError from ParameterResolver propagates in async"""
+        from fastopenapi.errors.exceptions import ValidationError
+
+        async def dep_with_param(required_param: str):
+            return f"result_{required_param}"
+
+        def endpoint(dep: str = Depends(dep_with_param)):
+            return dep
+
+        with patch(
+            "fastopenapi.resolution.resolver.ParameterResolver"
+        ) as mock_resolver:
+            mock_resolver.resolve.side_effect = ValidationError("Bad param")
+
+            with pytest.raises(ValidationError, match="Bad param"):
                 await self.resolver.resolve_dependencies_async(
                     endpoint, self.request_data
                 )

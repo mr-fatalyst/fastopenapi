@@ -313,6 +313,8 @@ class DependencyResolver:
                 resolved_regular = ParameterResolver.resolve(temp_func, request_data)
                 sub_dependencies.update(resolved_regular)
 
+            except (DependencyError, APIError):
+                raise
             except Exception as e:
                 # If ParameterResolver fails completely, use defaults or raise error
                 for param_name, param in regular_params.items():
@@ -563,6 +565,8 @@ class DependencyResolver:
                 resolved_regular = ParameterResolver.resolve(temp_func, request_data)
                 sub_dependencies.update(resolved_regular)
 
+            except (DependencyError, APIError):
+                raise
             except Exception as e:
                 # If ParameterResolver fails completely, use defaults or raise error
                 for param_name, param in regular_params.items():

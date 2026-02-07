@@ -443,7 +443,7 @@ class ParameterResolver:
             # Handle list fields that might come as single values
             data_copy = ParameterResolver._process_list_fields(model_class, data)
             return model_class(**data_copy)
-        except Exception as e:
+        except PydanticValidationError as e:
             raise ValidationError(
                 f"Validation error for parameter '{param_name}'", str(e)
             )
