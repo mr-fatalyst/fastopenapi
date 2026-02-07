@@ -4,9 +4,8 @@ Pydantic v2 only, no deprecated features
 """
 
 from collections.abc import Callable, Sequence
-from typing import Annotated, Any
+from typing import Any
 
-from pydantic import Field
 from pydantic.fields import FieldInfo
 
 from fastopenapi.core.constants import ParameterSource
@@ -563,22 +562,3 @@ class SecurityScopes:
 
     def __init__(self, scopes: list[str] | None = None):
         self.scopes = scopes or []
-
-
-# Pre-defined common validation types
-PositiveInt = Annotated[int, Field(gt=0, description="Positive integer")]
-NonNegativeInt = Annotated[int, Field(ge=0, description="Non-negative integer")]
-PositiveFloat = Annotated[float, Field(gt=0.0, description="Positive float")]
-NonEmptyStr = Annotated[str, Field(min_length=1, description="Non-empty string")]
-LimitedStr = Annotated[
-    str, Field(min_length=1, max_length=255, description="Limited string")
-]
-
-# Common ID patterns
-UserId = Annotated[int, Path(description="User ID", ge=1)]
-ItemId = Annotated[int, Path(description="Item ID", ge=1)]
-
-# Pagination patterns
-PageQuery = Annotated[int, Query(description="Page number", ge=1)]
-LimitQuery = Annotated[int, Query(description="Items per page", ge=1, le=100)]
-OffsetQuery = Annotated[int, Query(description="Items to skip", ge=0)]

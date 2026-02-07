@@ -1,5 +1,3 @@
-import typing
-
 import pytest
 from pydantic.fields import FieldInfo
 from pydantic_core import PydanticUndefined
@@ -12,20 +10,10 @@ from fastopenapi.core.params import (
     File,
     Form,
     Header,
-    ItemId,
-    LimitedStr,
-    LimitQuery,
-    NonEmptyStr,
-    NonNegativeInt,
-    OffsetQuery,
-    PageQuery,
     Param,
     Path,
-    PositiveFloat,
-    PositiveInt,
     Query,
     Security,
-    UserId,
 )
 
 
@@ -463,95 +451,6 @@ class TestSecurity:
         scopes = ("read", "write", "admin")
         security = Security(scopes=scopes)
         assert security.scopes == ["read", "write", "admin"]
-
-
-class TestPredefinedTypes:
-    """Test pre-defined validation types"""
-
-    def test_positive_int_type(self):
-        """Test PositiveInt type definition"""
-        origin = typing.get_origin(PositiveInt)
-        args = typing.get_args(PositiveInt)
-
-        assert origin is typing.Annotated
-        assert args[0] is int
-
-    def test_non_negative_int_type(self):
-        """Test NonNegativeInt type definition"""
-        origin = typing.get_origin(NonNegativeInt)
-        args = typing.get_args(NonNegativeInt)
-
-        assert origin is typing.Annotated
-        assert args[0] is int
-
-    def test_positive_float_type(self):
-        """Test PositiveFloat type definition"""
-        origin = typing.get_origin(PositiveFloat)
-        args = typing.get_args(PositiveFloat)
-
-        assert origin is typing.Annotated
-        assert args[0] is float
-
-    def test_non_empty_str_type(self):
-        """Test NonEmptyStr type definition"""
-        origin = typing.get_origin(NonEmptyStr)
-        args = typing.get_args(NonEmptyStr)
-
-        assert origin is typing.Annotated
-        assert args[0] is str
-
-    def test_limited_str_type(self):
-        """Test LimitedStr type definition"""
-        origin = typing.get_origin(LimitedStr)
-        args = typing.get_args(LimitedStr)
-
-        assert origin is typing.Annotated
-        assert args[0] is str
-
-    def test_user_id_type(self):
-        """Test UserId type definition"""
-        origin = typing.get_origin(UserId)
-        args = typing.get_args(UserId)
-
-        assert origin is typing.Annotated
-        assert args[0] is int
-        assert isinstance(args[1], Path)
-
-    def test_item_id_type(self):
-        """Test ItemId type definition"""
-        origin = typing.get_origin(ItemId)
-        args = typing.get_args(ItemId)
-
-        assert origin is typing.Annotated
-        assert args[0] is int
-        assert isinstance(args[1], Path)
-
-    def test_page_query_type(self):
-        """Test PageQuery type definition"""
-        origin = typing.get_origin(PageQuery)
-        args = typing.get_args(PageQuery)
-
-        assert origin is typing.Annotated
-        assert args[0] is int
-        assert isinstance(args[1], Query)
-
-    def test_limit_query_type(self):
-        """Test LimitQuery type definition"""
-        origin = typing.get_origin(LimitQuery)
-        args = typing.get_args(LimitQuery)
-
-        assert origin is typing.Annotated
-        assert args[0] is int
-        assert isinstance(args[1], Query)
-
-    def test_offset_query_type(self):
-        """Test OffsetQuery type definition"""
-        origin = typing.get_origin(OffsetQuery)
-        args = typing.get_args(OffsetQuery)
-
-        assert origin is typing.Annotated
-        assert args[0] is int
-        assert isinstance(args[1], Query)
 
 
 class TestFieldInfoIntegration:

@@ -409,59 +409,6 @@ async def upload_file_async(file: FileUpload = File(...)):
 
 ---
 
-## Pre-defined Types
-
-FastOpenAPI provides pre-defined annotated types for common patterns:
-
-### Validation Types
-
-```python
-from fastopenapi import (
-    PositiveInt,      # int with gt=0
-    NonNegativeInt,   # int with ge=0
-    PositiveFloat,    # float with gt=0.0
-    NonEmptyStr,      # str with min_length=1
-    LimitedStr,       # str with min_length=1, max_length=255
-)
-
-@router.get("/items")
-def list_items(
-    page: PositiveInt,
-    limit: NonNegativeInt = Query(10),
-):
-    return {"page": page, "limit": limit}
-```
-
-### ID Patterns
-
-```python
-from fastopenapi import UserId, ItemId
-
-@router.get("/users/{user_id}")
-def get_user(user_id: UserId):  # int >= 1
-    return {"user_id": user_id}
-
-@router.get("/items/{item_id}")
-def get_item(item_id: ItemId):  # int >= 1
-    return {"item_id": item_id}
-```
-
-### Pagination Patterns
-
-```python
-from fastopenapi import PageQuery, LimitQuery, OffsetQuery
-
-@router.get("/items")
-def list_items(
-    page: PageQuery = Query(1),        # ge=1
-    limit: LimitQuery = Query(10),     # ge=1, le=100
-    offset: OffsetQuery = Query(0),    # ge=0
-):
-    return {"page": page, "limit": limit, "offset": offset}
-```
-
----
-
 ## Validation Constraints
 
 All parameter classes support Pydantic validation constraints:
