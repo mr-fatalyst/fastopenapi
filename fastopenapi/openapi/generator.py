@@ -577,18 +577,48 @@ class ResponseBuilder:
         from http import HTTPStatus
 
         custom_errors = route.meta.get("response_errors")
-        if not custom_errors:
-            return
+        custom_responses = route.meta.get("responses")
 
-        for error_code in custom_errors:
-            responses[str(error_code)] = {
-                "description": HTTPStatus(error_code).phrase,
-                "content": {
-                    "application/json": {
-                        "schema": {"$ref": "#/components/schemas/ErrorSchema"}
+        if custom_errors:
+            for error_code in custom_errors:
+                responses[str(error_code)] = {
+                    "description": HTTPStatus(error_code).phrase,
+                    "content": {
+                        "application/json": {
+                            "schema": {"$ref": "#/components/schemas/ErrorSchema"}
+                        }
+                    },
+                }
+
+        if custom_responses:
+            for status_code, response_info in custom_responses.items():
+                str_code = str(status_code)
+                model = None
+                if isinstance(response_info, dict):
+                    description = response_info.get(
+                        "description", HTTPStatus(int(status_code)).phrase
+                    )
+                    model = response_info.get("model")
+                    schema = (
+                        self.schema_builder.get_model_schema(model)
+                        if model and self._is_pydantic_model(model)
+                        else {"$ref": "#/components/schemas/ErrorSchema"}
+                    )
+                else:
+                    description = HTTPStatus(int(status_code)).phrase
+                    schema = {"$ref": "#/components/schemas/ErrorSchema"}
+
+                if str_code in responses:
+                    responses[str_code]["description"] = description
+                    if model and self._is_pydantic_model(model):
+                        responses[str_code]["content"] = {
+                            "application/json": {"schema": schema}
+                        }
+                else:
+                    responses[str_code] = {
+                        "description": description,
+                        "content": {"application/json": {"schema": schema}},
                     }
-                },
-            }
 
     @staticmethod
     def _is_pydantic_model(annotation) -> bool:
@@ -696,9 +726,11 @@ class OpenAPIGenerator:
         responses = self.response_builder.build_responses(route)
 
         operation = {
-            "summary": route.endpoint.__doc__ or "",
+            "summary": route.meta.get("summary")
+            or route.endpoint.__name__.replace("_", " ").title(),
             "responses": responses,
-            "operationId": f"{route.method.lower()}_{route.endpoint.__name__}",
+            "operationId": route.meta.get("operation_id")
+            or f"{route.method.lower()}_{route.endpoint.__name__}",
         }
 
         # Add optional fields
@@ -731,8 +763,9 @@ class OpenAPIGenerator:
             operation["deprecated"] = True
         if route.meta.get("security"):
             operation["security"] = route.meta["security"]
-        if route.meta.get("description"):
-            operation["description"] = route.meta["description"]
+        description = route.meta.get("description") or route.endpoint.__doc__
+        if description:
+            operation["description"] = description
 
     def _add_error_schemas(self):
         """Add comprehensive error response schemas"""

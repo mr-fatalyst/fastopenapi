@@ -78,5 +78,5 @@ class TestDjangoAsyncRouter:
         assert schema["info"]["description"] == "Test Description"
         assert "/test/{id}" in schema["paths"]
         assert "get" in schema["paths"]["/test/{id}"]
-        assert schema["paths"]["/test/{id}"]["get"]["summary"] == "Test endpoint"
+        assert schema["paths"]["/test/{id}"]["get"]["summary"] == "Get Test"
         assert "TestModel" in schema["components"]["schemas"]

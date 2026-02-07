@@ -1540,3 +1540,243 @@ class TestOpenAPIGenerator:
             schema = processor._build_form_field_schema("field", param)
 
         assert schema["type"] == "string"
+
+    def test_summary_from_decorator_meta(self):
+        """Summary from decorator should override docstring"""
+
+        @self.router.get("/with-summary", summary="Custom summary")
+        def endpoint_with_summary():
+            """Docstring summary"""
+
+        schema = self.generator.generate()
+        operation = schema["paths"]["/with-summary"]["get"]
+        assert operation["summary"] == "Custom summary"
+
+    def test_summary_falls_back_to_function_name(self):
+        """Summary should fallback to function name titlecase (FastAPI-like)"""
+
+        @self.router.get("/with-docstring")
+        def get_user_profile():
+            """This is a docstring"""
+
+        schema = self.generator.generate()
+        operation = schema["paths"]["/with-docstring"]["get"]
+        assert operation["summary"] == "Get User Profile"
+
+    def test_summary_function_name_when_no_docstring(self):
+        """Summary should be function name titlecase when no meta and no docstring"""
+
+        @self.router.get("/no-summary")
+        def create_new_item():
+            pass
+
+        schema = self.generator.generate()
+        operation = schema["paths"]["/no-summary"]["get"]
+        assert operation["summary"] == "Create New Item"
+
+    def test_description_from_docstring(self):
+        """Docstring should become description (FastAPI-like)"""
+
+        @self.router.get("/with-desc")
+        def some_endpoint():
+            """This endpoint does something"""
+
+        schema = self.generator.generate()
+        operation = schema["paths"]["/with-desc"]["get"]
+        assert operation["description"] == "This endpoint does something"
+
+    def test_description_from_meta_overrides_docstring(self):
+        """Explicit description in decorator overrides docstring"""
+
+        @self.router.get("/with-meta-desc", description="Explicit description")
+        def some_endpoint():
+            """Docstring description"""
+
+        schema = self.generator.generate()
+        operation = schema["paths"]["/with-meta-desc"]["get"]
+        assert operation["description"] == "Explicit description"
+
+    def test_no_description_when_no_docstring(self):
+        """No description field when no docstring and no meta description"""
+
+        @self.router.get("/no-desc")
+        def some_endpoint():
+            pass
+
+        schema = self.generator.generate()
+        operation = schema["paths"]["/no-desc"]["get"]
+        assert "description" not in operation
+
+    def test_operation_id_from_decorator_meta(self):
+        """operation_id from decorator should override auto-generated"""
+
+        @self.router.get("/custom-op", operation_id="my_custom_op")
+        def some_endpoint():
+            pass
+
+        schema = self.generator.generate()
+        operation = schema["paths"]["/custom-op"]["get"]
+        assert operation["operationId"] == "my_custom_op"
+
+    def test_operation_id_falls_back_to_auto(self):
+        """operation_id should auto-generate when not in meta"""
+
+        @self.router.get("/auto-op")
+        def auto_op_endpoint():
+            pass
+
+        schema = self.generator.generate()
+        operation = schema["paths"]["/auto-op"]["get"]
+        assert operation["operationId"] == "get_auto_op_endpoint"
+
+    def test_responses_dict_from_decorator(self):
+        """Responses dict from decorator should add to OpenAPI responses"""
+
+        @self.router.get(
+            "/with-responses",
+            responses={
+                404: {"description": "Item not found"},
+                409: {"description": "Conflict"},
+            },
+        )
+        def endpoint_with_responses():
+            pass
+
+        schema = self.generator.generate()
+        responses = schema["paths"]["/with-responses"]["get"]["responses"]
+        assert "404" in responses
+        assert responses["404"]["description"] == "Item not found"
+        assert "409" in responses
+        assert responses["409"]["description"] == "Conflict"
+
+    def test_responses_dict_merges_with_existing(self):
+        """Responses dict should merge description into existing response"""
+
+        @self.router.get(
+            "/merge-responses",
+            status_code=200,
+            response_model=SimpleModel,
+            responses={200: {"description": "Custom success description"}},
+        )
+        def endpoint_merge():
+            pass
+
+        schema = self.generator.generate()
+        responses = schema["paths"]["/merge-responses"]["get"]["responses"]
+        assert responses["200"]["description"] == "Custom success description"
+        # Should still have content schema
+        assert "content" in responses["200"]
+
+    def test_response_errors_still_works(self):
+        """Existing response_errors parameter should still work"""
+
+        @self.router.post("/with-errors", response_errors=[400, 500])
+        def endpoint_with_errors(data: ComplexModel):
+            pass
+
+        schema = self.generator.generate()
+        responses = schema["paths"]["/with-errors"]["post"]["responses"]
+        assert "400" in responses
+        assert "500" in responses
+
+    def test_responses_and_response_errors_together(self):
+        """Both responses and response_errors can coexist"""
+
+        @self.router.post(
+            "/both",
+            response_errors=[400],
+            responses={404: {"description": "Not found"}},
+        )
+        def endpoint_both(data: ComplexModel):
+            pass
+
+        schema = self.generator.generate()
+        responses = schema["paths"]["/both"]["post"]["responses"]
+        assert "400" in responses
+        assert "404" in responses
+        assert responses["404"]["description"] == "Not found"
+
+    def test_responses_with_model(self):
+        """Responses with model key should generate $ref schema (FastAPI-like)"""
+
+        class ErrorDetail(BaseModel):
+            detail: str
+            code: int
+
+        @self.router.get(
+            "/with-model-response",
+            responses={
+                404: {"description": "Not found", "model": ErrorDetail},
+                422: {"description": "Validation error", "model": ErrorDetail},
+            },
+        )
+        def endpoint_with_model():
+            pass
+
+        schema = self.generator.generate()
+        responses = schema["paths"]["/with-model-response"]["get"]["responses"]
+        assert responses["404"]["description"] == "Not found"
+        assert responses["404"]["content"]["application/json"]["schema"] == {
+            "$ref": "#/components/schemas/ErrorDetail"
+        }
+        assert responses["422"]["description"] == "Validation error"
+        assert responses["422"]["content"]["application/json"]["schema"] == {
+            "$ref": "#/components/schemas/ErrorDetail"
+        }
+        assert "ErrorDetail" in schema["components"]["schemas"]
+
+    def test_responses_model_merges_with_existing(self):
+        """Responses with model should update schema on existing response codes"""
+
+        class SuccessDetail(BaseModel):
+            message: str
+
+        @self.router.get(
+            "/merge-model",
+            status_code=200,
+            response_model=SimpleModel,
+            responses={200: {"description": "Custom OK", "model": SuccessDetail}},
+        )
+        def endpoint_merge_model():
+            pass
+
+        schema = self.generator.generate()
+        responses = schema["paths"]["/merge-model"]["get"]["responses"]
+        assert responses["200"]["description"] == "Custom OK"
+        assert responses["200"]["content"]["application/json"]["schema"] == {
+            "$ref": "#/components/schemas/SuccessDetail"
+        }
+
+    def test_responses_without_model_uses_error_schema(self):
+        """Responses without model key should still use ErrorSchema"""
+
+        @self.router.get(
+            "/no-model",
+            responses={404: {"description": "Not found"}},
+        )
+        def endpoint_no_model():
+            pass
+
+        schema = self.generator.generate()
+        responses = schema["paths"]["/no-model"]["get"]["responses"]
+        assert responses["404"]["content"]["application/json"]["schema"] == {
+            "$ref": "#/components/schemas/ErrorSchema"
+        }
+
+    def test_responses_non_dict_value(self):
+        """Non-dict response_info should use default description and ErrorSchema"""
+
+        @self.router.get(
+            "/non-dict",
+            responses={404: "some string", 500: 0},
+        )
+        def endpoint_non_dict():
+            pass
+
+        schema = self.generator.generate()
+        responses = schema["paths"]["/non-dict"]["get"]["responses"]
+        assert responses["404"]["description"] == "Not Found"
+        assert responses["404"]["content"]["application/json"]["schema"] == {
+            "$ref": "#/components/schemas/ErrorSchema"
+        }
+        assert responses["500"]["description"] == "Internal Server Error"
