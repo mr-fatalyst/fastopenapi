@@ -30,36 +30,41 @@ router = FlaskRouter(
 
 ## Understanding Security()
 
-The `Security()` class is a specialized dependency marker for authentication. It works in two ways:
+The `Security()` class is a specialized dependency marker for authentication. It works like `Depends()` but additionally marks the endpoint as requiring authentication in the OpenAPI documentation.
 
-### Security() Without Arguments
+### Basic Usage
 
-When used without arguments, `Security()` automatically extracts the token from the `Authorization` header based on the router's `security_scheme`:
+`Security()` takes a dependency function that handles your authentication logic:
 
 ```python
-from fastopenapi import Security
+from fastopenapi import Security, Depends, Header
+from fastopenapi.errors import AuthenticationError
 
-# Router configured with BEARER_JWT (default)
-router = FlaskRouter(app=app)
+def get_bearer_token(authorization: str = Header(..., alias="Authorization")):
+    if not authorization.startswith("Bearer "):
+        raise AuthenticationError("Invalid authorization header")
+    return authorization[7:]  # Token without "Bearer " prefix
 
 @router.get("/protected")
-def protected(token: str = Security()):
-    # 'token' contains the extracted bearer token (without "Bearer " prefix)
+def protected(token: str = Security(get_bearer_token)):
     payload = verify_jwt_token(token)
     return {"user_id": payload["user_id"]}
 ```
 
-### Security() With Dependency
+### Chaining Dependencies
 
-When used with a dependency function, it behaves like `Depends()` but marks the endpoint as requiring authentication in OpenAPI:
+You can build authentication chains using `Depends()` and `Security()`:
 
 ```python
-def get_current_user(token: str = Security()):
+def get_current_user(token: str = Depends(get_bearer_token)):
     payload = verify_jwt_token(token)
-    return database.get_user(payload["user_id"])
+    user = database.get_user(payload["user_id"])
+    if not user:
+        raise AuthenticationError("User not found")
+    return user
 
 @router.get("/profile")
-def profile(user = Depends(get_current_user)):
+def profile(user = Security(get_current_user)):
     return {"username": user.username}
 ```
 
@@ -68,7 +73,7 @@ def profile(user = Depends(get_current_user)):
 The `scopes` parameter allows OAuth2-style scope validation:
 
 ```python
-def verify_scopes(token: str = Security(), required_scopes: list[str] = None):
+def verify_scopes(token: str = Depends(get_bearer_token), required_scopes: list[str] = None):
     payload = verify_jwt_token(token)
     token_scopes = payload.get("scopes", [])
 
@@ -103,8 +108,7 @@ router = FlaskRouter(
 )
 
 @router.get("/protected")
-def protected_endpoint(token: str = Security()):
-    # Token is automatically extracted from Authorization header
+def protected_endpoint(token: str = Security(get_bearer_token)):
     payload = verify_jwt_token(token)
     return {"user_id": payload["user_id"]}
 ```
@@ -162,7 +166,7 @@ def login(credentials: LoginRequest):
 ### Protected Endpoints with JWT
 
 ```python
-def get_current_user(token: str = Security()):
+def get_current_user(token: str = Depends(get_bearer_token)):
     payload = verify_jwt_token(token)
     user = database.get_user(payload["user_id"])
     if not user:
@@ -312,7 +316,7 @@ class User:
         self.username = username
         self.role = role
 
-def get_current_user(token: str = Security()) -> User:
+def get_current_user(token: str = Depends(get_bearer_token)) -> User:
     payload = verify_jwt_token(token)
     user = database.get_user(payload["user_id"])
     return user
@@ -443,7 +447,7 @@ def create_token_with_scopes(user_id: int, scopes: list[str]) -> str:
     return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 
 def verify_scopes(*required_scopes: str):
-    def scope_checker(token: str = Security()):
+    def scope_checker(token: str = Depends(get_bearer_token)):
         payload = verify_jwt_token(token)
         token_scopes = set(payload.get("scopes", []))
         

@@ -244,7 +244,7 @@ def get_user(user_id: int, session = Depends(get_db)):
 ```python
 import jwt
 from datetime import datetime, timedelta
-from fastopenapi import Depends, Security
+from fastopenapi import Depends, Security, Header
 
 SECRET_KEY = "your-secret-key"
 
@@ -255,7 +255,12 @@ def create_token(user_id: int) -> str:
     }
     return jwt.encode(payload, SECRET_KEY, algorithm="HS256")
 
-def get_current_user(token: str = Security()):
+def get_bearer_token(authorization: str = Header(..., alias="Authorization")):
+    if not authorization.startswith("Bearer "):
+        raise AuthenticationError("Invalid authorization header")
+    return authorization[7:]
+
+def get_current_user(token: str = Depends(get_bearer_token)):
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
         return payload["user_id"]
@@ -267,12 +272,12 @@ def login(username: str = Form(...), password: str = Form(...)):
     user = authenticate_user(username, password)
     if not user:
         raise AuthenticationError("Invalid credentials")
-    
+
     token = create_token(user.id)
     return {"access_token": token, "token_type": "bearer"}
 
 @router.get("/protected")
-def protected(user_id: int = Depends(get_current_user)):
+def protected(user_id: int = Security(get_current_user)):
     return {"user_id": user_id}
 ```
 

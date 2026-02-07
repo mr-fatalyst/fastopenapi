@@ -259,7 +259,6 @@ from fastopenapi import Body
 Body(
     default: Any = None,
     *,
-    embed: bool | None = None,
     media_type: str = "application/json",
     alias: str | None = None,
     title: str | None = None,
@@ -287,7 +286,6 @@ Body(
 
 Same as `Query`, plus:
 
-- **embed**: Embed the body in a field (for multiple body parameters)
 - **media_type**: MIME type of the body (default: `"application/json"`)
 
 ### Example

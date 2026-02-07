@@ -119,7 +119,7 @@ router = FlaskRouter(
 )
 
 @router.get("/protected")
-def protected_endpoint(token: str = Security()):
+def protected_endpoint(token: str = Security(verify_token)):  # Your auth function
     return {"message": "Access granted"}
 ```
 

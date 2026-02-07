@@ -277,7 +277,7 @@ async def get_item(item_id: int):
 ```python
 import jwt
 from datetime import datetime, timedelta
-from fastopenapi import Security, Depends
+from fastopenapi import Security, Depends, Header
 from fastopenapi.errors import AuthenticationError
 
 SECRET_KEY = "your-secret-key"
@@ -289,7 +289,12 @@ def create_access_token(data: dict):
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
-def verify_token(token: str = Security()):
+def get_bearer_token(authorization: str = Header(..., alias="Authorization")):
+    if not authorization.startswith("Bearer "):
+        raise AuthenticationError("Invalid authorization header")
+    return authorization[7:]
+
+def verify_token(token: str = Depends(get_bearer_token)):
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         return payload["user_id"]
@@ -301,12 +306,12 @@ async def login(username: str = Form(...), password: str = Form(...)):
     user = authenticate_user(username, password)
     if not user:
         raise AuthenticationError("Invalid credentials")
-    
+
     access_token = create_access_token(data={"user_id": str(user.id)})
     return {"access_token": access_token, "token_type": "bearer"}
 
 @router.get("/protected")
-async def protected(user_id: str = Depends(verify_token)):
+async def protected(user_id: str = Security(verify_token)):
     return {"user_id": user_id, "message": "Access granted"}
 ```
 

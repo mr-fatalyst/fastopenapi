@@ -340,12 +340,17 @@ async def get_item(item_id: int):
 
 ```python
 import jwt
-from fastopenapi import Security, Depends
+from fastopenapi import Security, Depends, Header
 from fastopenapi.errors import AuthenticationError
 
 SECRET_KEY = "your-secret-key"
 
-def verify_token(token: str = Security()):
+def get_bearer_token(authorization: str = Header(..., alias="Authorization")):
+    if not authorization.startswith("Bearer "):
+        raise AuthenticationError("Invalid authorization header")
+    return authorization[7:]
+
+def verify_token(token: str = Depends(get_bearer_token)):
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
         return payload["user_id"]
@@ -353,7 +358,7 @@ def verify_token(token: str = Security()):
         raise AuthenticationError("Invalid token")
 
 @router.get("/protected")
-async def protected(user_id: str = Depends(verify_token)):
+async def protected(user_id: str = Security(verify_token)):
     return {"user_id": user_id}
 ```
 

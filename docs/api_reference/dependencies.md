@@ -402,7 +402,7 @@ from fastopenapi.core.dependency_resolver import (
 - **Request-scoped caching**: Dependencies are resolved once per request
 - **Recursive resolution**: Dependencies can have their own dependencies
 - **Circular dependency detection**: Automatically detects and reports circular dependencies
-- **Security scopes validation**: Validates OAuth2 scopes for `Security()` dependencies
+- **Security scopes validation**: Validates OAuth2 scopes for `Security(func, scopes=[...])` dependencies
 - **Thread-safe operation**: Safe for concurrent requests
 
 ### Convenience Functions

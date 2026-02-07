@@ -490,7 +490,7 @@ class OpenAPIGenerator:
 - **Lazy generation** - Only generated when `.openapi` property accessed
 - **Thread-safe caching** - Model schemas cached with lock
 - **Pydantic integration** - Uses `model_json_schema()`
-- **Security auto-detection** - Detects `Security()` dependencies
+- **Security markers** - Detects `Security()` dependencies for OpenAPI security requirements
 
 ## Request Processing Flow
 
