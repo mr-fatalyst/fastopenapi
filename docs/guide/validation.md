@@ -558,19 +558,14 @@ When validation fails, FastOpenAPI returns a standardized error:
 {
   "error": {
     "type": "validation_error",
-    "message": "Validation error",
+    "message": "Validation error for parameter 'price'",
     "status": 422,
-    "details": [
-      {
-        "loc": ["body", "price"],
-        "msg": "Input should be greater than 0",
-        "type": "greater_than",
-        "input": -10
-      }
-    ]
+    "details": "Input should be greater than 0"
   }
 }
 ```
+
+> **Note:** The `details` field is a string with the Pydantic validation error message. If there are no details, the field is omitted entirely.
 
 ## Custom Error Messages
 

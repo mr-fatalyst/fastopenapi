@@ -142,23 +142,14 @@ Content-Type: application/json
 {
   "error": {
     "type": "validation_error",
-    "message": "Validation error",
+    "message": "Validation error for parameter 'age'",
     "status": 422,
-    "details": [
-      {
-        "loc": ["body", "age"],
-        "msg": "Input should be greater than or equal to 0",
-        "type": "greater_than_equal"
-      },
-      {
-        "loc": ["body", "email"],
-        "msg": "value is not a valid email address",
-        "type": "value_error"
-      }
-    ]
+    "details": "Input should be greater than or equal to 0 ..."
   }
 }
 ```
+
+> **Note:** The `details` field is a string representation of the Pydantic validation error message. If there are no details, the field is omitted entirely.
 
 ## Common Error Patterns
 

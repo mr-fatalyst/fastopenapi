@@ -402,25 +402,6 @@ def start_task(task_data: dict):
 
 ## Response Model Options
 
-### Exclude Unset Fields
-
-```python
-from pydantic import BaseModel
-
-class User(BaseModel):
-    id: int
-    username: str
-    email: str | None = None
-    full_name: str | None = None
-
-@router.get("/users/{user_id}", response_model=User)
-def get_user(user_id: int):
-    # Only returns fields that are set
-    return User(id=user_id, username="john")
-    # Returns: {"id": 1, "username": "john"}
-    # email and full_name are excluded
-```
-
 ### Exclude None Fields
 
 ```python

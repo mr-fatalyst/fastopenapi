@@ -101,16 +101,10 @@ To contribute to FastOpenAPI or run tests, clone the repository and install in d
 ```bash
 git clone https://github.com/mr-fatalyst/fastopenapi.git
 cd fastopenapi
-pip install -e ".[dev]"
+poetry install --all-extras
 ```
 
-This installs FastOpenAPI in editable mode with all development dependencies including:
-
-- pytest - Testing framework
-- black - Code formatter
-- flake8 - Linter
-- mypy - Type checker
-- All supported frameworks for testing
+This installs FastOpenAPI with all development dependencies and framework extras.
 
 ## Verifying Installation
 

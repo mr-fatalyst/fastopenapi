@@ -539,15 +539,17 @@ def expensive_op(user: User = Depends(user_rate_limit(max_requests=10))):
 ### IP-Based Access Control
 
 ```python
+from fastopenapi import Header, Depends
+from fastopenapi.errors import AuthorizationError
+
 ALLOWED_IPS = {"192.168.1.1", "10.0.0.1"}
 
-def require_whitelisted_ip(request):
-    client_ip = request.headers.get("X-Forwarded-For", request.remote_addr)
-    
-    if client_ip not in ALLOWED_IPS:
+def require_whitelisted_ip(
+    x_forwarded_for: str = Header(..., alias="X-Forwarded-For"),
+):
+    if x_forwarded_for not in ALLOWED_IPS:
         raise AuthorizationError("Access denied from this IP")
-    
-    return client_ip
+    return x_forwarded_for
 
 @router.get("/internal/status")
 def internal_status(client_ip: str = Depends(require_whitelisted_ip)):

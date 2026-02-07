@@ -95,7 +95,7 @@ To add a new framework, implement:
 
 - [ ] **Extractor class** - Extract data from framework request
   - Inherit from `BaseAsyncRequestDataExtractor` or `BaseRequestDataExtractor`
-  - Implement `_extract_*` methods
+  - Implement `_get_*` methods (`_get_path_params`, `_get_query_params`, `_get_headers`, `_get_cookies`, `_get_body`, `_get_form_data`, `_get_files`)
 
 - [ ] **Router class** - Integrate with framework
   - Inherit from `BaseAdapter`

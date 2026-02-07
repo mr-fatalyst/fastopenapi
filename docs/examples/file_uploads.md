@@ -108,6 +108,7 @@ curl -X POST http://localhost:5000/upload-multiple \
 
 ```python
 from pydantic import BaseModel
+from fastopenapi import File, FileUpload, Form
 
 class DocumentMetadata(BaseModel):
     title: str
@@ -371,6 +372,7 @@ def upload_csv(file: FileUpload = File(...)):
 ## File Download
 
 ```python
+from fastopenapi import Response
 from fastopenapi.errors import ResourceNotFoundError
 
 @router.get("/download/{filename}", tags=["Files"])
@@ -418,7 +420,7 @@ def download_file(filename: str):
 from flask import Flask
 from pydantic import BaseModel
 from datetime import datetime
-from fastopenapi import File, FileUpload
+from fastopenapi import File, FileUpload, Form, Response
 from fastopenapi.routers import FlaskRouter
 from fastopenapi.errors import ResourceNotFoundError, BadRequestError
 import os

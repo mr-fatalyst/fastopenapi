@@ -415,26 +415,6 @@ def list_items(user_id: int | None = Depends(get_optional_token)):
         return get_public_items()
 ```
 
-### Conditional Dependencies
-
-```python
-def require_auth_if_private(is_private: bool = Query(False)):
-    if is_private:
-        return Depends(get_current_user)
-    return None
-
-@router.get("/content/{content_id}")
-def get_content(
-    content_id: int,
-    is_private: bool = Query(False),
-    user = Depends(require_auth_if_private(is_private))
-):
-    if is_private and not user:
-        raise AuthenticationError("Authentication required for private content")
-    
-    return get_content_by_id(content_id)
-```
-
 ### Dependency Composition
 
 ```python

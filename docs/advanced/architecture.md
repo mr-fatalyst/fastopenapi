@@ -273,22 +273,36 @@ class RequestData:
 **Extractor Interface:**
 
 ```python
-class BaseAsyncRequestDataExtractor:
-    """Base async extractor"""
+class BaseAsyncRequestDataExtractor(BaseRequestDataExtractor, ABC):
+    """Base async extractor — overrides only body/form/files as async"""
+
+    @classmethod
+    @abstractmethod
+    async def _get_body(cls, request: Any) -> bytes | str | dict: ...
+
+    @classmethod
+    @abstractmethod
+    async def _get_form_data(cls, request: Any) -> dict: ...
+
+    @classmethod
+    @abstractmethod
+    async def _get_files(cls, request: Any) -> dict: ...
 
     @classmethod
     async def extract_request_data(cls, env: RequestEnvelope) -> RequestData:
-        """Extract data from framework request"""
+        request = env.request
         return RequestData(
-            path_params=await cls._get_path_params(env),
-            query_params=await cls._get_query_params(env),
-            headers=await cls._get_headers(env),
-            cookies=await cls._get_cookies(env),
-            body=await cls._get_body(env),
-            form_data=await cls._get_form_data(env),
-            files=await cls._get_files(env),
+            path_params=env.path_params or cls._get_path_params(request),
+            query_params=cls._get_query_params(request),          # sync
+            headers=cls._normalize_headers(cls._get_headers(request)),  # sync
+            cookies=cls._get_cookies(request),                    # sync
+            body=await cls._get_body(request),                    # async
+            form_data=await cls._get_form_data(request),          # async
+            files=await cls._get_files(request),                  # async
         )
 ```
+
+> **Note:** `_get_path_params`, `_get_query_params`, `_get_headers`, `_get_cookies` are **synchronous** methods inherited from `BaseRequestDataExtractor`. Only `_get_body`, `_get_form_data`, and `_get_files` are overridden as async. All `_get_*` methods receive the framework `request` object, not the `RequestEnvelope`.
 
 Each framework provides its own extractor (e.g., `StarletteRequestDataExtractor`, `FlaskRequestDataExtractor`).
 
@@ -374,6 +388,7 @@ class DependencyResolver:
                 self._request_cache[request_data] = {
                     "resolved": {},
                     "resolving": set(),  # For circular detection
+                    "generators": [],  # For yield dependency cleanup
                 }
 
         try:
@@ -389,7 +404,7 @@ class DependencyResolver:
 - **Request-scoped caching** - Same dependency called twice = same instance
 - **Circular dependency detection** - Raises `CircularDependencyError`
 - **Security scopes validation** - Validates OAuth2 scopes
-- **Generator dependencies** - Planned support for `yield` setup/teardown (not yet implemented)
+- **Generator dependencies** - Supports `yield` setup/teardown for both sync and async generators with guaranteed cleanup
 - **Thread-safe** - Double-checked locking pattern
 - **Async support** - Separate async methods that handle both sync and async deps
 

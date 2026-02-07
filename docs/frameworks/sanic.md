@@ -107,20 +107,6 @@ async def upload_file(file: FileUpload = File(...)):
 
 ## Sanic-Specific Features
 
-### Using Sanic Request
-
-```python
-from sanic import request
-
-@router.get("/request-info")
-async def get_request_info():
-    return {
-        "ip": request.ip,
-        "host": request.host,
-        "scheme": request.scheme
-    }
-```
-
 ### Using Sanic Response
 
 ```python

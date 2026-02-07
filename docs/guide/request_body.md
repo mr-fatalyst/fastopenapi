@@ -40,34 +40,6 @@ def create_item(item: Item):  # Automatically uses Body()
     return {"item": item}
 ```
 
-### Multiple Body Parameters
-
-```python
-@router.post("/items")
-def create_item(
-    item: Item = Body(...),
-    metadata: dict = Body(..., description="Additional metadata")
-):
-    return {"item": item, "metadata": metadata}
-```
-
-**Request:**
-```http
-POST /items HTTP/1.1
-Content-Type: application/json
-
-{
-  "item": {
-    "name": "Laptop",
-    "price": 999.99
-  },
-  "metadata": {
-    "source": "web",
-    "user_id": 123
-  }
-}
-```
-
 ### Nested Models
 
 ```python
@@ -478,15 +450,9 @@ Content-Type: application/json
 {
   "error": {
     "type": "validation_error",
-    "message": "Validation error",
+    "message": "Validation error for parameter 'price'",
     "status": 422,
-    "details": [
-      {
-        "loc": ["body", "price"],
-        "msg": "Input should be greater than 0",
-        "type": "greater_than"
-      }
-    ]
+    "details": "Input should be greater than 0"
   }
 }
 ```

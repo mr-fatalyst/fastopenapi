@@ -514,15 +514,9 @@ Content-Type: application/json
 {
   "error": {
     "type": "validation_error",
-    "message": "Validation error",
+    "message": "Error parsing parameter 'limit'",
     "status": 422,
-    "details": [
-      {
-        "loc": ["query", "limit"],
-        "msg": "Input should be greater than or equal to 1",
-        "type": "greater_than_equal"
-      }
-    ]
+    "details": "Input should be greater than or equal to 1"
   }
 }
 ```
@@ -538,18 +532,13 @@ Content-Type: application/json
 {
   "error": {
     "type": "validation_error",
-    "message": "Validation error",
-    "status": 422,
-    "details": [
-      {
-        "loc": ["query", "q"],
-        "msg": "Field required",
-        "type": "missing"
-      }
-    ]
+    "message": "Missing required parameter: 'q'",
+    "status": 422
   }
 }
 ```
+
+> **Note:** For missing parameters, the `details` field is omitted. For validation failures, `details` contains a string description of the error.
 
 ## Best Practices
 

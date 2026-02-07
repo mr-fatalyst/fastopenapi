@@ -108,20 +108,6 @@ async def upload_file(file: FileUpload = File(...)):
 
 ## Starlette-Specific Features
 
-### Using Starlette Request
-
-```python
-from starlette.requests import Request
-
-@router.get("/request-info")
-async def get_request_info(request: Request):
-    return {
-        "method": request.method,
-        "url": str(request.url),
-        "client": request.client.host
-    }
-```
-
 ### Using Starlette Response
 
 ```python
@@ -511,26 +497,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-```
-
-## Session Management
-
-```python
-from starlette.middleware.sessions import SessionMiddleware
-
-app.add_middleware(SessionMiddleware, secret_key="your-secret-key")
-
-@router.post("/login")
-async def login(request: Request, username: str = Form(...)):
-    request.session["user"] = username
-    return {"message": "Logged in"}
-
-@router.get("/profile")
-async def profile(request: Request):
-    user = request.session.get("user")
-    if not user:
-        raise AuthenticationError("Not logged in")
-    return {"user": user}
 ```
 
 ## Next Steps

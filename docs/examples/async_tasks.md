@@ -494,7 +494,7 @@ if __name__ == "__main__":
 import asyncio
 from datetime import datetime, timedelta
 from collections import defaultdict
-from fastopenapi import Depends
+from fastopenapi import Depends, Header
 from fastopenapi.errors import AuthorizationError
 
 class AsyncRateLimiter:
