@@ -1626,6 +1626,59 @@ class TestDependencyResolver:
         assert result == {"dep": "sync_value"}
         assert cleanup_called
 
+    def test_sync_generator_cleanup_exception_swallowed(self):
+        """Test that exception in generator's finally block is silently swallowed"""
+        cleanup_log = []
+
+        def failing_cleanup_gen():
+            try:
+                yield "value"
+            finally:
+                cleanup_log.append("cleanup_attempted")
+                raise RuntimeError("cleanup exploded")
+
+        def healthy_gen():
+            try:
+                yield "healthy"
+            finally:
+                cleanup_log.append("healthy_cleanup")
+
+        def endpoint(a=Depends(failing_cleanup_gen), b=Depends(healthy_gen)):
+            return f"{a}_{b}"
+
+        result = self.resolver.resolve_dependencies(endpoint, self.request_data)
+        assert result == {"a": "value", "b": "healthy"}
+        assert "cleanup_attempted" in cleanup_log
+        assert "healthy_cleanup" in cleanup_log
+
+    @pytest.mark.asyncio
+    async def test_async_generator_cleanup_exception_swallowed(self):
+        """Test that async generator cleanup exception is silently swallowed"""
+        cleanup_log = []
+
+        async def failing_cleanup_gen():
+            try:
+                yield "value"
+            finally:
+                cleanup_log.append("cleanup_attempted")
+                raise RuntimeError("async cleanup exploded")
+
+        async def healthy_gen():
+            try:
+                yield "healthy"
+            finally:
+                cleanup_log.append("healthy_cleanup")
+
+        def endpoint(a=Depends(failing_cleanup_gen), b=Depends(healthy_gen)):
+            return f"{a}_{b}"
+
+        result = await self.resolver.resolve_dependencies_async(
+            endpoint, self.request_data
+        )
+        assert result == {"a": "value", "b": "healthy"}
+        assert "cleanup_attempted" in cleanup_log
+        assert "healthy_cleanup" in cleanup_log
+
     @pytest.mark.asyncio
     async def test_mixed_async_and_sync_generators(self):
         """Test mixing async and sync generators in async context"""

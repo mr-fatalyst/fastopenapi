@@ -135,7 +135,7 @@ class DependencyResolver:
 
         # Handle regular Depends
         return self._resolve_regular_dependency(
-            dependency, dependency_func, request_data, param_name
+            dependency_func, request_data, param_name
         )
 
     def _resolve_security_dependency(
@@ -166,7 +166,6 @@ class DependencyResolver:
 
     def _resolve_regular_dependency(
         self,
-        depends: Depends,
         dependency_func: Callable,
         request_data: RequestData,
         param_name: str,
