@@ -43,9 +43,11 @@ def __init__(
 ### Parameters
 
 - **app**: Framework application instance
-- **docs_url**: URL for Swagger UI docs (set to `None` to disable)
-- **redoc_url**: URL for ReDoc UI docs (set to `None` to disable)
-- **openapi_url**: URL for OpenAPI JSON schema (set to `None` to disable)
+- **docs_url**: URL for Swagger UI docs (default: `"/docs"`)
+- **redoc_url**: URL for ReDoc UI docs (default: `"/redoc"`)
+- **openapi_url**: URL for OpenAPI JSON schema (default: `"/openapi.json"`)
+
+> **Note:** Setting any of these to `None` disables all documentation endpoints (Swagger UI, ReDoc, and OpenAPI JSON) at once.
 - **openapi_version**: OpenAPI specification version (default: `"3.0.0"`)
 - **title**: API title
 - **version**: API version
@@ -523,12 +525,12 @@ router = FlaskRouter(
 
 ### Disabling Documentation
 
+To disable all documentation endpoints, set any URL to `None`:
+
 ```python
 router = FlaskRouter(
     app=app,
-    docs_url=None,      # Disable Swagger UI
-    redoc_url=None,     # Disable ReDoc
-    openapi_url=None    # Disable OpenAPI schema
+    docs_url=None,      # Disables all: Swagger UI, ReDoc, and OpenAPI JSON
 )
 ```
 
