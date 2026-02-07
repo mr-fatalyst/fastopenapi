@@ -5,13 +5,12 @@ from contextlib import contextmanager
 from typing import Any
 from weakref import WeakKeyDictionary
 
-from fastopenapi.core.params import Depends, Security
+from fastopenapi.core.params import Depends, Security, SecurityScopes
 from fastopenapi.core.types import RequestData
 from fastopenapi.errors.exceptions import (
     APIError,
     CircularDependencyError,
     DependencyError,
-    SecurityError,
 )
 
 
@@ -145,24 +144,13 @@ class DependencyResolver:
         request_data: RequestData,
         param_name: str,
     ) -> Any:
-        """Resolve Security dependency with scope validation"""
-
-        # Execute the dependency function first to get token data
-        result = self._execute_dependency_function(
-            dependency_func, request_data, param_name
+        """Resolve Security dependency, injecting SecurityScopes if requested"""
+        return self._execute_dependency_function(
+            dependency_func,
+            request_data,
+            param_name,
+            security_scopes=SecurityScopes(security.scopes),
         )
-
-        # Extract provided scopes from result
-        provided_scopes = self._extract_scopes_from_result(result)
-
-        # Get required scopes from Security object
-        required_scopes = set(security.scopes)
-
-        # Check if we have all required scopes
-        if required_scopes and not required_scopes.issubset(provided_scopes):
-            raise SecurityError("Insufficient scopes")
-
-        return result
 
     def _resolve_regular_dependency(
         self,
@@ -180,6 +168,7 @@ class DependencyResolver:
         dependency_func: Callable,
         request_data: RequestData,
         param_name: str,
+        security_scopes: SecurityScopes | None = None,
     ) -> Any:
         """
         Execute dependency function with caching and circular dependency detection
@@ -209,7 +198,7 @@ class DependencyResolver:
             # Guard against circular dependencies
             with self._resolving_guard(request_cache, dependency_func, param_name):
                 sub_dependencies = self._resolve_sub_dependencies(
-                    dependency_func, request_data
+                    dependency_func, request_data, security_scopes
                 )
                 result = self._call_dependency(
                     dependency_func, sub_dependencies or {}, request_data
@@ -269,25 +258,35 @@ class DependencyResolver:
                 f"Dependency function '{dependency_func.__name__}' failed"
             ) from e
 
+    def _classify_params(self, dependency_func, security_scopes):
+        """Split function params into injected, dependency, and regular."""
+        sig = self._get_signature(dependency_func)
+        injected = {}
+        dependency_params = {}
+        regular_params = {}
+        for param_name, param in sig.items():
+            if param.annotation is SecurityScopes:
+                injected[param_name] = security_scopes or SecurityScopes()
+            elif isinstance(param.default, (Depends, Security)):
+                dependency_params[param_name] = param
+            else:
+                regular_params[param_name] = param
+        return injected, dependency_params, regular_params
+
     def _resolve_sub_dependencies(
-        self, dependency_func: Callable, request_data: RequestData
+        self,
+        dependency_func: Callable,
+        request_data: RequestData,
+        security_scopes: SecurityScopes | None = None,
     ) -> dict[str, Any]:
         """
         Resolve sub-dependencies for a dependency function
         This enables recursive dependency injection
         """
-        sig = self._get_signature(dependency_func)
-        sub_dependencies = {}
-
-        # Split parameters into dependencies and regular parameters
-        dependency_params = {}
-        regular_params = {}
-
-        for param_name, param in sig.items():
-            if isinstance(param.default, (Depends, Security)):
-                dependency_params[param_name] = param
-            else:
-                regular_params[param_name] = param
+        injected, dependency_params, regular_params = self._classify_params(
+            dependency_func, security_scopes
+        )
+        sub_dependencies = dict(injected)
 
         # Resolve dependency parameters recursively
         for param_name, param in dependency_params.items():
@@ -435,24 +434,13 @@ class DependencyResolver:
         request_data: RequestData,
         param_name: str,
     ) -> Any:
-        """Resolve Security dependency with scope validation (async)"""
-
-        # Execute the dependency function first to get token data
-        result = await self._execute_dependency_function_async(
-            dependency_func, request_data, param_name
+        """Resolve Security dependency, injecting SecurityScopes if requested"""
+        return await self._execute_dependency_function_async(
+            dependency_func,
+            request_data,
+            param_name,
+            security_scopes=SecurityScopes(security.scopes),
         )
-
-        # Extract provided scopes from result
-        provided_scopes = self._extract_scopes_from_result(result)
-
-        # Get required scopes from Security object
-        required_scopes = set(security.scopes)
-
-        # Check if we have all required scopes
-        if required_scopes and not required_scopes.issubset(provided_scopes):
-            raise SecurityError("Insufficient scopes")
-
-        return result
 
     async def _resolve_regular_dependency_async(
         self,
@@ -471,6 +459,7 @@ class DependencyResolver:
         dependency_func: Callable,
         request_data: RequestData,
         param_name: str,
+        security_scopes: SecurityScopes | None = None,
     ) -> Any:
         """
         Execute dependency function with caching and circular dependency detection
@@ -500,7 +489,7 @@ class DependencyResolver:
             # Guard against circular dependencies
             with self._resolving_guard(request_cache, dependency_func, param_name):
                 sub_dependencies = await self._resolve_sub_dependencies_async(
-                    dependency_func, request_data
+                    dependency_func, request_data, security_scopes
                 )
                 result = await self._call_dependency_async(
                     dependency_func, sub_dependencies or {}, request_data
@@ -535,24 +524,19 @@ class DependencyResolver:
             ) from e
 
     async def _resolve_sub_dependencies_async(
-        self, dependency_func: Callable, request_data: RequestData
+        self,
+        dependency_func: Callable,
+        request_data: RequestData,
+        security_scopes: SecurityScopes | None = None,
     ) -> dict[str, Any]:
         """
         Resolve sub-dependencies for a dependency function (async)
         This enables recursive dependency injection
         """
-        sig = self._get_signature(dependency_func)
-        sub_dependencies = {}
-
-        # Split parameters into dependencies and regular parameters
-        dependency_params = {}
-        regular_params = {}
-
-        for param_name, param in sig.items():
-            if isinstance(param.default, (Depends, Security)):
-                dependency_params[param_name] = param
-            else:
-                regular_params[param_name] = param
+        injected, dependency_params, regular_params = self._classify_params(
+            dependency_func, security_scopes
+        )
+        sub_dependencies = dict(injected)
 
         # Resolve dependency parameters recursively (async)
         for param_name, param in dependency_params.items():
@@ -616,14 +600,6 @@ class DependencyResolver:
                     f"No dependency function specified for parameter '{param_name}'"
                 )
         return dependency_func
-
-    def _extract_scopes_from_result(self, result: Any) -> set[str]:
-        """Extract scopes from dependency function result"""
-        if isinstance(result, dict) and "scopes" in result:
-            return set(result["scopes"])
-        elif hasattr(result, "scopes"):
-            return set(result.scopes)
-        return set()
 
     def _make_cache_key(
         self, dependency_func: Callable, request_data: RequestData

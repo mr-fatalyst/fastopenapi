@@ -9,6 +9,7 @@ from fastopenapi.core.params import (
     Path,
     Query,
     Security,
+    SecurityScopes,
 )
 from fastopenapi.core.types import FileUpload, Response
 
@@ -27,4 +28,5 @@ __all__ = [
     "File",
     "Depends",
     "Security",
+    "SecurityScopes",
 ]

@@ -374,11 +374,11 @@ def moderate_posts(moderator = Depends(require_role(UserRole.MODERATOR))):
 ## OAuth2 with Scopes
 
 ```python
-from fastopenapi import Security
+from fastopenapi import Security, SecurityScopes
 
 def verify_token_scopes(
     authorization: str = Header(..., alias="Authorization"),
-    security_scopes: Security = None
+    security_scopes: SecurityScopes,
 ):
     """Verify token and check scopes"""
     if not authorization or not authorization.startswith("Bearer "):
@@ -394,10 +394,9 @@ def verify_token_scopes(
         raise AuthenticationError("Invalid token")
 
     # Check if token has required scopes
-    if security_scopes:
-        for scope in security_scopes.scopes:
-            if scope not in token_scopes:
-                raise AuthenticationError(f"Scope '{scope}' required")
+    for scope in security_scopes.scopes:
+        if scope not in token_scopes:
+            raise AuthenticationError(f"Scope '{scope}' required")
 
     user = users_db.get(int(user_id))
     if not user:

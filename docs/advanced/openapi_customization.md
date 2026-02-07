@@ -287,8 +287,7 @@ router = FlaskRouter(
     security_scheme={
         "type": "oauth2",
         "flows": {
-            "authorizationCode": {
-                "authorizationUrl": "https://example.com/oauth/authorize",
+            "password": {
                 "tokenUrl": "https://example.com/oauth/token",
                 "scopes": {
                     "read": "Read access",

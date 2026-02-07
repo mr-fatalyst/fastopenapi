@@ -70,14 +70,20 @@ def profile(user = Security(get_current_user)):
 
 ### Security() With Scopes
 
-The `scopes` parameter allows OAuth2-style scope validation:
+The `scopes` parameter allows OAuth2-style scope validation. Required scopes are injected into the dependency function via the `SecurityScopes` parameter:
 
 ```python
-def verify_scopes(token: str = Depends(get_bearer_token), required_scopes: list[str] = None):
+from fastopenapi import Security, SecurityScopes, Depends
+from fastopenapi.errors import AuthorizationError
+
+def verify_scopes(
+    security_scopes: SecurityScopes,
+    token: str = Depends(get_bearer_token),
+):
     payload = verify_jwt_token(token)
     token_scopes = payload.get("scopes", [])
 
-    for scope in required_scopes or []:
+    for scope in security_scopes.scopes:
         if scope not in token_scopes:
             raise AuthorizationError(f"Scope '{scope}' required")
 
@@ -93,7 +99,7 @@ def delete_user(user_id: int, user = Security(verify_scopes, scopes=["users:dele
     return {"deleted": user_id}
 ```
 
-The scopes are also shown in the OpenAPI documentation.
+The `SecurityScopes` object receives the `scopes` list from the `Security()` declaration. The function itself decides how to validate them. Scopes are also shown in the OpenAPI documentation.
 
 ## Bearer JWT Authentication
 
@@ -446,20 +452,21 @@ def create_token_with_scopes(user_id: int, scopes: list[str]) -> str:
     }
     return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 
-def verify_scopes(*required_scopes: str):
-    def scope_checker(token: str = Depends(get_bearer_token)):
-        payload = verify_jwt_token(token)
-        token_scopes = set(payload.get("scopes", []))
-        
-        for scope in required_scopes:
-            if scope not in token_scopes:
-                raise AuthorizationError(f"Scope '{scope}' required")
-        
-        return payload
-    return scope_checker
+def verify_scopes(
+    security_scopes: SecurityScopes,
+    token: str = Depends(get_bearer_token),
+):
+    payload = verify_jwt_token(token)
+    token_scopes = set(payload.get("scopes", []))
+
+    for scope in security_scopes.scopes:
+        if scope not in token_scopes:
+            raise AuthorizationError(f"Scope '{scope}' required")
+
+    return payload
 
 @router.get("/admin/stats")
-def admin_stats(payload = Depends(verify_scopes("admin:read", "stats:read"))):
+def admin_stats(payload = Security(verify_scopes, scopes=["admin:read", "stats:read"])):
     return {"stats": get_statistics()}
 ```
 

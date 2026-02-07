@@ -69,8 +69,7 @@ SECURITY_SCHEMES = {
     SecuritySchemeType.OAUTH2: {
         "type": "oauth2",
         "flows": {
-            "authorizationCode": {
-                "authorizationUrl": "https://example.com/oauth/authorize",
+            "password": {
                 "tokenUrl": "https://example.com/oauth/token",
                 "scopes": {
                     "read": "Read access",

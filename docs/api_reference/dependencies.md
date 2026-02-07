@@ -137,16 +137,18 @@ def protected_route(user = Security(verify_token)):
 #### OAuth2 Scopes
 
 ```python
+from fastopenapi import Security, SecurityScopes
+
 def verify_scopes(
     authorization: str = Header(..., alias="Authorization"),
-    required_scopes: Security = None
+    security_scopes: SecurityScopes,
 ):
     token = authorization[7:]
     payload = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
 
     # Check if user has required scopes
     user_scopes = payload.get("scopes", [])
-    for scope in required_scopes.scopes:
+    for scope in security_scopes.scopes:
         if scope not in user_scopes:
             raise SecurityError(f"Scope '{scope}' required")
 
@@ -177,6 +179,57 @@ def create_post(
 ):
     # User must have BOTH scopes
     return create_post(content, user["user_id"])
+```
+
+---
+
+## SecurityScopes
+
+Scopes injected into security dependency functions.
+
+```python
+from fastopenapi import SecurityScopes
+```
+
+### Class Definition
+
+```python
+class SecurityScopes:
+    def __init__(self, scopes: list[str] | None = None)
+```
+
+### Parameters
+
+- **scopes** (`list[str] | None`): List of required scopes. Defaults to `[]`.
+
+### Attributes
+
+- **scopes** (`list[str]`): List of required scopes
+
+### Usage
+
+Add a `SecurityScopes`-annotated parameter to your security function. FastOpenAPI will automatically inject the scopes from the `Security()` declaration:
+
+```python
+from fastopenapi import Security, SecurityScopes
+
+def verify_token(
+    authorization: str = Header(..., alias="Authorization"),
+    security_scopes: SecurityScopes,
+):
+    token = authorization[7:]
+    payload = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
+
+    for scope in security_scopes.scopes:
+        if scope not in payload.get("scopes", []):
+            raise SecurityError(f"Missing scope: {scope}")
+
+    return payload
+
+# security_scopes.scopes will be ["admin:read"]
+@router.get("/admin")
+def admin(user=Security(verify_token, scopes=["admin:read"])):
+    return {"user": user}
 ```
 
 ---
@@ -402,7 +455,7 @@ from fastopenapi.core.dependency_resolver import (
 - **Request-scoped caching**: Dependencies are resolved once per request
 - **Recursive resolution**: Dependencies can have their own dependencies
 - **Circular dependency detection**: Automatically detects and reports circular dependencies
-- **Security scopes validation**: Validates OAuth2 scopes for `Security(func, scopes=[...])` dependencies
+- **Security scopes injection**: Injects `SecurityScopes` into security dependency functions
 - **Thread-safe operation**: Safe for concurrent requests
 
 ### Convenience Functions

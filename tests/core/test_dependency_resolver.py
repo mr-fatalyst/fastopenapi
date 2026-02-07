@@ -1,6 +1,6 @@
 import threading
 import time
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 from weakref import WeakKeyDictionary
 
 import pytest
@@ -10,7 +10,7 @@ from fastopenapi.core.dependency_resolver import (
     get_dependency_stats,
     resolve_dependencies,
 )
-from fastopenapi.core.params import Depends, Security
+from fastopenapi.core.params import Depends, Security, SecurityScopes
 from fastopenapi.core.types import RequestData
 from fastopenapi.errors.exceptions import (
     APIError,
@@ -84,47 +84,31 @@ class TestDependencyResolver:
         assert result2 == {"dep": "result_2"}
         assert call_count == 2
 
-    def test_resolve_security_dependency_with_scopes(self):
-        """Test Security dependency with scopes validation"""
+    def test_security_scopes_injected_into_function(self):
+        """Test SecurityScopes is injected into dependency function"""
+        from fastopenapi.core.params import SecurityScopes
 
-        def auth_dep():
-            return {"user": "john", "scopes": ["read", "write"]}
+        received_scopes = []
 
-        def endpoint(user_data: dict = Security(auth_dep, scopes=["read"])):
-            return user_data
-
-        result = self.resolver.resolve_dependencies(endpoint, self.request_data)
-
-        assert result == {"user_data": {"user": "john", "scopes": ["read", "write"]}}
-
-    def test_resolve_security_dependency_insufficient_scopes(self):
-        """Test Security dependency with insufficient scopes"""
-
-        def auth_dep():
-            return {"user": "john", "scopes": ["read"]}
+        def auth_dep(scopes: SecurityScopes):
+            received_scopes.append(scopes.scopes)
+            return {"user": "john"}
 
         def endpoint(user_data: dict = Security(auth_dep, scopes=["read", "write"])):
             return user_data
 
-        with pytest.raises(SecurityError, match="Insufficient scopes"):
-            self.resolver.resolve_dependencies(endpoint, self.request_data)
+        result = self.resolver.resolve_dependencies(endpoint, self.request_data)
+        assert result == {"user_data": {"user": "john"}}
+        assert received_scopes == [["read", "write"]]
 
-    def test_resolve_security_dependency_no_scopes_in_result(self):
-        """Test Security dependency when result has no scopes"""
+    def test_security_scopes_empty_when_no_scopes(self):
+        """Test SecurityScopes has empty list when no scopes declared"""
+        from fastopenapi.core.params import SecurityScopes
 
-        def auth_dep():
-            return {"user": "john"}
+        received_scopes = []
 
-        def endpoint(user_data: dict = Security(auth_dep, scopes=["read"])):
-            return user_data
-
-        with pytest.raises(SecurityError, match="Insufficient scopes"):
-            self.resolver.resolve_dependencies(endpoint, self.request_data)
-
-    def test_resolve_security_dependency_no_required_scopes(self):
-        """Test Security dependency with no required scopes"""
-
-        def auth_dep():
+        def auth_dep(scopes: SecurityScopes):
+            received_scopes.append(scopes.scopes)
             return {"user": "john"}
 
         def endpoint(user_data: dict = Security(auth_dep, scopes=[])):
@@ -132,25 +116,36 @@ class TestDependencyResolver:
 
         result = self.resolver.resolve_dependencies(endpoint, self.request_data)
         assert result == {"user_data": {"user": "john"}}
+        assert received_scopes == [[]]
 
-    def test_extract_scopes_from_result_dict(self):
-        """Test extracting scopes from dict result"""
-        result = {"scopes": ["read", "write"]}
-        scopes = self.resolver._extract_scopes_from_result(result)
-        assert scopes == {"read", "write"}
+    def test_security_without_scopes_param(self):
+        """Test Security dependency works without SecurityScopes parameter"""
 
-    def test_extract_scopes_from_result_object(self):
-        """Test extracting scopes from object with scopes attribute"""
-        result = Mock()
-        result.scopes = ["admin", "read"]
-        scopes = self.resolver._extract_scopes_from_result(result)
-        assert scopes == {"admin", "read"}
+        def auth_dep():
+            return {"user": "john"}
 
-    def test_extract_scopes_from_result_no_scopes(self):
-        """Test extracting scopes when no scopes present"""
-        result = {"user": "john"}
-        scopes = self.resolver._extract_scopes_from_result(result)
-        assert scopes == set()
+        def endpoint(user_data: dict = Security(auth_dep, scopes=["read"])):
+            return user_data
+
+        result = self.resolver.resolve_dependencies(endpoint, self.request_data)
+        assert result == {"user_data": {"user": "john"}}
+
+    def test_security_scopes_function_raises(self):
+        """Test that function can use SecurityScopes to raise SecurityError"""
+        from fastopenapi.core.params import SecurityScopes
+
+        def auth_dep(scopes: SecurityScopes):
+            user_scopes = ["read"]
+            for scope in scopes.scopes:
+                if scope not in user_scopes:
+                    raise SecurityError(f"Missing scope: {scope}")
+            return {"user": "john"}
+
+        def endpoint(user_data: dict = Security(auth_dep, scopes=["admin"])):
+            return user_data
+
+        with pytest.raises(SecurityError, match="Missing scope: admin"):
+            self.resolver.resolve_dependencies(endpoint, self.request_data)
 
     def test_circular_dependency_detection(self):
         """Test circular dependency detection"""
@@ -847,51 +842,34 @@ class TestDependencyResolver:
         assert call_count == 2
 
     @pytest.mark.asyncio
-    async def test_resolve_security_dependency_async_with_scopes(self):
-        """Async version of test_resolve_security_dependency_with_scopes"""
+    async def test_security_scopes_injected_async(self):
+        """Test SecurityScopes is injected in async context"""
+        from fastopenapi.core.params import SecurityScopes
 
-        async def auth_dep():
-            return {"user": "john", "scopes": ["read", "write"]}
+        received_scopes = []
 
-        def endpoint(user_data: dict = Security(auth_dep, scopes=["read"])):
+        async def auth_dep(scopes: SecurityScopes):
+            received_scopes.append(scopes.scopes)
+            return {"user": "john"}
+
+        def endpoint(user_data: dict = Security(auth_dep, scopes=["read", "write"])):
             return user_data
 
         result = await self.resolver.resolve_dependencies_async(
             endpoint, self.request_data
         )
-        assert result == {"user_data": {"user": "john", "scopes": ["read", "write"]}}
+        assert result == {"user_data": {"user": "john"}}
+        assert received_scopes == [["read", "write"]]
 
     @pytest.mark.asyncio
-    async def test_resolve_security_dependency_async_insufficient_scopes(self):
-        """Async version of test_resolve_security_dependency_insufficient_scopes"""
+    async def test_security_scopes_empty_async(self):
+        """Test SecurityScopes empty in async context"""
+        from fastopenapi.core.params import SecurityScopes
 
-        async def auth_dep():
-            return {"user": "john", "scopes": ["read"]}
+        received_scopes = []
 
-        def endpoint(user_data: dict = Security(auth_dep, scopes=["read", "write"])):
-            return user_data
-
-        with pytest.raises(SecurityError, match="Insufficient scopes"):
-            await self.resolver.resolve_dependencies_async(endpoint, self.request_data)
-
-    @pytest.mark.asyncio
-    async def test_resolve_security_dependency_async_no_scopes_in_result(self):
-        """Async version of test_resolve_security_dependency_no_scopes_in_result"""
-
-        async def auth_dep():
-            return {"user": "john"}
-
-        def endpoint(user_data: dict = Security(auth_dep, scopes=["read"])):
-            return user_data
-
-        with pytest.raises(SecurityError, match="Insufficient scopes"):
-            await self.resolver.resolve_dependencies_async(endpoint, self.request_data)
-
-    @pytest.mark.asyncio
-    async def test_resolve_security_dependency_async_no_required_scopes(self):
-        """Async version of test_resolve_security_dependency_no_required_scopes"""
-
-        async def auth_dep():
+        async def auth_dep(scopes: SecurityScopes):
+            received_scopes.append(scopes.scopes)
             return {"user": "john"}
 
         def endpoint(user_data: dict = Security(auth_dep, scopes=[])):
@@ -901,6 +879,39 @@ class TestDependencyResolver:
             endpoint, self.request_data
         )
         assert result == {"user_data": {"user": "john"}}
+        assert received_scopes == [[]]
+
+    @pytest.mark.asyncio
+    async def test_security_without_scopes_param_async(self):
+        """Test Security works without SecurityScopes param in async"""
+
+        async def auth_dep():
+            return {"user": "john"}
+
+        def endpoint(user_data: dict = Security(auth_dep, scopes=["read"])):
+            return user_data
+
+        result = await self.resolver.resolve_dependencies_async(
+            endpoint, self.request_data
+        )
+        assert result == {"user_data": {"user": "john"}}
+
+    @pytest.mark.asyncio
+    async def test_security_scopes_function_raises_async(self):
+        """Test function can raise SecurityError using scopes in async"""
+
+        async def auth_dep(scopes: SecurityScopes):
+            user_scopes = ["read"]
+            for scope in scopes.scopes:
+                if scope not in user_scopes:
+                    raise SecurityError(f"Missing scope: {scope}")
+            return {"user": "john"}
+
+        def endpoint(user_data: dict = Security(auth_dep, scopes=["admin"])):
+            return user_data
+
+        with pytest.raises(SecurityError, match="Missing scope: admin"):
+            await self.resolver.resolve_dependencies_async(endpoint, self.request_data)
 
     @pytest.mark.asyncio
     async def test_circular_dependency_detection_async(self):

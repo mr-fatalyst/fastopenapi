@@ -558,6 +558,13 @@ class Security(Depends):
         self.scopes = list(scopes) if scopes else []
 
 
+class SecurityScopes:
+    """Required scopes injected into security dependency functions"""
+
+    def __init__(self, scopes: list[str] | None = None):
+        self.scopes = scopes or []
+
+
 # Pre-defined common validation types
 PositiveInt = Annotated[int, Field(gt=0, description="Positive integer")]
 NonNegativeInt = Annotated[int, Field(ge=0, description="Non-negative integer")]
