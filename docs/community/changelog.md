@@ -1,11 +1,64 @@
 # Changelog
 
-All notable changes to FastOpenAPI will be documented in this file.
+All notable changes to FastOpenAPI are documented in this file.
 
-## [0.8.0] - Unreleased
+FastOpenAPI follows the [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) format.
+
+## [1.0.0b1] - Unreleased
 
 ### Added
-- `DjangoRouter` for integration with the `Django` framework.
+
+- **Dependency Injection system** with `Depends` and `Security` for automatic dependency resolution
+  - Request-scoped caching (same dependency called multiple times returns cached result)
+  - Circular dependency detection
+  - `SecurityScopes` injection for OAuth2 scope validation
+  - Generator/yield dependencies with proper cleanup (sync and async)
+- **FastAPI-style parameter classes**: `Query`, `Path`, `Header`, `Cookie`, `Body`, `Form`, `File`
+  - Full Pydantic v2 validation: `gt`, `ge`, `lt`, `le`, `min_length`, `max_length`, `pattern`, `multiple_of`, `strict`, etc.
+  - Parameter metadata: `description`, `title`, `example`, `examples`, `deprecated`
+  - Alias support for headers and query parameters
+- **Django support** with `DjangoRouter` (sync) and `DjangoAsyncRouter` (async), including `urls` property for Django URL patterns
+- **Falcon async support** with `FalconAsyncRouter` (in addition to existing sync `FalconRouter`)
+- `FileUpload` class for framework-agnostic file handling with `.read()` and `.aread()` methods
+- Form data and file upload extraction for all frameworks
+- `RequestData` unified container for request data across all frameworks
+- `Response` class for custom responses with headers and status codes
+- Response model validation via `TypeAdapter` with thread-safe caching
+- **Standardized error hierarchy**: `APIError`, `BadRequestError`, `ValidationError` (422), `AuthenticationError`, `AuthorizationError`, `ResourceNotFoundError`, `ResourceConflictError`, `InternalServerError`, `ServiceUnavailableError`, `DependencyError`, `CircularDependencyError`, `SecurityError`
+- `APIError.from_exception()` for converting any exception to standardized JSON format
+- `EXCEPTION_MAPPER` on routers for framework-specific exception conversion (e.g., Django's `PermissionDenied` → `AuthorizationError`)
+- Built-in OpenAPI security schemes: Bearer JWT, API Key (header/query), Basic Auth, OAuth2
+- Custom security schemes via `security_scheme` parameter (accepts `SecuritySchemeType` enum or raw dict)
+- Security scheme merging in `include_router()`
+- `SecuritySchemeType` exported from `fastopenapi` for public use
+- Documentation completely rewritten with guides, API reference, framework-specific pages, and examples
+
+### Changed
+
+- **Complete architecture refactor** from monolithic `base_router.py` to composition-based modular design:
+  - `core/` — `BaseRouter`, parameter classes, dependency resolver, types, constants
+  - `resolution/` — `ParameterResolver` (extracted from `BaseRouter.resolve_endpoint_params()`)
+  - `response/` — `ResponseBuilder` (extracted from `BaseRouter._serialize_response()`)
+  - `openapi/` — `OpenAPIGenerator`, `SchemaBuilder`, UI renderers (extracted from `BaseRouter.generate_openapi()`)
+  - `errors/` — error hierarchy (extracted from `error_handler.py`)
+  - `routers/` — `BaseAdapter` + per-framework packages with separate extractors
+- All framework routers now inherit from `BaseAdapter` instead of `BaseRouter`
+- Each framework router split into separate router and extractor modules
+- Route metadata stored in `RouteInfo` class (was tuple)
+- Validation errors now return HTTP 422 (was 400)
+- OpenAPI `summary` resolved from route metadata or formatted endpoint name; `description` from metadata or docstring
+- Improved import errors with `MissingRouter` raising `ImportError` when framework is not installed
+- `django` added as optional dependency extra
+
+### Deprecated
+
+- Importing from `fastopenapi.error_handler` module (use `from fastopenapi.errors import ...` instead)
+
+### Removed
+
+- `BaseRouter.generate_openapi()` method (use `router.openapi` property)
+- `BaseRouter.resolve_endpoint_params()` and `BaseRouter._serialize_response()` internal methods
+- Multi-language documentation (single English version retained)
 
 
 ## [0.7.0] - 2025-04-27

@@ -8,48 +8,57 @@ FastOpenAPI follows the [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ### Added
 
-- **Dependency Injection system** with `Depends` and `Security` classes for automatic dependency resolution
-- Request-scoped dependency caching with circular dependency detection
-- Security scopes validation with OAuth2 support
+- **Dependency Injection system** with `Depends` and `Security` for automatic dependency resolution
+  - Request-scoped caching (same dependency called multiple times returns cached result)
+  - Circular dependency detection
+  - `SecurityScopes` injection for OAuth2 scope validation
+  - Generator/yield dependencies with proper cleanup (sync and async)
 - **FastAPI-style parameter classes**: `Query`, `Path`, `Header`, `Cookie`, `Body`, `Form`, `File`
-- Full Pydantic v2 validation support for all parameter types (gt, ge, lt, le, min_length, max_length, pattern, etc)
-- Parameter documentation support (description, examples, deprecated flags)
-- Pre-defined parameter types: `PositiveInt`, `NonNegativeInt`, `PositiveFloat`, `NonEmptyStr`, `LimitedStr`
+  - Full Pydantic v2 validation: `gt`, `ge`, `lt`, `le`, `min_length`, `max_length`, `pattern`, `multiple_of`, `strict`, etc.
+  - Parameter metadata: `description`, `title`, `example`, `examples`, `deprecated`
+  - Alias support for headers and query parameters
+- **Django support** with `DjangoRouter` (sync) and `DjangoAsyncRouter` (async), including `urls` property for Django URL patterns
+- **Falcon async support** with `FalconAsyncRouter` (in addition to existing sync `FalconRouter`)
 - `FileUpload` class for framework-agnostic file handling with `.read()` and `.aread()` methods
+- Form data and file upload extraction for all frameworks
 - `RequestData` unified container for request data across all frameworks
 - `Response` class for custom responses with headers and status codes
-- **Django support** with `DjangoRouter` (sync) and `DjangoAsyncRouter` (async)
-- Built-in OpenAPI security scheme definitions: Bearer JWT, API Key (header/query), Basic Auth, OAuth2
-- Configurable security schemes via `security_scheme` parameter in router constructor
-- Automatic security scheme integration in OpenAPI documentation
-- `APIError.from_exception()` method for converting any exception to standardized format
-- Thread-safe caching for parameter models, function signatures, and Pydantic schemas
-- Modular architecture with dedicated packages: `core/`, `errors/`, `openapi/`, `resolution/`, `response/`, `routers/`
-- `RouteInfo` dataclass for type-safe route metadata
-- Enhanced OpenAPI schema generation with `SchemaBuilder`, `ParameterProcessor`, and `ResponseBuilder` helper classes
-- Comprehensive error schema generation in OpenAPI documentation
-- Support for all parameter sources in OpenAPI (path, query, header, cookie, body, form, file)
+- Response model validation via `TypeAdapter` with thread-safe caching
+- **Standardized error hierarchy**: `APIError`, `BadRequestError`, `ValidationError` (422), `AuthenticationError`, `AuthorizationError`, `ResourceNotFoundError`, `ResourceConflictError`, `InternalServerError`, `ServiceUnavailableError`, `DependencyError`, `CircularDependencyError`, `SecurityError`
+- `APIError.from_exception()` for converting any exception to standardized JSON format
+- `EXCEPTION_MAPPER` on routers for framework-specific exception conversion (e.g., Django's `PermissionDenied` → `AuthorizationError`)
+- Built-in OpenAPI security schemes: Bearer JWT, API Key (header/query), Basic Auth, OAuth2
+- Custom security schemes via `security_scheme` parameter (accepts `SecuritySchemeType` enum or raw dict)
+- Security scheme merging in `include_router()`
+- `SecuritySchemeType` exported from `fastopenapi` for public use
+- Documentation completely rewritten with guides, API reference, framework-specific pages, and examples
 
 ### Changed
 
-- **Complete architecture refactor** from monolithic to modular design using composition over inheritance
-- Router implementation changed from inheritance-based to composition-based using `BaseAdapter` pattern
-- Moved parameter resolution from `BaseRouter.resolve_endpoint_params()` to dedicated `ParameterResolver` class
-- Moved OpenAPI generation from `BaseRouter.generate_openapi()` to dedicated `OpenAPIGenerator` class
-- Moved response serialization from `BaseRouter._serialize_response()` to `ResponseBuilder` class
-- Split OpenAPI generation into focused helper classes for better separation of concerns
-- Reorganized error handling from `error_handler.py` module to `errors/` package
-- Split `base_router.py` into multiple focused modules with single responsibility
-- Route metadata structure changed from tuple to `RouteInfo` dataclass for better type safety
-- Router constructor signature updated with `security_scheme` parameter (default: `SecuritySchemeType.BEARER_JWT`)
+- **Complete architecture refactor** from monolithic `base_router.py` to composition-based modular design:
+  - `core/` — `BaseRouter`, parameter classes, dependency resolver, types, constants
+  - `resolution/` — `ParameterResolver` (extracted from `BaseRouter.resolve_endpoint_params()`)
+  - `response/` — `ResponseBuilder` (extracted from `BaseRouter._serialize_response()`)
+  - `openapi/` — `OpenAPIGenerator`, `SchemaBuilder`, UI renderers (extracted from `BaseRouter.generate_openapi()`)
+  - `errors/` — error hierarchy (extracted from `error_handler.py`)
+  - `routers/` — `BaseAdapter` + per-framework packages with separate extractors
+- All framework routers now inherit from `BaseAdapter` instead of `BaseRouter`
+- Each framework router split into separate router and extractor modules
+- Route metadata stored in `RouteInfo` class (was tuple)
+- Validation errors now return HTTP 422 (was 400)
+- OpenAPI `summary` resolved from route metadata or formatted endpoint name; `description` from metadata or docstring
+- Improved import errors with `MissingRouter` raising `ImportError` when framework is not installed
+- `django` added as optional dependency extra
 
 ### Deprecated
 
-- Importing from `fastopenapi.error_handler` module (use `from fastopenapi.errors import ...` instead) - will show deprecation warning
+- Importing from `fastopenapi.error_handler` module (use `from fastopenapi.errors import ...` instead)
 
 ### Removed
-- `BaseRouter.generate_openapi()` method (use `router.openapi` property instead)
-- Internal API methods for custom router developers: `resolve_endpoint_params()` and `_serialize_response()`
+
+- `BaseRouter.generate_openapi()` method (use `router.openapi` property)
+- `BaseRouter.resolve_endpoint_params()` and `BaseRouter._serialize_response()` internal methods
+- Multi-language documentation (single English version retained)
 
 
 ## [0.7.0] - 2025-04-27
