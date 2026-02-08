@@ -678,11 +678,26 @@ class TestOpenAPIGenerator:
         param_obj = Mock()
         param_obj.title = None
         param_obj.description = None
+        param_obj.example = None
         param_obj.examples = None
         param_obj.unknown = None
 
         builder._apply_object_metadata(schema, param_obj)
         assert schema == {}
+
+    def test_schema_builder_apply_object_metadata_with_example(self):
+        """Test applying object metadata with example value"""
+        builder = SchemaBuilder({}, threading.Lock())
+        schema = {}
+
+        param_obj = Mock()
+        param_obj.title = None
+        param_obj.description = None
+        param_obj.example = "laptop"
+        param_obj.examples = None
+
+        builder._apply_object_metadata(schema, param_obj)
+        assert schema == {"example": "laptop"}
 
     def test_schema_builder_apply_default_value_none_or_ellipsis(self):
         """Test applying None or ellipsis default values"""
@@ -1065,6 +1080,17 @@ class TestOpenAPIGenerator:
         assert param_info["description"] == "Test description"
         assert "examples" in param_info
         assert param_info["deprecated"] is True
+
+    def test_parameter_processor_add_parameter_metadata_with_example(self):
+        """Test adding parameter metadata with example (singular)"""
+        processor = ParameterProcessor(self.generator.schema_builder)
+
+        param_info = {}
+        param_obj = Query(example="laptop")
+
+        processor._add_parameter_metadata(param_info, param_obj, "search")
+
+        assert param_info["example"] == "laptop"
 
     def test_parameter_processor_add_parameter_metadata_common_descriptions(self):
         """Test adding common parameter descriptions"""

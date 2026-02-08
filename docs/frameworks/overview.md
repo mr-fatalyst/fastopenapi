@@ -4,16 +4,16 @@ FastOpenAPI supports 8 popular Python web frameworks. This guide helps you choos
 
 ## Supported Frameworks
 
-| Framework | Type | Async | Python 3.10+ | Best For |
-|-----------|------|-------|--------------|----------|
-| **Flask** | WSGI | No | Yes | Traditional web apps, simple APIs |
-| **Django** | WSGI/ASGI | Both | Yes | Full-featured web applications |
-| **Starlette** | ASGI | Yes | Yes | Modern async APIs, high performance |
-| **Quart** | ASGI | Yes | Yes | Async Flask alternative |
-| **AIOHTTP** | ASGI | Yes | Yes | Async HTTP client/server |
-| **Sanic** | ASGI | Yes | Yes | Speed-focused async framework |
-| **Falcon** | WSGI/ASGI | Both | Yes | Minimalist APIs, microservices |
-| **Tornado** | Async | Yes | Yes | Long-lived connections, WebSockets |
+| Framework | Async | Python 3.10+ | Best For |
+|-----------|-------|--------------|----------|
+| **Flask** | No | Yes | Traditional web apps, simple APIs |
+| **Django** | Both | Yes | Full-featured web applications |
+| **Starlette** | Yes | Yes | Modern async APIs, high performance |
+| **Quart** | Yes | Yes | Async Flask alternative |
+| **AIOHTTP** | Yes | Yes | Async HTTP client/server |
+| **Sanic** | Yes | Yes | Speed-focused async framework |
+| **Falcon** | Both | Yes | Minimalist APIs, microservices |
+| **Tornado** | Yes | Yes | Long-lived connections, WebSockets |
 
 ## Quick Comparison
 
@@ -329,7 +329,7 @@ def get_user(user_id: int):
 | **Form Handling** | Extension | Yes | Yes | Yes | No | Yes | No | Yes |
 | **Session Management** | Extension | Yes | Middleware | Extension | No | Extension | No | Yes |
 | **Template Engine** | Jinja2 | Django Templates | Jinja2 | Jinja2 | Jinja2 | Jinja2 | No | Native |
-| **Deployment** | WSGI | WSGI/ASGI | ASGI | ASGI | ASGI | ASGI | WSGI/ASGI | ASGI |
+| **Deployment** | Sync | Sync/Async | Async | Async | Async | Async | Sync/Async | Async |
 
 *Django and Falcon support both sync and async
 

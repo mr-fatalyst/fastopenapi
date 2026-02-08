@@ -253,21 +253,21 @@ class RequestData:
     """Unified request data container"""
     def __init__(
         self,
-        path_params: dict[str, Any],
-        query_params: dict[str, Any],
-        headers: dict[str, str],
-        cookies: dict[str, str],
-        body: dict[str, Any] | None = None,
-        form_data: dict[str, Any] | None = None,
-        files: dict[str, Any] | None = None,
+        path_params: dict[str, Any] = None,
+        query_params: dict[str, Any] = None,
+        headers: dict[str, str] = None,
+        cookies: dict[str, str] = None,
+        body: Any = None,
+        form_data: dict[str, Any] = None,
+        files: dict[str, FileUpload | list[FileUpload]] = None,
     ):
-        self.path_params = path_params
-        self.query_params = query_params
-        self.headers = headers
-        self.cookies = cookies
+        self.path_params = path_params or {}
+        self.query_params = query_params or {}
+        self.headers = headers or {}
+        self.cookies = cookies or {}
         self.body = body
-        self.form_data = form_data
-        self.files = files
+        self.form_data = form_data or {}
+        self.files = files or {}
 ```
 
 **Extractor Interface:**

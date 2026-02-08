@@ -469,7 +469,7 @@ if __name__ == "__main__":
 Set the security scheme for OpenAPI documentation:
 
 ```python
-from fastopenapi.core.constants import SecuritySchemeType
+from fastopenapi import SecuritySchemeType
 
 # Bearer JWT (default)
 router = FlaskRouter(

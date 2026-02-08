@@ -12,7 +12,7 @@ from pydantic import BaseModel
 from datetime import datetime, timedelta
 import secrets
 import hashlib
-from fastopenapi import Header, Body, Depends, Security
+from fastopenapi import Header, Depends, Security
 from fastopenapi.routers import FlaskRouter
 from fastopenapi.errors import AuthenticationError, ResourceConflictError
 

@@ -1,4 +1,5 @@
 from fastopenapi.__version__ import __version__
+from fastopenapi.core.constants import SecuritySchemeType
 from fastopenapi.core.params import (
     Body,
     Cookie,
@@ -18,6 +19,7 @@ __all__ = [
     # types
     "FileUpload",
     "Response",
+    "SecuritySchemeType",
     # params
     "Query",
     "Path",

@@ -12,7 +12,7 @@ Set the security scheme when creating the router:
 
 ```python
 from fastopenapi.routers import FlaskRouter
-from fastopenapi.core.constants import SecuritySchemeType
+from fastopenapi import SecuritySchemeType
 
 router = FlaskRouter(
     app=app,

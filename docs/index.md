@@ -111,7 +111,7 @@ def list_items(db = Depends(get_db)):
 
 **Security Schemes**
 ```python
-from fastopenapi import Security
+from fastopenapi import Security, SecuritySchemeType
 
 router = FlaskRouter(
     app=app,

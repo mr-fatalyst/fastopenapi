@@ -62,7 +62,6 @@ class Product(BaseModel):
 - `min_length` - Minimum string length
 - `max_length` - Maximum string length
 - `pattern` - Regex pattern (string must match)
-- `strip_whitespace` - Remove leading/trailing whitespace
 
 ### Numeric Constraints
 

@@ -34,10 +34,10 @@ The router constructor supports the following parameters:
 | `docs_url` | str \| None | "/docs" | Swagger UI URL |
 | `redoc_url` | str \| None | "/redoc" | ReDoc URL |
 | `openapi_url` | str \| None | "/openapi.json" | OpenAPI schema URL |
-
-> **Note:** Setting any URL to `None` disables all documentation endpoints at once.
 | `openapi_version` | str | "3.0.0" | OpenAPI specification version |
 | `security_scheme` | SecuritySchemeType \| None | BEARER_JWT | Default security scheme |
+
+> **Note:** Setting any URL to `None` disables all documentation endpoints at once.
 
 ## Tags
 
@@ -242,7 +242,7 @@ def list_users(
 ### API Key in Header
 
 ```python
-from fastopenapi.core.constants import SecuritySchemeType
+from fastopenapi import SecuritySchemeType
 
 router = FlaskRouter(
     app=app,

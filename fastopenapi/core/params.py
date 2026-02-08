@@ -33,6 +33,7 @@ class BaseParam(FieldInfo):
         allow_inf_nan: bool | None = None,
         max_digits: int | None = None,
         decimal_places: int | None = None,
+        example: Any | None = None,
         examples: list[Any] | None = None,
         deprecated: bool | None = None,
         include_in_schema: bool = True,
@@ -40,6 +41,7 @@ class BaseParam(FieldInfo):
         **extra: Any,
     ):
         # OpenAPI specific attributes
+        self.example = example
         self.examples = examples
         self.include_in_schema = include_in_schema
 
@@ -73,6 +75,7 @@ class BaseParam(FieldInfo):
 
         super().__init__(**filtered_kwargs)
 
+        self.example = example
         self.examples = examples
         self.include_in_schema = include_in_schema
 

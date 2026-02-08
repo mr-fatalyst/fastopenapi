@@ -427,9 +427,10 @@ class RouteInfo:
 Wrapper for framework request (from `fastopenapi.routers.common`):
 
 ```python
+@dataclass(slots=True, frozen=True)
 class RequestEnvelope:
-    request: Any      # Framework's request object
-    path_params: dict # Path parameters extracted by framework
+    path_params: dict[str, str]  # Path parameters extracted by framework
+    request: Any | None          # Framework's request object
 ```
 
 ### Response

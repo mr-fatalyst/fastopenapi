@@ -797,7 +797,7 @@ FastOpenAPI automatically converts common Django exceptions:
 # These are automatically handled:
 # - Http404 -> 404 error
 # - PermissionDenied -> 403 error
-# - SuspiciousOperation -> 400 error
+# - BadRequest -> 400 error
 ```
 
 ## Next Steps

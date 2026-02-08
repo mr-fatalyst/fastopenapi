@@ -84,8 +84,7 @@ pre-commit run --all-files
 ## Documentation
 
 If your change affects public APIs or behavior, update the relevant documentation:
-- `docs/en/`
-- If possible, update other languages too (optional)
+- `docs/`
 
 ---
 

@@ -17,7 +17,7 @@ Dependencies are reusable functions that can be injected into your endpoints. Th
 ### Simple Dependency
 
 ```python
-from fastopenapi import Depends
+from fastopenapi import Depends, Query
 
 def get_query_param(q: str = Query(None)):
     return q or "default"
@@ -30,6 +30,9 @@ def search(query: str = Depends(get_query_param)):
 ### Dependency with Logic
 
 ```python
+from fastopenapi import Header
+from fastopenapi.errors import AuthenticationError
+
 def get_current_user(token: str = Header(..., alias="Authorization")):
     if not token.startswith("Bearer "):
         raise AuthenticationError("Invalid token format")

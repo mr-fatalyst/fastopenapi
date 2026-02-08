@@ -48,7 +48,7 @@ Flask uses `<type:name>` syntax, but FastOpenAPI converts `{name}` automatically
 def get_user(user_id: int):
     return {"user_id": user_id}
 
-# Both generate the same Flask route: /users/<int:user_id>
+# Both generate the same Flask route: /users/<user_id>
 ```
 
 ## Request Data

@@ -132,7 +132,7 @@ class SchemaBuilder:
 
     def _apply_object_metadata(self, schema: dict, param_obj: BaseParam) -> None:
         """Apply object-level metadata"""
-        attrs = ["title", "description", "examples"]
+        attrs = ["title", "description", "example", "examples"]
         for attr in attrs:
             if hasattr(param_obj, attr):  # pragma: no cover
                 value = getattr(param_obj, attr)
@@ -389,6 +389,8 @@ class ParameterProcessor:
         if isinstance(param_obj, BaseParam):
             if param_obj.description:
                 param_info["description"] = param_obj.description
+            if hasattr(param_obj, "example") and param_obj.example is not None:
+                param_info["example"] = param_obj.example
             if hasattr(param_obj, "examples") and param_obj.examples:
                 param_info["examples"] = {
                     f"example_{i}": {"value": example}

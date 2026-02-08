@@ -83,7 +83,7 @@ sequenceDiagram
 | `BaseRouter` | `fastopenapi/core/router.py` | Route registration, OpenAPI generation |
 | `BaseAdapter` | `fastopenapi/routers/base.py` | Request pipeline orchestration |
 | `FrameworkRouter` | `fastopenapi/routers/{framework}/` | Framework integration (3 methods) |
-| `RequestDataExtractor` | `fastopenapi/routers/extractors.py` | Extract data from requests |
+| `BaseRequestDataExtractor` / `BaseAsyncRequestDataExtractor` | `fastopenapi/routers/extractors.py` | Extract data from requests (sync / async) |
 | `ParameterResolver` | `fastopenapi/resolution/resolver.py` | Parameter validation |
 | `DependencyResolver` | `fastopenapi/core/dependency_resolver.py` | Dependency injection |
 | `ResponseBuilder` | `fastopenapi/response/builder.py` | Response serialization |
