@@ -99,15 +99,9 @@ All errors return a standardized JSON format:
 {
   "error": {
     "type": "validation_error",
-    "message": "Validation error",
+    "message": "Error parsing parameter 'email'",
     "status": 422,
-    "details": [
-      {
-        "loc": ["body", "email"],
-        "msg": "Invalid email format",
-        "type": "value_error"
-      }
-    ]
+    "details": "Value is not a valid email address"
   }
 }
 ```

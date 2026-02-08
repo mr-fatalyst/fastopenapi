@@ -129,6 +129,50 @@ class TestBaseRouter:
         assert "BearerAuth" in parent._security_schemes
         assert "ApiKey" in parent._security_schemes
 
+    def test_security_scheme_dict_bearer(self):
+        """Test security_scheme as dict with bearer type"""
+        router = BaseRouter(
+            security_scheme={
+                "type": "http",
+                "scheme": "bearer",
+                "bearerFormat": "JWT",
+                "description": "Custom bearer",
+            }
+        )
+        assert router._security_schemes is not None
+        assert "BearerAuth" in router._security_schemes
+        assert router._security_schemes["BearerAuth"]["description"] == "Custom bearer"
+
+    def test_security_scheme_dict_oauth2(self):
+        """Test security_scheme as dict with oauth2 type"""
+        router = BaseRouter(
+            security_scheme={
+                "type": "oauth2",
+                "flows": {"password": {"tokenUrl": "/token", "scopes": {}}},
+            }
+        )
+        assert "OAuth2" in router._security_schemes
+
+    def test_security_scheme_dict_apikey(self):
+        """Test security_scheme as dict with apiKey type"""
+        router = BaseRouter(
+            security_scheme={"type": "apiKey", "in": "header", "name": "X-My-Key"}
+        )
+        assert "ApiKeyAuth" in router._security_schemes
+        assert router._security_schemes["ApiKeyAuth"]["name"] == "X-My-Key"
+
+    def test_security_scheme_dict_basic(self):
+        """Test security_scheme as dict with basic auth type"""
+        router = BaseRouter(security_scheme={"type": "http", "scheme": "basic"})
+        assert "BasicAuth" in router._security_schemes
+
+    def test_security_scheme_dict_custom(self):
+        """Test security_scheme as dict with unknown type"""
+        router = BaseRouter(
+            security_scheme={"type": "openIdConnect", "openIdConnectUrl": "/openid"}
+        )
+        assert "CustomAuth" in router._security_schemes
+
     def test_include_router_merges_global_security(self):
         """Test that include_router merges global security from sub-router"""
         parent = BaseRouter(security_scheme=None)

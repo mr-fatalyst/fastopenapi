@@ -37,7 +37,9 @@ class BaseRouter:
         title: str = "My App",
         version: str = "0.1.0",
         description: str = "API documentation",
-        security_scheme: SecuritySchemeType | None = SecuritySchemeType.BEARER_JWT,
+        security_scheme: (
+            SecuritySchemeType | dict | None
+        ) = SecuritySchemeType.BEARER_JWT,
     ):
         self.app = app
         self.docs_url = docs_url
@@ -53,8 +55,25 @@ class BaseRouter:
         self._global_security = []
 
         if security_scheme:
-            scheme_name = SECURITY_SCHEME_NAMES[security_scheme]
-            self._security_schemes = {scheme_name: SECURITY_SCHEMES[security_scheme]}
+            if isinstance(security_scheme, dict):
+                scheme_type = security_scheme.get("type", "")
+                http_scheme = security_scheme.get("scheme", "")
+                if scheme_type == "http" and http_scheme == "bearer":
+                    name = "BearerAuth"
+                elif scheme_type == "http" and http_scheme == "basic":
+                    name = "BasicAuth"
+                elif scheme_type == "apiKey":
+                    name = "ApiKeyAuth"
+                elif scheme_type == "oauth2":
+                    name = "OAuth2"
+                else:
+                    name = "CustomAuth"
+                self._security_schemes = {name: security_scheme}
+            else:
+                scheme_name = SECURITY_SCHEME_NAMES[security_scheme]
+                self._security_schemes = {
+                    scheme_name: SECURITY_SCHEMES[security_scheme]
+                }
 
         # Register documentation endpoints if app is provided
         if self.app is not None and all([docs_url, redoc_url, openapi_url]):

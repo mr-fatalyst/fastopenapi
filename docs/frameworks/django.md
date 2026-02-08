@@ -186,7 +186,7 @@ from fastopenapi import Path
 def get_user(user_id: int = Path(..., description="User ID")):
     return {"user_id": user_id}
 
-# Django URL: /users/<int:user_id>
+# Django URL: /users/<user_id>
 ```
 
 ## Request Data

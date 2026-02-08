@@ -194,13 +194,7 @@ Content-Type: application/json
     "type": "validation_error",
     "message": "Validation error",
     "status": 422,
-    "details": [
-      {
-        "loc": ["body", "email"],
-        "msg": "value is not a valid email address",
-        "type": "value_error.email"
-      }
-    ]
+    "details": "Value is not a valid email address"
   }
 }
 ```
@@ -606,9 +600,7 @@ All errors follow this structure:
     "type": "error_type_identifier",
     "message": "Human-readable error message",
     "status": 400,
-    "details": {
-      // Optional additional details
-    }
+    "details": "Optional additional details (string, included only when provided)"
   }
 }
 ```
