@@ -5,200 +5,160 @@ This example demonstrates building a complete CRUD (Create, Read, Update, Delete
 ## Complete Example
 
 ```python
+import hashlib
+from datetime import datetime
+
 from flask import Flask
 from pydantic import BaseModel, EmailStr, Field
-from datetime import datetime
-from typing import Optional
-from fastopenapi.routers import FlaskRouter
-from fastopenapi.errors import ResourceNotFoundError, BadRequestError
+
 from fastopenapi import Query
+from fastopenapi.errors import BadRequestError, ResourceNotFoundError
+from fastopenapi.routers import FlaskRouter
 
 app = Flask(__name__)
 router = FlaskRouter(
     app=app,
     title="User Management API",
     version="1.0.0",
-    description="Complete CRUD API for user management"
+    description="Complete CRUD API for user management",
 )
 
 # In-memory database
-users_db = {}
+users_db: dict[int, dict] = {}
 next_id = 1
+
 
 # Models
 class UserBase(BaseModel):
-    """Base user model with common fields"""
     username: str = Field(..., min_length=3, max_length=50)
     email: EmailStr
-    full_name: Optional[str] = Field(None, max_length=100)
+    full_name: str | None = Field(None, max_length=100)
     is_active: bool = True
 
+
 class UserCreate(UserBase):
-    """Model for creating a new user"""
     password: str = Field(..., min_length=8)
 
+
 class UserUpdate(BaseModel):
-    """Model for updating user (all fields optional)"""
-    username: Optional[str] = Field(None, min_length=3, max_length=50)
-    email: Optional[EmailStr] = None
-    full_name: Optional[str] = Field(None, max_length=100)
-    password: Optional[str] = Field(None, min_length=8)
-    is_active: Optional[bool] = None
+    username: str | None = Field(None, min_length=3, max_length=50)
+    email: EmailStr | None = None
+    full_name: str | None = Field(None, max_length=100)
+    password: str | None = Field(None, min_length=8)
+    is_active: bool | None = None
+
 
 class UserResponse(UserBase):
-    """Model for user responses"""
     id: int
     created_at: datetime
     updated_at: datetime
 
+
 class UserListResponse(BaseModel):
-    """Paginated list of users"""
     users: list[UserResponse]
     total: int
     page: int
     per_page: int
     total_pages: int
 
-# Helper functions
+
+class BulkUserCreate(BaseModel):
+    users: list[UserCreate]
+
+
+class BulkUserDelete(BaseModel):
+    user_ids: list[int]
+
+
+class BulkResultResponse(BaseModel):
+    success_count: int
+    success_ids: list[int]
+    error_count: int
+    errors: list[dict]
+
+
+# Helpers
 def hash_password(password: str) -> str:
-    """Hash password (simplified - use bcrypt in production)"""
-    import hashlib
+    """Simplified hash — use bcrypt in production."""
     return hashlib.sha256(password.encode()).hexdigest()
 
-def get_user_by_id(user_id: int) -> Optional[dict]:
-    """Get user by ID"""
-    return users_db.get(user_id)
 
-def get_user_by_username(username: str) -> Optional[dict]:
-    """Get user by username"""
+def find_user(username: str | None = None, email: str | None = None) -> dict | None:
     for user in users_db.values():
-        if user["username"] == username:
+        if username and user["username"] == username:
+            return user
+        if email and user["email"] == email:
             return user
     return None
 
-def get_user_by_email(email: str) -> Optional[dict]:
-    """Get user by email"""
-    for user in users_db.values():
-        if user["email"] == email:
-            return user
-    return None
+
+def user_response(user: dict) -> dict:
+    """Strip internal fields before returning."""
+    return {k: v for k, v in user.items() if k != "password_hash"}
+
+
+def check_unique(username: str, email: str, exclude_id: int | None = None):
+    existing = find_user(username=username)
+    if existing and existing["id"] != exclude_id:
+        raise BadRequestError(f"Username '{username}' already exists")
+    existing = find_user(email=email)
+    if existing and existing["id"] != exclude_id:
+        raise BadRequestError(f"Email '{email}' already exists")
+
 
 # Endpoints
 
 @router.get("/", tags=["Root"])
 def root():
-    """API root endpoint"""
     return {
         "message": "User Management API",
         "version": "1.0.0",
-        "endpoints": {
-            "users": "/users",
-            "docs": "/docs",
-            "openapi": "/openapi.json"
-        }
     }
 
-@router.get(
-    "/users",
-    response_model=UserListResponse,
-    tags=["Users"],
-    summary="List all users",
-    description="Get a paginated list of all users"
-)
+
+@router.get("/users", response_model=UserListResponse, tags=["Users"])
 def list_users(
     page: int = Query(1, ge=1, description="Page number"),
     per_page: int = Query(10, ge=1, le=100, description="Users per page"),
-    is_active: Optional[bool] = Query(None, description="Filter by active status"),
-    search: Optional[str] = Query(None, description="Search in username or email")
+    is_active: bool | None = Query(None, description="Filter by active status"),
+    search: str | None = Query(None, description="Search in username or email"),
 ):
-    """
-    List all users with pagination and optional filtering.
-    
-    - **page**: Page number (starts from 1)
-    - **per_page**: Number of users per page (max 100)
-    - **is_active**: Filter by active status
-    - **search**: Search in username or email
-    """
-    # Get all users
     users = list(users_db.values())
-    
-    # Filter by active status
+
     if is_active is not None:
         users = [u for u in users if u["is_active"] == is_active]
-    
-    # Search filter
     if search:
-        search_lower = search.lower()
-        users = [
-            u for u in users
-            if search_lower in u["username"].lower()
-            or search_lower in u["email"].lower()
-        ]
-    
-    # Calculate pagination
+        q = search.lower()
+        users = [u for u in users if q in u["username"].lower() or q in u["email"].lower()]
+
     total = len(users)
     total_pages = (total + per_page - 1) // per_page
     start = (page - 1) * per_page
-    end = start + per_page
-    
-    # Get page of users
-    page_users = users[start:end]
-    
+    page_users = users[start : start + per_page]
+
     return {
-        "users": page_users,
+        "users": [user_response(u) for u in page_users],
         "total": total,
         "page": page,
         "per_page": per_page,
-        "total_pages": total_pages
+        "total_pages": total_pages,
     }
 
-@router.get(
-    "/users/{user_id}",
-    response_model=UserResponse,
-    tags=["Users"],
-    summary="Get user by ID",
-    description="Retrieve a single user by their ID"
-)
+
+@router.get("/users/{user_id}", response_model=UserResponse, tags=["Users"])
 def get_user(user_id: int):
-    """
-    Get a specific user by ID.
-    
-    - **user_id**: The ID of the user to retrieve
-    """
-    user = get_user_by_id(user_id)
+    user = users_db.get(user_id)
     if not user:
         raise ResourceNotFoundError(f"User with ID {user_id} not found")
-    return user
+    return user_response(user)
 
-@router.post(
-    "/users",
-    response_model=UserResponse,
-    status_code=201,
-    tags=["Users"],
-    summary="Create new user",
-    description="Create a new user with the provided data"
-)
+
+@router.post("/users", response_model=UserResponse, status_code=201, tags=["Users"])
 def create_user(user: UserCreate):
-    """
-    Create a new user.
-    
-    - **username**: Unique username (3-50 characters)
-    - **email**: Valid email address (must be unique)
-    - **full_name**: Optional full name
-    - **password**: Password (minimum 8 characters)
-    - **is_active**: Whether the user is active (default: true)
-    """
     global next_id
-    
-    # Check if username already exists
-    if get_user_by_username(user.username):
-        raise BadRequestError(f"Username '{user.username}' already exists")
-    
-    # Check if email already exists
-    if get_user_by_email(user.email):
-        raise BadRequestError(f"Email '{user.email}' already exists")
-    
-    # Create new user
+
+    check_unique(user.username, user.email)
+
     now = datetime.now()
     new_user = {
         "id": next_id,
@@ -206,260 +166,127 @@ def create_user(user: UserCreate):
         "email": user.email,
         "full_name": user.full_name,
         "is_active": user.is_active,
-        "password_hash": hash_password(user.password),  # Never store plain passwords
+        "password_hash": hash_password(user.password),
         "created_at": now,
-        "updated_at": now
+        "updated_at": now,
     }
-    
     users_db[next_id] = new_user
     next_id += 1
-    
-    # Remove password_hash from response
-    response_user = new_user.copy()
-    del response_user["password_hash"]
-    
-    return response_user
 
-@router.put(
-    "/users/{user_id}",
-    response_model=UserResponse,
-    tags=["Users"],
-    summary="Update user (full)",
-    description="Replace all user data with new data"
-)
+    return user_response(new_user)
+
+
+@router.put("/users/{user_id}", response_model=UserResponse, tags=["Users"])
 def replace_user(user_id: int, user: UserCreate):
-    """
-    Replace entire user (PUT).
-    
-    All fields are required and will replace the existing user completely.
-    """
-    existing_user = get_user_by_id(user_id)
-    if not existing_user:
+    existing = users_db.get(user_id)
+    if not existing:
         raise ResourceNotFoundError(f"User with ID {user_id} not found")
-    
-    # Check username uniqueness (excluding current user)
-    existing_by_username = get_user_by_username(user.username)
-    if existing_by_username and existing_by_username["id"] != user_id:
-        raise BadRequestError(f"Username '{user.username}' already exists")
-    
-    # Check email uniqueness (excluding current user)
-    existing_by_email = get_user_by_email(user.email)
-    if existing_by_email and existing_by_email["id"] != user_id:
-        raise BadRequestError(f"Email '{user.email}' already exists")
-    
-    # Update user
-    updated_user = {
+
+    check_unique(user.username, user.email, exclude_id=user_id)
+
+    updated = {
         "id": user_id,
         "username": user.username,
         "email": user.email,
         "full_name": user.full_name,
         "is_active": user.is_active,
         "password_hash": hash_password(user.password),
-        "created_at": existing_user["created_at"],
-        "updated_at": datetime.now()
+        "created_at": existing["created_at"],
+        "updated_at": datetime.now(),
     }
-    
-    users_db[user_id] = updated_user
-    
-    # Remove password_hash from response
-    response_user = updated_user.copy()
-    del response_user["password_hash"]
-    
-    return response_user
+    users_db[user_id] = updated
 
-@router.patch(
-    "/users/{user_id}",
-    response_model=UserResponse,
-    tags=["Users"],
-    summary="Update user (partial)",
-    description="Update only specified fields of a user"
-)
+    return user_response(updated)
+
+
+@router.patch("/users/{user_id}", response_model=UserResponse, tags=["Users"])
 def update_user(user_id: int, updates: UserUpdate):
-    """
-    Partially update a user (PATCH).
-    
-    Only provided fields will be updated. Other fields remain unchanged.
-    """
-    user = get_user_by_id(user_id)
+    user = users_db.get(user_id)
     if not user:
         raise ResourceNotFoundError(f"User with ID {user_id} not found")
-    
-    # Get update data (exclude unset fields)
-    update_data = updates.model_dump(exclude_unset=True)
-    
-    # Check username uniqueness if updating username
-    if "username" in update_data:
-        existing = get_user_by_username(update_data["username"])
-        if existing and existing["id"] != user_id:
-            raise BadRequestError(f"Username '{update_data['username']}' already exists")
-    
-    # Check email uniqueness if updating email
-    if "email" in update_data:
-        existing = get_user_by_email(update_data["email"])
-        if existing and existing["id"] != user_id:
-            raise BadRequestError(f"Email '{update_data['email']}' already exists")
-    
-    # Hash password if updating
-    if "password" in update_data:
-        update_data["password_hash"] = hash_password(update_data["password"])
-        del update_data["password"]
-    
-    # Update user
-    user.update(update_data)
-    user["updated_at"] = datetime.now()
-    users_db[user_id] = user
-    
-    # Remove password_hash from response
-    response_user = user.copy()
-    del response_user["password_hash"]
-    
-    return response_user
 
-@router.delete(
-    "/users/{user_id}",
-    status_code=204,
-    tags=["Users"],
-    summary="Delete user",
-    description="Permanently delete a user"
-)
+    data = updates.model_dump(exclude_unset=True)
+
+    if "username" in data:
+        existing = find_user(username=data["username"])
+        if existing and existing["id"] != user_id:
+            raise BadRequestError(f"Username '{data['username']}' already exists")
+
+    if "email" in data:
+        existing = find_user(email=data["email"])
+        if existing and existing["id"] != user_id:
+            raise BadRequestError(f"Email '{data['email']}' already exists")
+
+    if "password" in data:
+        data["password_hash"] = hash_password(data.pop("password"))
+
+    user.update(data)
+    user["updated_at"] = datetime.now()
+
+    return user_response(user)
+
+
+@router.delete("/users/{user_id}", status_code=204, tags=["Users"])
 def delete_user(user_id: int):
-    """
-    Delete a user.
-    
-    This action cannot be undone.
-    """
     if user_id not in users_db:
         raise ResourceNotFoundError(f"User with ID {user_id} not found")
-    
     del users_db[user_id]
     return None
 
+
 # Bulk operations
 
-@router.post(
-    "/users/bulk",
-    response_model=dict,
-    status_code=201,
-    tags=["Bulk Operations"],
-    summary="Create multiple users",
-    description="Create multiple users in a single request"
-)
-def bulk_create_users(users: list[UserCreate]):
-    """
-    Create multiple users at once.
-    
-    Returns count of successfully created users and any errors.
-    """
+@router.post("/users/bulk", response_model=BulkResultResponse, status_code=201, tags=["Bulk Operations"])
+def bulk_create_users(payload: BulkUserCreate):
     global next_id
-    
     created = []
     errors = []
-    
-    for idx, user in enumerate(users):
-        try:
-            # Check duplicates
-            if get_user_by_username(user.username):
-                errors.append({
-                    "index": idx,
-                    "error": f"Username '{user.username}' already exists"
-                })
-                continue
-            
-            if get_user_by_email(user.email):
-                errors.append({
-                    "index": idx,
-                    "error": f"Email '{user.email}' already exists"
-                })
-                continue
-            
-            # Create user
-            now = datetime.now()
-            new_user = {
-                "id": next_id,
-                "username": user.username,
-                "email": user.email,
-                "full_name": user.full_name,
-                "is_active": user.is_active,
-                "password_hash": hash_password(user.password),
-                "created_at": now,
-                "updated_at": now
-            }
-            
-            users_db[next_id] = new_user
-            created.append(next_id)
-            next_id += 1
-            
-        except Exception as e:
-            errors.append({
-                "index": idx,
-                "error": str(e)
-            })
-    
-    return {
-        "created_count": len(created),
-        "created_ids": created,
-        "error_count": len(errors),
-        "errors": errors
-    }
 
-@router.delete(
-    "/users/bulk",
-    status_code=200,
-    tags=["Bulk Operations"],
-    summary="Delete multiple users",
-    description="Delete multiple users by their IDs"
-)
-def bulk_delete_users(user_ids: list[int]):
-    """
-    Delete multiple users at once.
-    
-    Returns count of deleted users and any errors.
-    """
+    for idx, user in enumerate(payload.users):
+        if find_user(username=user.username):
+            errors.append({"index": idx, "error": f"Username '{user.username}' already exists"})
+            continue
+        if find_user(email=user.email):
+            errors.append({"index": idx, "error": f"Email '{user.email}' already exists"})
+            continue
+
+        now = datetime.now()
+        users_db[next_id] = {
+            "id": next_id,
+            "username": user.username,
+            "email": user.email,
+            "full_name": user.full_name,
+            "is_active": user.is_active,
+            "password_hash": hash_password(user.password),
+            "created_at": now,
+            "updated_at": now,
+        }
+        created.append(next_id)
+        next_id += 1
+
+    return {"success_count": len(created), "success_ids": created, "error_count": len(errors), "errors": errors}
+
+
+@router.post("/users/bulk-delete", response_model=BulkResultResponse, tags=["Bulk Operations"])
+def bulk_delete_users(payload: BulkUserDelete):
     deleted = []
     errors = []
-    
-    for user_id in user_ids:
-        if user_id in users_db:
-            del users_db[user_id]
-            deleted.append(user_id)
-        else:
-            errors.append({
-                "user_id": user_id,
-                "error": "User not found"
-            })
-    
-    return {
-        "deleted_count": len(deleted),
-        "deleted_ids": deleted,
-        "error_count": len(errors),
-        "errors": errors
-    }
 
-# Run the application
+    for uid in payload.user_ids:
+        if uid in users_db:
+            del users_db[uid]
+            deleted.append(uid)
+        else:
+            errors.append({"user_id": uid, "error": "User not found"})
+
+    return {"success_count": len(deleted), "success_ids": deleted, "error_count": len(errors), "errors": errors}
+
+
 if __name__ == "__main__":
-    # Add some sample users
-    sample_users = [
-        UserCreate(
-            username="alice",
-            email="alice@example.com",
-            full_name="Alice Smith",
-            password="password123"
-        ),
-        UserCreate(
-            username="bob",
-            email="bob@example.com",
-            full_name="Bob Johnson",
-            password="password123"
-        ),
-    ]
-    
-    for user in sample_users:
-        create_user(user)
-    
-    print("Sample users created!")
-    print("API running on http://localhost:5000")
-    print("Docs at http://localhost:5000/docs")
-    
+    for name, email in [("alice", "alice@example.com"), ("bob", "bob@example.com")]:
+        create_user(UserCreate(username=name, email=email, full_name=name.title(), password="password123"))
+
+    print("Sample users created! Docs at http://localhost:5000/docs")
     app.run(debug=True)
 ```
 
@@ -522,25 +349,27 @@ curl -X DELETE http://localhost:5000/users/1
 ```bash
 curl -X POST http://localhost:5000/users/bulk \
   -H "Content-Type: application/json" \
-  -d '[
-    {
-      "username": "user1",
-      "email": "user1@example.com",
-      "password": "password123"
-    },
-    {
-      "username": "user2",
-      "email": "user2@example.com",
-      "password": "password123"
-    }
-  ]'
+  -d '{
+    "users": [
+      {
+        "username": "user1",
+        "email": "user1@example.com",
+        "password": "password123"
+      },
+      {
+        "username": "user2",
+        "email": "user2@example.com",
+        "password": "password123"
+      }
+    ]
+  }'
 ```
 
 ### Bulk Delete
 ```bash
-curl -X DELETE http://localhost:5000/users/bulk \
+curl -X POST http://localhost:5000/users/bulk-delete \
   -H "Content-Type: application/json" \
-  -d '[1, 2, 3]'
+  -d '{"user_ids": [1, 2, 3]}'
 ```
 
 ## Key Concepts Demonstrated

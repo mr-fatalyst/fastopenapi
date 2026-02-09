@@ -1,3 +1,6 @@
+!!! warning "Beta Release — v1.0.0b1"
+    You are viewing the documentation for **v1.0.0b1** (beta). The API is stable, but minor changes may occur before the final release. The last stable version is available [here](https://fastopenapi.fatalyst.dev/0.7/).
+
 # FastOpenAPI
 
 <p align="center">
