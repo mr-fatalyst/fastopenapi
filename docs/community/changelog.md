@@ -4,7 +4,7 @@ All notable changes to FastOpenAPI are documented in this file.
 
 FastOpenAPI follows the [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) format.
 
-## [1.0.0b1] - Unreleased
+## [1.0.0b1] - 2026-02-09
 
 ### Added
 
