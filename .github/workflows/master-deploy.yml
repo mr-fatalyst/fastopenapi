@@ -58,6 +58,8 @@ jobs:
 
   docs:
     needs: deploy-prod
+    permissions:
+      contents: write
     uses: ./.github/workflows/docs.yml
     with:
       version: ${{ github.ref_name }}
