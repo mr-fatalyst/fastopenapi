@@ -22,7 +22,6 @@ repos:
   hooks:
   - id: black
     args: [--target-version, py310, --line-length=88]
-    language_version: python3.10
 
 - repo: https://github.com/pycqa/flake8
   rev: 7.1.2

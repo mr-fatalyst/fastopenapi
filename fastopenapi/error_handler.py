@@ -16,11 +16,11 @@ from fastopenapi.errors import (  # noqa: F401, E402
     BadRequestError,
     CircularDependencyError,
     DependencyError,
+    ErrorType,
     InternalServerError,
     ResourceConflictError,
     ResourceNotFoundError,
     SecurityError,
     ServiceUnavailableError,
     ValidationError,
-    ErrorType,
 )
