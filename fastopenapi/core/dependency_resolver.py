@@ -53,8 +53,10 @@ class DependencyResolver:
             Dict mapping parameter names to resolved dependency values
         """
         # Initialize request-scoped tracking
+        is_top_level = False
         with self._request_cache_lock:
             if request_data not in self._request_cache:
+                is_top_level = True
                 self._request_cache[request_data] = {
                     "resolved": {},
                     "resolving": set(),
@@ -64,20 +66,21 @@ class DependencyResolver:
         try:
             return self._resolve_endpoint_dependencies(endpoint, request_data)
         finally:
-            # Get generators before deleting cache
-            with self._request_cache_lock:
-                cache = self._request_cache.get(request_data, {})
-                generators = list(cache.get("generators", []))
-            # Close generators (triggers finally blocks)
-            for gen in generators:
-                try:
-                    gen.close()
-                except Exception:
-                    pass
-            # Clean up request cache
-            with self._request_cache_lock:
-                if request_data in self._request_cache:
-                    del self._request_cache[request_data]
+            if is_top_level:
+                # Get generators before deleting cache
+                with self._request_cache_lock:
+                    cache = self._request_cache.get(request_data, {})
+                    generators = list(cache.get("generators", []))
+                # Close generators (triggers finally blocks)
+                for gen in generators:
+                    try:
+                        gen.close()
+                    except Exception:
+                        pass
+                # Clean up request cache
+                with self._request_cache_lock:
+                    if request_data in self._request_cache:
+                        del self._request_cache[request_data]
 
     def _resolve_endpoint_dependencies(
         self, endpoint: Callable, request_data: RequestData
