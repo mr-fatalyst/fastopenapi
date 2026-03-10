@@ -7,3 +7,20 @@ warnings.warn(
     DeprecationWarning,
     stacklevel=2,
 )
+
+# Export classes for backward compatibility but hide from IDE autocomplete
+from fastopenapi.errors import (  # noqa: F401, E402
+    APIError,
+    AuthenticationError,
+    AuthorizationError,
+    BadRequestError,
+    CircularDependencyError,
+    DependencyError,
+    InternalServerError,
+    ResourceConflictError,
+    ResourceNotFoundError,
+    SecurityError,
+    ServiceUnavailableError,
+    ValidationError,
+    ErrorType,
+)
