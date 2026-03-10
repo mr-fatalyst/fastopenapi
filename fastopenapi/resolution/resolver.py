@@ -9,7 +9,7 @@ from pydantic import ValidationError as PydanticValidationError
 from pydantic import create_model
 from pydantic_core import PydanticUndefined
 
-from fastopenapi.core.constants import ParameterSource
+from fastopenapi.core.constants import NO_BODY_METHODS, ParameterSource
 from fastopenapi.core.dependency_resolver import dependency_resolver
 from fastopenapi.core.params import (
     BaseParam,
@@ -59,6 +59,7 @@ class ParameterResolver:
     def resolve(cls, endpoint: Callable, request_data: RequestData) -> dict[str, Any]:
         """Resolve all parameters for an endpoint"""
         params = cls._get_signature(endpoint)
+        method = getattr(endpoint, "__route_meta__", {}).get("method")
         kwargs = {}
 
         # Resolve dependencies first
@@ -66,7 +67,7 @@ class ParameterResolver:
 
         # Process regular parameters
         regular_kwargs, model_fields, model_values = cls._process_parameters(
-            params, request_data
+            params, request_data, method=method
         )
         kwargs.update(regular_kwargs)
 
@@ -84,6 +85,7 @@ class ParameterResolver:
         cls, endpoint: Callable, request_data: RequestData
     ) -> dict[str, Any]:
         params = cls._get_signature(endpoint)
+        method = getattr(endpoint, "__route_meta__", {}).get("method")
         kwargs = {}
 
         # Async dependencies
@@ -91,7 +93,7 @@ class ParameterResolver:
 
         # Sync parameters
         regular_kwargs, model_fields, model_values = cls._process_parameters(
-            params, request_data
+            params, request_data, method=method
         )
         kwargs.update(regular_kwargs)
 
@@ -131,6 +133,7 @@ class ParameterResolver:
         cls,
         params: MappingProxyType[str, inspect.Parameter],
         request_data: RequestData,
+        method: str | None = None,
     ) -> tuple[dict[str, Any], dict[str, tuple], dict[str, Any]]:
         """Process all endpoint parameters"""
         regular_kwargs = {}
@@ -144,7 +147,9 @@ class ParameterResolver:
 
             # Handle Pydantic models separately (direct validation without wrapper)
             if cls._is_pydantic_model(param.annotation):
-                source = cls._determine_source(name, param, request_data.path_params)
+                source = cls._determine_source(
+                    name, param, request_data.path_params, method
+                )
                 data = (
                     request_data.body
                     if source == ParameterSource.BODY
@@ -214,7 +219,10 @@ class ParameterResolver:
 
     @staticmethod
     def _determine_source(
-        name: str, param: inspect.Parameter, path_params: dict[str, Any]
+        name: str,
+        param: inspect.Parameter,
+        path_params: dict[str, Any],
+        method: str | None = None,
     ) -> ParameterSource:
         """Determine where to extract parameter from using param classes"""
         # Check Body and its subclasses first (Form, File)
@@ -235,6 +243,8 @@ class ParameterResolver:
         elif name in path_params:
             return ParameterSource.PATH
         elif ParameterResolver._is_pydantic_model(param.annotation):
+            if method and method.upper() in NO_BODY_METHODS:
+                return ParameterSource.QUERY
             return ParameterSource.BODY
         else:
             return ParameterSource.QUERY
