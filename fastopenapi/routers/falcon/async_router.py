@@ -26,15 +26,9 @@ class FalconAsyncRouter(FalconRouter):
 
             # Falcon needs special handling
             if isinstance(result_response, Response):
-                response.status = result_response.status_code
-                response.media = result_response.content
-                for key, value in result_response.headers.items():
-                    response.set_header(key, value)
+                self._apply_falcon_response(result_response, response)
             elif isinstance(result_response, FalconResponse):  # pragma: no cover
-                response.status = result_response.status_code
-                response.media = result_response.media
-                for key, value in result_response.headers.items():
-                    response.set_header(key, value)
+                self._copy_falcon_response(result_response, response)
 
         setattr(resource, method_name, handle)
         return resource

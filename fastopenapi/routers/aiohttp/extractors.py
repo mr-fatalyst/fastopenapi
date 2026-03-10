@@ -5,6 +5,8 @@ from pydantic_core import from_json
 from fastopenapi.core.types import FileUpload
 from fastopenapi.routers.extractors import BaseAsyncRequestDataExtractor
 
+_MULTIPART_CACHE_ATTR = "_fastopenapi_multipart_cache"
+
 
 class AioHttpRequestDataExtractor(BaseAsyncRequestDataExtractor):
     @classmethod
@@ -44,42 +46,20 @@ class AioHttpRequestDataExtractor(BaseAsyncRequestDataExtractor):
             return {}
 
     @classmethod
-    async def _get_form_data(cls, request: Any) -> dict:
-        """Extract form data"""
+    async def _parse_multipart(
+        cls, request: Any
+    ) -> tuple[dict, dict[str, FileUpload | list[FileUpload]]]:
+        """Parse multipart stream once and cache the result on the request."""
+        cached = getattr(request, _MULTIPART_CACHE_ATTR, None)
+        if isinstance(cached, tuple):
+            return cached
+
         form_data = {}
-        content_type = request.content_type or ""
+        files: dict[str, FileUpload | list[FileUpload]] = {}
 
-        if content_type == "application/x-www-form-urlencoded":
-            post_data = await request.post()
-            for key in post_data:
-                values = (
-                    post_data.getall(key)
-                    if hasattr(post_data, "getall")
-                    else [post_data[key]]
-                )
-                form_data[key] = values[0] if len(values) == 1 else values
-
-        elif content_type == "multipart/form-data":
-            reader = await request.multipart()
-            async for part in reader:
-                if part.filename:
-                    continue  # Files handled separately
-                form_data[part.name] = await part.text()
-
-        return form_data
-
-    @classmethod
-    async def _get_files(cls, request: Any) -> dict[str, FileUpload | list[FileUpload]]:
-        """Extract files from AioHTTP request"""
-        files = {}
-        content_type = request.content_type or ""
-
-        if content_type == "multipart/form-data":
-            reader = await request.multipart()
-            async for part in reader:
-                if not part.filename:
-                    continue
-
+        reader = await request.multipart()
+        async for part in reader:
+            if part.filename:
                 file_data = await part.read()
                 file_upload = FileUpload(
                     filename=part.filename,
@@ -87,13 +67,51 @@ class AioHttpRequestDataExtractor(BaseAsyncRequestDataExtractor):
                     size=len(file_data),
                     file=file_data,
                 )
-
                 if part.name in files:
-                    if isinstance(files[part.name], list):
-                        files[part.name].append(file_upload)
+                    existing = files[part.name]
+                    if isinstance(existing, list):
+                        existing.append(file_upload)
                     else:
-                        files[part.name] = [files[part.name], file_upload]
+                        files[part.name] = [existing, file_upload]
                 else:
                     files[part.name] = file_upload
+            else:
+                form_data[part.name] = await part.text()
 
-        return files
+        result = (form_data, files)
+        setattr(request, _MULTIPART_CACHE_ATTR, result)
+        return result
+
+    @classmethod
+    async def _get_form_data(cls, request: Any) -> dict:
+        """Extract form data"""
+        content_type = request.content_type or ""
+
+        if content_type == "application/x-www-form-urlencoded":
+            post_data = await request.post()
+            form_data = {}
+            for key in post_data:
+                values = (
+                    post_data.getall(key)
+                    if hasattr(post_data, "getall")
+                    else [post_data[key]]
+                )
+                form_data[key] = values[0] if len(values) == 1 else values
+            return form_data
+
+        if content_type == "multipart/form-data":
+            form_data, _ = await cls._parse_multipart(request)
+            return form_data
+
+        return {}
+
+    @classmethod
+    async def _get_files(cls, request: Any) -> dict[str, FileUpload | list[FileUpload]]:
+        """Extract files from AioHTTP request"""
+        content_type = request.content_type or ""
+
+        if content_type == "multipart/form-data":
+            _, files = await cls._parse_multipart(request)
+            return files
+
+        return {}
