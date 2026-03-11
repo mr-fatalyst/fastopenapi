@@ -443,10 +443,16 @@ class ParameterResolver:
 
     @staticmethod
     def _resolve_pydantic_model(
-        model_class: type[BaseModel], data: dict[str, Any], param_name: str
+        model_class: type[BaseModel], data: dict[str, Any] | list, param_name: str
     ) -> BaseModel:
         """Create Pydantic model instance from data"""
         try:
+            if isinstance(data, list):
+                raise ValidationError(
+                    f"Validation error for parameter '{param_name}'",
+                    "Expected JSON object, got array",
+                )
+
             if not data:
                 data = {}
 
