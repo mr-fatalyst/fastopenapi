@@ -115,7 +115,7 @@ import fastopenapi
 print(fastopenapi.__version__)
 ```
 
-You should see the version number (e.g., `1.0.0b1`).
+You should see the version number (e.g., `1.0.0rc1`).
 
 ## Upgrading
 

@@ -1,5 +1,5 @@
-!!! warning "Beta Release — v1.0.0b1"
-    You are viewing the documentation for **v1.0.0b1** (beta). The API is stable, but minor changes may occur before the final release. The last stable version is available [here](https://fastopenapi.fatalyst.dev/0.7/).
+!!! warning "Release Candidate — v1.0.0rc1"
+    You are viewing the documentation for **v1.0.0rc1** (release candidate). The API is stable, but minor changes may occur before the final release. The last stable version is available [here](https://fastopenapi.fatalyst.dev/0.7/).
 
 # FastOpenAPI
 
@@ -138,7 +138,7 @@ async def upload_file(file: FileUpload = File(...)):
 
 ## Project Status
 
-FastOpenAPI is currently in **beta** (version 1.0.0b1). The API is stable, but minor changes may occur before the 1.0.0 release. We welcome feedback and contributions to help improve the library.
+FastOpenAPI is currently a **release candidate** (version 1.0.0rc1). The API is stable, but minor changes may occur before the 1.0.0 release. We welcome feedback and contributions to help improve the library.
 
 ## Quick Example
 

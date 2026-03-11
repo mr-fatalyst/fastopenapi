@@ -4,6 +4,25 @@ All notable changes to FastOpenAPI are documented in this file.
 
 FastOpenAPI follows the [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) format.
 
+## [1.0.0rc1] - 2026-03-11
+
+### Added
+
+- **Multi-body parameter support** following FastAPI semantics: multiple body parameters are automatically embedded by name, `Body(embed=True)` supported for single parameters
+
+### Fixed
+
+- **GET + Pydantic model** now correctly reads query params instead of body at runtime
+- **Aiohttp multipart** reader no longer consumed twice — form fields and files parsed in a single pass with caching
+- **Falcon async router** binary/text responses now use proper content-type branching (was forcing `response.media` for all)
+- **Async DI resolver** no longer holds `threading.Lock` across `await` — removed unnecessary lock since async is single-threaded per event loop
+- **Tornado cookies** now extracted as strings instead of `Morsel` objects
+- **204 responses** now preserve custom headers from tuple returns and `Response` objects
+- **OpenAPI schema** invalidated after `add_route`/`include_router` — no more stale schema if accessed before all routes are registered
+- **JSON array in request body** returns 422 instead of 500 when endpoint expects a single Pydantic model
+- DI cache reliability improvements
+- Error hierarchy backward compatibility fixes
+
 ## [1.0.0b1] - 2026-02-09
 
 ### Added
