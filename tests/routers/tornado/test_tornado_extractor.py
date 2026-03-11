@@ -1,3 +1,4 @@
+from http.cookies import SimpleCookie
 from unittest.mock import Mock
 
 import pytest
@@ -81,8 +82,12 @@ class TestTornadoRequestDataExtractor:
 
     def test_get_cookies(self):
         """Test cookies extraction"""
+
         request = Mock()
-        request.cookies = {"session": "abc123", "csrf": "token456"}
+        cookies = SimpleCookie()
+        cookies["session"] = "abc123"
+        cookies["csrf"] = "token456"
+        request.cookies = cookies
 
         result = TornadoRequestDataExtractor._get_cookies(request)
 
@@ -186,7 +191,9 @@ class TestTornadoRequestDataExtractor:
         request.query_arguments = query_args_mock
 
         request.headers = {"Content-Type": "application/json"}
-        request.cookies = {"session": "abc"}
+        cookies = SimpleCookie()
+        cookies["session"] = "abc"
+        request.cookies = cookies
         request.body = b'{"data": "test"}'
 
         body_args_mock = Mock()
