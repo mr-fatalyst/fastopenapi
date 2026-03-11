@@ -84,6 +84,7 @@ class BaseRouter:
         meta = getattr(endpoint, "__route_meta__", {})
         route = RouteInfo(path, method, endpoint, meta)
         self._routes.append(route)
+        self._openapi_schema = None
 
     def include_router(self, other: "BaseRouter", prefix: str = ""):
         """Include routes from another router"""

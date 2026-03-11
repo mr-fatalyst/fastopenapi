@@ -3,6 +3,8 @@ from sanic import Sanic
 
 from fastopenapi.routers import SanicRouter
 
+Sanic.test_mode = True
+
 
 class TestSanicRouter:
     def test_router_initialization(self):
