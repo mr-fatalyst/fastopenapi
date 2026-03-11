@@ -88,15 +88,10 @@ class BaseAdapter(BaseRouter, ABC):
                 result = self._validate_response(result, response_model)
             if self.is_framework_response(result):
                 return result
+            response = self.response_builder_cls.build(result, endpoint.__route_meta__)
             if route_meta.get("status_code") == 204:
-                return self.build_framework_response(
-                    Response(status_code=204, content=None)
-                )
-            else:
-                response = self.response_builder_cls.build(
-                    result, endpoint.__route_meta__
-                )
-                return self.build_framework_response(response)
+                response.content = None
+            return self.build_framework_response(response)
         except Exception as e:
             api_error = APIError.from_exception(e, self.EXCEPTION_MAPPER)
             return self.build_framework_response(
@@ -125,13 +120,10 @@ class BaseAdapter(BaseRouter, ABC):
                 result = self._validate_response(result, response_model)
             if self.is_framework_response(result):
                 return result
+            response = self.response_builder_cls.build(result, route_meta)
             if route_meta.get("status_code") == 204:
-                return self.build_framework_response(
-                    Response(status_code=204, content=None)
-                )
-            else:
-                response = self.response_builder_cls.build(result, route_meta)
-                return self.build_framework_response(response)
+                response.content = None
+            return self.build_framework_response(response)
         except Exception as e:
             api_error = APIError.from_exception(e, self.EXCEPTION_MAPPER)
             return self.build_framework_response(
