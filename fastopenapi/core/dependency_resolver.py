@@ -472,35 +472,20 @@ class DependencyResolver:
         cache_key = self._make_cache_key(dependency_func, request_data)
         request_cache = self._get_request_cache(request_data)
 
-        # First check (without lock)
         hit, value = self._try_get_cached(cache_key, request_cache)
         if hit:
             return value
 
-        # Get or create lock for this function
-        func_id = id(dependency_func)
-        with self._execution_locks_lock:
-            if func_id not in self._execution_locks:
-                self._execution_locks[func_id] = threading.Lock()
-            func_lock = self._execution_locks[func_id]
-
-        # Synchronize execution per function
-        with func_lock:
-            # Second check (double-checked locking pattern)
-            hit, value = self._try_get_cached(cache_key, request_cache)
-            if hit:
-                return value
-
-            # Guard against circular dependencies
-            with self._resolving_guard(request_cache, dependency_func, param_name):
-                sub_dependencies = await self._resolve_sub_dependencies_async(
-                    dependency_func, request_data, security_scopes
-                )
-                result = await self._call_dependency_async(
-                    dependency_func, sub_dependencies or {}, request_data
-                )
-                self._cache_result(cache_key, result, request_cache)
-                return result
+        # Guard against circular dependencies
+        with self._resolving_guard(request_cache, dependency_func, param_name):
+            sub_dependencies = await self._resolve_sub_dependencies_async(
+                dependency_func, request_data, security_scopes
+            )
+            result = await self._call_dependency_async(
+                dependency_func, sub_dependencies or {}, request_data
+            )
+            self._cache_result(cache_key, result, request_cache)
+            return result
 
     async def _call_dependency_async(
         self,

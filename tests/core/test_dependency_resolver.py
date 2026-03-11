@@ -1412,47 +1412,6 @@ class TestDependencyResolver:
         assert result == {"s": "sync", "a": "async"}
 
     @pytest.mark.asyncio
-    async def test_async_double_checked_locking_second_check_hit(self):
-        """Test second cache check (inside lock) finds value and returns it"""
-
-        async def test_dep():
-            return "should_not_execute"
-
-        # Initialize cache manually
-        with self.resolver._request_cache_lock:
-            self.resolver._request_cache[self.request_data] = {
-                "resolved": {},
-                "resolving": set(),
-            }
-
-        self.resolver._make_cache_key(test_dep, self.request_data)
-        self.resolver._get_request_cache(self.request_data)
-
-        # Mock _try_get_cached to return miss first, then hit
-        call_count = {"count": 0}
-
-        def mock_try_get_cached(key, cache):
-            call_count["count"] += 1
-            if call_count["count"] == 1:
-                # First check (before lock) - miss
-                return (False, None)
-            else:
-                # Second check (inside lock) - HIT
-                return (True, "from_second_check")
-
-        with patch.object(
-            self.resolver, "_try_get_cached", side_effect=mock_try_get_cached
-        ):
-            # Call the internal method directly to avoid outer cleanup
-            result = await self.resolver._execute_dependency_function_async(
-                test_dep, self.request_data, "dep"
-            )
-
-            # Should return value from second check without executing function
-            assert result == "from_second_check"
-            assert call_count["count"] == 2  # Called twice
-
-    @pytest.mark.asyncio
     async def test_async_cleanup_when_cache_already_deleted(self):
         """Test finally cleanup when request_data already removed from cache"""
 
