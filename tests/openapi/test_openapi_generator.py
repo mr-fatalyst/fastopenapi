@@ -136,7 +136,9 @@ class TestOpenAPIGenerator:
         request_body = schema["paths"]["/data"]["post"]["requestBody"]
 
         assert "text/plain" in request_body["content"]
-        assert request_body["content"]["text/plain"]["schema"]["type"] == "string"
+        schema_obj = request_body["content"]["text/plain"]["schema"]
+        assert schema_obj["type"] == "object"
+        assert schema_obj["properties"]["data"]["type"] == "string"
 
     def test_form_and_file_parameters(self):
         """Test Form and File parameters"""
@@ -1806,3 +1808,42 @@ class TestOpenAPIGenerator:
             "$ref": "#/components/schemas/ErrorSchema"
         }
         assert responses["500"]["description"] == "Internal Server Error"
+
+    def test_multi_body_schema(self):
+        """Two Pydantic models should produce embedded request body schema"""
+
+        class User(BaseModel):
+            name: str
+
+        class Item(BaseModel):
+            title: str
+
+        @self.router.post("/multi")
+        def multi_body(user: User, item: Item):
+            pass
+
+        schema = self.generator.generate()
+        request_body = schema["paths"]["/multi"]["post"]["requestBody"]
+        content_schema = request_body["content"]["application/json"]["schema"]
+
+        assert content_schema["type"] == "object"
+        assert "user" in content_schema["properties"]
+        assert "item" in content_schema["properties"]
+
+    def test_single_body_no_embed_schema(self):
+        """Single Pydantic model without embed should not wrap in object"""
+
+        class Item(BaseModel):
+            title: str
+
+        @self.router.post("/single")
+        def single_body(item: Item):
+            pass
+
+        schema = self.generator.generate()
+        request_body = schema["paths"]["/single"]["post"]["requestBody"]
+        content_schema = request_body["content"]["application/json"]["schema"]
+
+        assert content_schema.get("type") != "object" or "title" in content_schema.get(
+            "properties", {}
+        )

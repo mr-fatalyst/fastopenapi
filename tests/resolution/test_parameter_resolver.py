@@ -1157,3 +1157,132 @@ class TestParameterResolver:
 
         assert result["age"] == 25
         assert result["name"] == "John"
+
+
+class TestMultiBody:
+    """Tests for multi-body parameter support"""
+
+    @pytest.fixture(autouse=True)
+    def setup(self) -> None:
+        ParameterResolver._param_model_cache.clear()
+        ParameterResolver._signature_cache.clear()
+
+    def test_two_pydantic_models_embedded(self) -> None:
+        """Two Pydantic models should be extracted from body by param name"""
+
+        class User(BaseModel):
+            name: str
+
+        class Item(BaseModel):
+            title: str
+
+        def endpoint(user: User, item: Item):
+            pass
+
+        request_data = RequestData(
+            path_params={},
+            query_params={},
+            headers={},
+            cookies={},
+            body={"user": {"name": "John"}, "item": {"title": "Widget"}},
+            form_data={},
+            files={},
+        )
+
+        result = ParameterResolver.resolve(endpoint, request_data)
+
+        assert isinstance(result["user"], User)
+        assert result["user"].name == "John"
+        assert isinstance(result["item"], Item)
+        assert result["item"].title == "Widget"
+
+    def test_single_model_not_embedded(self) -> None:
+        """Single Pydantic model should use entire body"""
+
+        class Item(BaseModel):
+            title: str
+
+        def endpoint(item: Item):
+            pass
+
+        request_data = RequestData(
+            path_params={},
+            query_params={},
+            headers={},
+            cookies={},
+            body={"title": "Widget"},
+            form_data={},
+            files={},
+        )
+
+        result = ParameterResolver.resolve(endpoint, request_data)
+
+        assert result["item"].title == "Widget"
+
+    def test_single_body_with_embed_true(self) -> None:
+        """Single Body(embed=True) should extract by param name"""
+
+        def endpoint(data: str = Body(embed=True)):
+            pass
+
+        request_data = RequestData(
+            path_params={},
+            query_params={},
+            headers={},
+            cookies={},
+            body={"data": "hello"},
+            form_data={},
+            files={},
+        )
+
+        result = ParameterResolver.resolve(endpoint, request_data)
+
+        assert result["data"] == "hello"
+
+    def test_model_plus_scalar_body(self) -> None:
+        """Pydantic model + scalar Body() should both be embedded"""
+
+        class Item(BaseModel):
+            title: str
+
+        def endpoint(item: Item, importance: int = Body()):
+            pass
+
+        request_data = RequestData(
+            path_params={},
+            query_params={},
+            headers={},
+            cookies={},
+            body={"item": {"title": "Widget"}, "importance": 5},
+            form_data={},
+            files={},
+        )
+
+        result = ParameterResolver.resolve(endpoint, request_data)
+
+        assert result["item"].title == "Widget"
+        assert result["importance"] == 5
+
+    def test_model_plus_query_not_embedded(self) -> None:
+        """Pydantic model + query param should not trigger embedding"""
+
+        class Item(BaseModel):
+            title: str
+
+        def endpoint(item: Item, q: str = Query()):
+            pass
+
+        request_data = RequestData(
+            path_params={},
+            query_params={"q": "search"},
+            headers={},
+            cookies={},
+            body={"title": "Widget"},
+            form_data={},
+            files={},
+        )
+
+        result = ParameterResolver.resolve(endpoint, request_data)
+
+        assert result["item"].title == "Widget"
+        assert result["q"] == "search"

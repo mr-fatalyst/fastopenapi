@@ -199,9 +199,10 @@ class ParameterProcessor:
         path_params = self._extract_path_parameters(route.path)
 
         parameters = []
-        request_body = None
+        body_fields: dict[str, dict] = {}
         form_fields = {}
         multipart_fields = {}
+        has_explicit_embed = False
 
         for param_name, param in sig.parameters.items():
             if self._should_skip_parameter(param):
@@ -221,17 +222,34 @@ class ParameterProcessor:
             elif param_type == "parameters":  # Multiple parameters from model
                 parameters.extend(data)
             elif param_type == "request_body":
-                request_body = data
+                body_fields[param_name] = data
+                if isinstance(param.default, Body) and param.default.embed:
+                    has_explicit_embed = True
             elif param_type == "form":
                 form_fields[param_name] = data
             elif param_type == "multipart":  # pragma: no cover
                 multipart_fields[param_name] = data
 
-        # Build combined request body for form data
-        if form_fields or multipart_fields:
-            request_body = self._build_form_request_body(form_fields, multipart_fields)
-
+        request_body = self._resolve_request_body(
+            body_fields, form_fields, multipart_fields, has_explicit_embed
+        )
         return parameters, request_body
+
+    def _resolve_request_body(
+        self,
+        body_fields: dict[str, dict],
+        form_fields: dict,
+        multipart_fields: dict,
+        has_explicit_embed: bool,
+    ) -> dict | None:
+        """Resolve final request body from collected fields"""
+        if form_fields or multipart_fields:
+            return self._build_form_request_body(form_fields, multipart_fields)
+        if len(body_fields) > 1 or has_explicit_embed:
+            return self._build_embedded_request_body(body_fields)
+        if body_fields:
+            return next(iter(body_fields.values()))
+        return None
 
     def _extract_path_parameters(self, path: str) -> set:
         """Extract path parameters from route path"""
@@ -448,6 +466,34 @@ class ParameterProcessor:
             request_body["description"] = param_obj.description
 
         return request_body
+
+    @staticmethod
+    def _build_embedded_request_body(body_fields: dict[str, dict]) -> dict:
+        """Build request body with multiple body params embedded by name"""
+        properties = {}
+        required = []
+        content_type = "application/json"
+        for name, field_body in body_fields.items():
+            content = field_body.get("content", {})
+            ct = next(iter(content), "application/json")
+            schema = content.get(ct, {}).get("schema", {})
+            properties[name] = schema
+            if field_body.get("required", False):
+                required.append(name)
+            if len(body_fields) == 1:
+                content_type = ct
+
+        wrapper_schema: dict[str, Any] = {
+            "type": "object",
+            "properties": properties,
+        }
+        if required:
+            wrapper_schema["required"] = required
+
+        return {
+            "content": {content_type: {"schema": wrapper_schema}},
+            "required": True,
+        }
 
     def _build_form_request_body(
         self, form_fields: dict, multipart_fields: dict

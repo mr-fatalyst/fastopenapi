@@ -129,6 +129,26 @@ class ParameterResolver:
             raise
 
     @classmethod
+    def _should_embed_body(
+        cls,
+        params: MappingProxyType[str, inspect.Parameter],
+        path_params: dict[str, Any],
+        method: str | None = None,
+    ) -> bool:
+        """Determine if body parameters should be embedded (keyed by param name)"""
+        body_params = []
+        has_explicit_embed = False
+        for name, param in params.items():
+            if isinstance(param.default, (Depends, Security)):
+                continue
+            source = cls._determine_source(name, param, path_params, method)
+            if source == ParameterSource.BODY:
+                body_params.append(name)
+                if isinstance(param.default, Body) and param.default.embed:
+                    has_explicit_embed = True
+        return len(body_params) > 1 or has_explicit_embed
+
+    @classmethod
     def _process_parameters(
         cls,
         params: MappingProxyType[str, inspect.Parameter],
@@ -140,6 +160,8 @@ class ParameterResolver:
         model_fields = {}
         model_values = {}
 
+        embed = cls._should_embed_body(params, request_data.path_params, method)
+
         for name, param in params.items():
             # Skip dependency parameters - already resolved
             if isinstance(param.default, (Depends, Security)):
@@ -150,18 +172,20 @@ class ParameterResolver:
                 source = cls._determine_source(
                     name, param, request_data.path_params, method
                 )
-                data = (
-                    request_data.body
-                    if source == ParameterSource.BODY
-                    else request_data.query_params
-                )
+                if source == ParameterSource.BODY:
+                    body = request_data.body or {}
+                    data = body.get(name, {}) if embed else body
+                else:
+                    data = request_data.query_params
                 resolved_model = cls._resolve_pydantic_model(
                     param.annotation, data, name
                 )
                 regular_kwargs[name] = resolved_model
                 continue  # Don't add to model_fields
 
-            processed_param = cls._process_single_parameter(name, param, request_data)
+            processed_param = cls._process_single_parameter(
+                name, param, request_data, embed
+            )
 
             if processed_param.needs_validation:
                 model_fields[name] = processed_param.field_info
@@ -173,23 +197,31 @@ class ParameterResolver:
 
     @classmethod
     def _process_single_parameter(
-        cls, name: str, param: inspect.Parameter, request_data: RequestData
+        cls,
+        name: str,
+        param: inspect.Parameter,
+        request_data: RequestData,
+        embed: bool = False,
     ) -> ProcessedParameter:
         """Process a single parameter"""
         source = cls._determine_source(name, param, request_data.path_params)
 
         # Handle Pydantic models
         if cls._is_pydantic_model(param.annotation):
-            data = (
-                request_data.body
-                if source == ParameterSource.BODY
-                else request_data.query_params
-            )
+            if source == ParameterSource.BODY:
+                body = request_data.body or {}
+                data = body.get(name, {}) if embed else body
+            else:
+                data = request_data.query_params
             resolved_model = cls._resolve_pydantic_model(param.annotation, data, name)
             return ProcessedParameter(value=resolved_model, needs_validation=False)
 
         # Extract value based on source
-        value = cls._extract_value(name, param, source, request_data)
+        if embed and source == ParameterSource.BODY:
+            body = request_data.body or {}
+            value = body.get(name)
+        else:
+            value = cls._extract_value(name, param, source, request_data)
 
         # Handle missing required parameters
         if value is None and cls._is_required_param(param):
