@@ -81,7 +81,13 @@ class BaseRouter:
 
     def add_route(self, path: str, method: str, endpoint: Callable):
         """Add a route to the router"""
-        meta = getattr(endpoint, "__route_meta__", {})
+        try:
+            if not hasattr(endpoint, "__route_meta__"):
+                endpoint.__route_meta__ = {}
+            endpoint.__route_meta__.setdefault("method", method)
+        except AttributeError:
+            pass
+        meta = getattr(endpoint, "__route_meta__", {"method": method})
         route = RouteInfo(path, method, endpoint, meta)
         self._routes.append(route)
         self._openapi_schema = None
@@ -137,6 +143,7 @@ class BaseRouter:
         """Create a decorator for route registration"""
 
         def decorator(func: Callable):
+            meta["method"] = method
             func.__route_meta__ = meta
             self.add_route(path, method, func)
             return func

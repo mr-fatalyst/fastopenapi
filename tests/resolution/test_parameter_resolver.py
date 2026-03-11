@@ -320,6 +320,53 @@ class TestParameterResolver:
         source = ParameterResolver._determine_source("data", param, {})
         assert source == ParameterSource.BODY
 
+    @pytest.mark.parametrize("method", ["GET", "HEAD", "DELETE"])
+    def test_determine_source_pydantic_model_no_body_methods(self, method) -> None:
+        """Test that Pydantic models resolve as QUERY for NO_BODY methods"""
+
+        class FilterModel(BaseModel):
+            search: str
+            limit: int = 10
+
+        param = inspect.Parameter(
+            "filters",
+            inspect.Parameter.POSITIONAL_OR_KEYWORD,
+            annotation=FilterModel,
+        )
+        source = ParameterResolver._determine_source(
+            "filters", param, {}, method=method
+        )
+        assert source == ParameterSource.QUERY
+
+    @pytest.mark.parametrize("method", ["POST", "PUT", "PATCH"])
+    def test_determine_source_pydantic_model_body_methods(self, method) -> None:
+        """Test that Pydantic models resolve as BODY for body-carrying methods"""
+
+        class DataModel(BaseModel):
+            name: str
+
+        param = inspect.Parameter(
+            "data",
+            inspect.Parameter.POSITIONAL_OR_KEYWORD,
+            annotation=DataModel,
+        )
+        source = ParameterResolver._determine_source("data", param, {}, method=method)
+        assert source == ParameterSource.BODY
+
+    def test_determine_source_pydantic_model_no_method(self) -> None:
+        """Test that Pydantic models resolve as BODY when method is None"""
+
+        class DataModel(BaseModel):
+            name: str
+
+        param = inspect.Parameter(
+            "data",
+            inspect.Parameter.POSITIONAL_OR_KEYWORD,
+            annotation=DataModel,
+        )
+        source = ParameterResolver._determine_source("data", param, {}, method=None)
+        assert source == ParameterSource.BODY
+
     def test_determine_source_query_default(self) -> None:
         """Test source determination defaults to query"""
         param = inspect.Parameter(

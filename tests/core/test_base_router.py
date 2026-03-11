@@ -254,6 +254,54 @@ class TestBaseRouter:
         assert hasattr(get_endpoint, "__route_meta__")
         assert get_endpoint.__route_meta__["tags"] == ["test"]
 
+    def test_decorator_writes_method_to_route_meta(self):
+        """Test that decorators write HTTP method into __route_meta__"""
+
+        @self.router.get("/get-test")
+        def get_ep():
+            pass
+
+        @self.router.post("/post-test")
+        def post_ep():
+            pass
+
+        @self.router.delete("/delete-test")
+        def delete_ep():
+            pass
+
+        @self.router.head("/head-test")
+        def head_ep():
+            pass
+
+        assert get_ep.__route_meta__["method"] == "GET"
+        assert post_ep.__route_meta__["method"] == "POST"
+        assert delete_ep.__route_meta__["method"] == "DELETE"
+        assert head_ep.__route_meta__["method"] == "HEAD"
+
+    def test_add_route_sets_route_meta(self):
+        """Test that add_route sets __route_meta__ on bare functions"""
+
+        def bare_func():
+            pass
+
+        assert not hasattr(bare_func, "__route_meta__")
+        self.router.add_route("/bare", "GET", bare_func)
+
+        assert hasattr(bare_func, "__route_meta__")
+        assert bare_func.__route_meta__["method"] == "GET"
+
+    def test_add_route_preserves_existing_route_meta(self):
+        """Test that add_route doesn't overwrite existing method in __route_meta__"""
+
+        def func_with_meta():
+            pass
+
+        func_with_meta.__route_meta__ = {"method": "POST", "tags": ["custom"]}
+        self.router.add_route("/meta", "POST", func_with_meta)
+
+        assert func_with_meta.__route_meta__["method"] == "POST"
+        assert func_with_meta.__route_meta__["tags"] == ["custom"]
+
     def test_openapi_property_lazy_loading(self):
         # Test the openapi property (lazy loading)
 
