@@ -54,5 +54,7 @@ class FalconAsyncRouter(FalconRouter):
                 resp.text = html
 
         self.app.add_route(self.openapi_url, OpenAPISchemaResource())
-        self.app.add_route(self.docs_url, SwaggerUIResource())
-        self.app.add_route(self.redoc_url, RedocUIResource())
+        if self.docs_url:
+            self.app.add_route(self.docs_url, SwaggerUIResource())
+        if self.redoc_url:
+            self.app.add_route(self.redoc_url, RedocUIResource())

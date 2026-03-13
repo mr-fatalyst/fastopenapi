@@ -743,10 +743,6 @@ class OpenAPIGenerator:
 
     def _has_security_dependency(self, route) -> bool:
         """Check if route has Security dependencies"""
-        import inspect
-
-        from fastopenapi.core.params import Security
-
         sig = inspect.signature(route.endpoint)
         for param in sig.parameters.values():
             if isinstance(param.default, Security):
@@ -755,10 +751,6 @@ class OpenAPIGenerator:
 
     def _extract_security_scopes(self, route) -> list[str]:
         """Extract scopes from Security dependencies"""
-        import inspect
-
-        from fastopenapi.core.params import Security
-
         sig = inspect.signature(route.endpoint)
         all_scopes = []
         for param in sig.parameters.values():

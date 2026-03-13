@@ -61,12 +61,16 @@ class QuartRouter(BaseAdapter):
         async def openapi_view():
             return jsonify(self.openapi)
 
-        @self.app.route(self.docs_url, methods=["GET"])
-        async def docs_view():
-            html = render_swagger_ui(self.openapi_url)
-            return QuartResponse(html, mimetype="text/html")
+        if self.docs_url:
 
-        @self.app.route(self.redoc_url, methods=["GET"])
-        async def redoc_view():
-            html = render_redoc_ui(self.openapi_url)
-            return QuartResponse(html, mimetype="text/html")
+            @self.app.route(self.docs_url, methods=["GET"])
+            async def docs_view():
+                html = render_swagger_ui(self.openapi_url)
+                return QuartResponse(html, mimetype="text/html")
+
+        if self.redoc_url:
+
+            @self.app.route(self.redoc_url, methods=["GET"])
+            async def redoc_view():
+                html = render_redoc_ui(self.openapi_url)
+                return QuartResponse(html, mimetype="text/html")

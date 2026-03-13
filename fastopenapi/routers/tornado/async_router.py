@@ -83,9 +83,15 @@ class TornadoRouter(BaseAdapter):
                 await self.finish()
 
         spec_openapi = url(self.openapi_url, OpenAPIHandler, name="openapi-schema")
-        spec_swagger = url(self.docs_url, SwaggerUIHandler, name="swagger-ui")
-        spec_redoc = url(self.redoc_url, RedocUIHandler, name="redoc-ui")
+        specs = [spec_openapi]
 
-        self.routes.extend([spec_openapi, spec_swagger, spec_redoc])
+        if self.docs_url:
+            spec_swagger = url(self.docs_url, SwaggerUIHandler, name="swagger-ui")
+            specs.append(spec_swagger)
+        if self.redoc_url:
+            spec_redoc = url(self.redoc_url, RedocUIHandler, name="redoc-ui")
+            specs.append(spec_redoc)
+
+        self.routes.extend(specs)
         if self.app is not None:
-            self.app.add_handlers(r".*", [spec_openapi, spec_swagger, spec_redoc])
+            self.app.add_handlers(r".*", specs)

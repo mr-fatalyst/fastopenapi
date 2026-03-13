@@ -105,7 +105,11 @@ class StarletteRouter(BaseAdapter):
         self.app.router.routes.append(
             Route(self.openapi_url, openapi_view, methods=["GET"])
         )
-        self.app.router.routes.append(Route(self.docs_url, docs_view, methods=["GET"]))
-        self.app.router.routes.append(
-            Route(self.redoc_url, redoc_view, methods=["GET"])
-        )
+        if self.docs_url:
+            self.app.router.routes.append(
+                Route(self.docs_url, docs_view, methods=["GET"])
+            )
+        if self.redoc_url:
+            self.app.router.routes.append(
+                Route(self.redoc_url, redoc_view, methods=["GET"])
+            )

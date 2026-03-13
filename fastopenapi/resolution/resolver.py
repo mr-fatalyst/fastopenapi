@@ -109,24 +109,16 @@ class ParameterResolver:
         endpoint: Callable, request_data: RequestData
     ) -> dict[str, Any]:
         """Resolve endpoint dependencies"""
-        try:
-            return dependency_resolver.resolve_dependencies(endpoint, request_data)
-        except Exception:
-            # Re-raise dependency errors as-is
-            raise
+        return dependency_resolver.resolve_dependencies(endpoint, request_data)
 
     @staticmethod
     async def _resolve_dependencies_async(
         endpoint: Callable, request_data: RequestData
     ) -> dict[str, Any]:
         """Resolve endpoint dependencies"""
-        try:
-            return await dependency_resolver.resolve_dependencies_async(
-                endpoint, request_data
-            )
-        except Exception:
-            # Re-raise dependency errors as-is
-            raise
+        return await dependency_resolver.resolve_dependencies_async(
+            endpoint, request_data
+        )
 
     @classmethod
     def _should_embed_body(

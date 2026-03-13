@@ -134,8 +134,10 @@ class DjangoRouter(BaseAdapter):
                 )
 
         self._views[self.openapi_url] = OpenAPISchemaView
-        self._views[self.docs_url] = SwaggerUIView
-        self._views[self.redoc_url] = RedocUIView
+        if self.docs_url:
+            self._views[self.docs_url] = SwaggerUIView
+        if self.redoc_url:
+            self._views[self.redoc_url] = RedocUIView
 
     @property
     def urls(self):
@@ -145,7 +147,11 @@ class DjangoRouter(BaseAdapter):
                 django_path(
                     re.sub(r"{(\w+)}", r"<\1>", path).lstrip("/"),
                     view_class.as_view(),
-                    name=view_class.__class__.__name__,
+                    name=path.strip("/")
+                    .replace("/", "_")
+                    .replace("{", "")
+                    .replace("}", "")
+                    or "root",
                 )
                 for path, view_class in self._views.items()
             ),

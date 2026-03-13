@@ -40,11 +40,6 @@ class BaseParam(FieldInfo):
         json_schema_extra: dict[str, Any] | None = None,
         **extra: Any,
     ):
-        # OpenAPI specific attributes
-        self.example = example
-        self.examples = examples
-        self.include_in_schema = include_in_schema
-
         # Build kwargs for FieldInfo
         kwargs = {
             "default": default,
@@ -395,9 +390,6 @@ class Body(BaseParam):
         json_schema_extra: dict[str, Any] | None = None,
         **extra: Any,
     ):
-        self.embed = embed
-        self.media_type = media_type
-
         super().__init__(
             default=default,
             alias=alias,

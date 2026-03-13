@@ -56,5 +56,7 @@ class DjangoAsyncRouter(DjangoRouter):
                 )
 
         self._views[self.openapi_url] = OpenAPISchemaView
-        self._views[self.docs_url] = SwaggerUIView
-        self._views[self.redoc_url] = RedocUIView
+        if self.docs_url:
+            self._views[self.docs_url] = SwaggerUIView
+        if self.redoc_url:
+            self._views[self.redoc_url] = RedocUIView

@@ -76,7 +76,7 @@ class BaseRouter:
                 }
 
         # Register documentation endpoints if app is provided
-        if self.app is not None and all([docs_url, redoc_url, openapi_url]):
+        if self.app is not None and openapi_url:
             self._register_docs_endpoints()
 
     def add_route(self, path: str, method: str, endpoint: Callable):

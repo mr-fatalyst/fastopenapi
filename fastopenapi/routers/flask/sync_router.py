@@ -76,12 +76,16 @@ class FlaskRouter(BaseAdapter):
         def openapi_view():
             return jsonify(self.openapi)
 
-        @self.app.route(self.docs_url, methods=["GET"])
-        def docs_view():
-            html = render_swagger_ui(self.openapi_url)
-            return FlaskResponse(html, mimetype="text/html")
+        if self.docs_url:
 
-        @self.app.route(self.redoc_url, methods=["GET"])
-        def redoc_view():
-            html = render_redoc_ui(self.openapi_url)
-            return FlaskResponse(html, mimetype="text/html")
+            @self.app.route(self.docs_url, methods=["GET"])
+            def docs_view():
+                html = render_swagger_ui(self.openapi_url)
+                return FlaskResponse(html, mimetype="text/html")
+
+        if self.redoc_url:
+
+            @self.app.route(self.redoc_url, methods=["GET"])
+            def redoc_view():
+                html = render_redoc_ui(self.openapi_url)
+                return FlaskResponse(html, mimetype="text/html")

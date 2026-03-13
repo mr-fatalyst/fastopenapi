@@ -75,12 +75,16 @@ class SanicRouter(BaseAdapter):
         async def openapi_view(request):
             return response.json(self.openapi)
 
-        @self.app.route(self.docs_url, methods=["GET"])
-        async def docs_view(request):
-            html = render_swagger_ui(self.openapi_url)
-            return response.html(html)
+        if self.docs_url:
 
-        @self.app.route(self.redoc_url, methods=["GET"])
-        async def redoc_view(request):
-            html = render_redoc_ui(self.openapi_url)
-            return response.html(html)
+            @self.app.route(self.docs_url, methods=["GET"])
+            async def docs_view(request):
+                html = render_swagger_ui(self.openapi_url)
+                return response.html(html)
+
+        if self.redoc_url:
+
+            @self.app.route(self.redoc_url, methods=["GET"])
+            async def redoc_view(request):
+                html = render_redoc_ui(self.openapi_url)
+                return response.html(html)

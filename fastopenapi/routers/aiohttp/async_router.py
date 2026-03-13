@@ -92,5 +92,7 @@ class AioHttpRouter(BaseAdapter):
 
         if self.app is not None:
             self.app.router.add_route("GET", self.openapi_url, openapi_view)
-            self.app.router.add_route("GET", self.docs_url, docs_view)
-            self.app.router.add_route("GET", self.redoc_url, redoc_view)
+            if self.docs_url:
+                self.app.router.add_route("GET", self.docs_url, docs_view)
+            if self.redoc_url:
+                self.app.router.add_route("GET", self.redoc_url, redoc_view)
