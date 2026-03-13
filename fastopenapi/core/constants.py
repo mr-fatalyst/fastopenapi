@@ -13,6 +13,7 @@ PYTHON_TYPE_MAPPING = {
     float: "number",
     bool: "boolean",
     str: "string",
+    dict: "object",
 }
 
 

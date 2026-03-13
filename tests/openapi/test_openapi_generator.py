@@ -1281,26 +1281,26 @@ class TestOpenAPIGenerator:
         assert "$ref" in schema["items"]
 
     def test_response_builder_add_response_model_list_non_pydantic(self):
-        """Test adding list of non-Pydantic types"""
+        """Test adding list of non-Pydantic types generates array schema"""
         builder = ResponseBuilder(self.generator.schema_builder)
 
         responses = {"200": {"description": "OK"}}
 
         builder._add_response_model(responses, "200", list[str])
 
-        # Should not add content for non-Pydantic types
-        assert "content" not in responses["200"]
+        schema = responses["200"]["content"]["application/json"]["schema"]
+        assert schema == {"type": "array", "items": {"type": "string"}}
 
     def test_response_builder_add_response_model_non_pydantic(self):
-        """Test adding non-Pydantic response model"""
+        """Test adding non-Pydantic response model generates schema"""
         builder = ResponseBuilder(self.generator.schema_builder)
 
         responses = {"200": {"description": "OK"}}
 
         builder._add_response_model(responses, "200", str)
 
-        # Should not add content for non-Pydantic types
-        assert "content" not in responses["200"]
+        schema = responses["200"]["content"]["application/json"]["schema"]
+        assert schema == {"type": "string"}
 
     def test_response_builder_add_custom_error_responses(self):
         """Test adding custom error responses"""

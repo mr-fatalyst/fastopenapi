@@ -643,13 +643,15 @@ class ResponseBuilder:
             inner_type = typing.get_args(response_model)[0]
             if self._is_pydantic_model(inner_type):
                 inner_schema = self.schema_builder.get_model_schema(inner_type)
-                array_schema = {"type": "array", "items": inner_schema}
-                responses[status_code]["content"] = {
-                    "application/json": {"schema": array_schema}
-                }
+                schema = {"type": "array", "items": inner_schema}
+            else:
+                schema = self.schema_builder.build_parameter_schema(response_model)
         elif self._is_pydantic_model(response_model):
             schema = self.schema_builder.get_model_schema(response_model)
-            responses[status_code]["content"] = {"application/json": {"schema": schema}}
+        else:
+            schema = self.schema_builder.build_parameter_schema(response_model)
+
+        responses[status_code]["content"] = {"application/json": {"schema": schema}}
 
     def _add_security_error_responses(
         self, responses: dict, route, has_security: bool = False
