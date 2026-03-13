@@ -35,6 +35,9 @@ class QuartRouter(BaseAdapter):
 
     def build_framework_response(self, response: Response):
         """Build Quart response"""
+        if response.status_code in (204, 304):
+            return "", response.status_code, {}
+
         content_type = response.headers.get("Content-Type")
 
         # Binary content

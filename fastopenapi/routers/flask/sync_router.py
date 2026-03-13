@@ -43,6 +43,9 @@ class FlaskRouter(BaseAdapter):
 
     def build_framework_response(self, response: Response) -> FlaskResponse:
         """Build Flask response"""
+        if response.status_code in (204, 304):
+            return make_response("", response.status_code)
+
         content_type = response.headers.get("Content-Type")
 
         # Binary content

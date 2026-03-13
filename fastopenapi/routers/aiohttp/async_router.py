@@ -48,6 +48,9 @@ class AioHttpRouter(BaseAdapter):
                 },
             )
 
+        if response.status_code in (204, 304):
+            return web.Response(status=response.status_code)
+
         # String non-JSON content (CSV, XML, plain text, etc.)
         if isinstance(response.content, str) and content_type not in [
             "application/json",

@@ -46,6 +46,9 @@ class SanicRouter(BaseAdapter):
                 content_type=content_type or "application/octet-stream",
             )
 
+        if response_obj.status_code in (204, 304):
+            return response.empty(response_obj.status_code)
+
         # String non-JSON content
         if isinstance(response_obj.content, str) and content_type not in [
             "application/json",
