@@ -8,6 +8,8 @@ from fastopenapi.routers.extractors import (
     BaseRequestDataExtractor,
 )
 
+_MULTIPART_CACHE_ATTR = "_fastopenapi_multipart_cache"
+
 
 class FalconRequestDataExtractor(BaseRequestDataExtractor):
     @classmethod
@@ -51,31 +53,25 @@ class FalconRequestDataExtractor(BaseRequestDataExtractor):
         return {}
 
     @classmethod
-    def _get_form_data(cls, request: Any) -> dict:
-        """Extract form data"""
+    def _parse_multipart(
+        cls, request: Any
+    ) -> tuple[dict, dict[str, FileUpload | list[FileUpload]]]:
+        """Parse multipart stream once and cache the result on the request."""
+        cached = getattr(request, _MULTIPART_CACHE_ATTR, None)
+        if isinstance(cached, tuple):
+            return cached
+
         form_data = {}
-        ct = (request.content_type or "").lower()
+        files: dict[str, FileUpload | list[FileUpload]] = {}
 
-        if ct == "application/x-www-form-urlencoded":
-            form_data = request.media or {}
+        form = request.get_media()
+        for part in form:
+            filename = getattr(part, "secure_filename", None) or getattr(
+                part, "filename", None
+            )
+            field_name = getattr(part, "name", filename)
 
-        return form_data
-
-    @classmethod
-    def _get_files(cls, request: Any) -> dict[str, FileUpload | list[FileUpload]]:
-        """Extract files from Falcon request (sync)"""
-        files = {}
-        ct = (request.content_type or "").lower()
-
-        if "multipart/form-data" in ct and hasattr(request, "get_media"):
-            form = request.get_media()
-            for part in form:
-                filename = getattr(part, "secure_filename", None) or getattr(
-                    part, "filename", None
-                )
-                if not filename:
-                    continue
-
+            if filename:
                 content = part.stream.read()
                 file_upload = FileUpload(
                     filename=filename,
@@ -83,8 +79,6 @@ class FalconRequestDataExtractor(BaseRequestDataExtractor):
                     size=len(content),
                     file=content,
                 )
-
-                field_name = getattr(part, "name", filename)
                 if field_name in files:
                     if isinstance(files[field_name], list):
                         files[field_name].append(file_upload)
@@ -92,8 +86,37 @@ class FalconRequestDataExtractor(BaseRequestDataExtractor):
                         files[field_name] = [files[field_name], file_upload]
                 else:
                     files[field_name] = file_upload
+            else:
+                form_data[field_name] = part.text
 
-        return files
+        result = (form_data, files)
+        setattr(request, _MULTIPART_CACHE_ATTR, result)
+        return result
+
+    @classmethod
+    def _get_form_data(cls, request: Any) -> dict:
+        """Extract form data"""
+        ct = str(request.content_type or "").lower()
+
+        if ct == "application/x-www-form-urlencoded":
+            return request.media or {}
+
+        if "multipart/form-data" in ct and hasattr(request, "get_media"):
+            form_data, _ = cls._parse_multipart(request)
+            return form_data
+
+        return {}
+
+    @classmethod
+    def _get_files(cls, request: Any) -> dict[str, FileUpload | list[FileUpload]]:
+        """Extract files from Falcon request (sync)"""
+        ct = str(request.content_type or "").lower()
+
+        if "multipart/form-data" in ct and hasattr(request, "get_media"):
+            _, files = cls._parse_multipart(request)
+            return files
+
+        return {}
 
 
 class FalconAsyncRequestDataExtractor(
