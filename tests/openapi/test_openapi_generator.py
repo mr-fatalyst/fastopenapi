@@ -437,7 +437,7 @@ class TestOpenAPIGenerator:
         route.meta = {"security": True}
 
         builder = ResponseBuilder(self.generator.schema_builder)
-        responses = builder.build_responses(route)
+        responses = builder.build_responses(route, has_security=True)
 
         # Should add security error responses
         assert "401" in responses

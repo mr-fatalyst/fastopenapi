@@ -202,6 +202,7 @@ class ParameterProcessor:
         body_fields: dict[str, dict] = {}
         form_fields = {}
         multipart_fields = {}
+        form_required = []
         has_explicit_embed = False
 
         for param_name, param in sig.parameters.items():
@@ -215,25 +216,56 @@ class ParameterProcessor:
             if result is None:
                 continue
 
-            param_type, data = result
-
-            if param_type == "parameter":
-                parameters.append(data)
-            elif param_type == "parameters":  # Multiple parameters from model
-                parameters.extend(data)
-            elif param_type == "request_body":
-                body_fields[param_name] = data
-                if isinstance(param.default, Body) and param.default.embed:
-                    has_explicit_embed = True
-            elif param_type == "form":
-                form_fields[param_name] = data
-            elif param_type == "multipart":  # pragma: no cover
-                multipart_fields[param_name] = data
+            self._classify_parameter_result(
+                result,
+                param_name,
+                param,
+                parameters,
+                body_fields,
+                form_fields,
+                multipart_fields,
+                form_required,
+            )
+            if isinstance(param.default, Body) and param.default.embed:
+                has_explicit_embed = True
 
         request_body = self._resolve_request_body(
-            body_fields, form_fields, multipart_fields, has_explicit_embed
+            body_fields,
+            form_fields,
+            multipart_fields,
+            has_explicit_embed,
+            form_required,
         )
         return parameters, request_body
+
+    def _classify_parameter_result(
+        self,
+        result: tuple[str, Any],
+        param_name: str,
+        param: inspect.Parameter,
+        parameters: list,
+        body_fields: dict,
+        form_fields: dict,
+        multipart_fields: dict,
+        form_required: list,
+    ) -> None:
+        """Classify a processed parameter result into the appropriate collection"""
+        param_type, data = result
+
+        if param_type == "parameter":
+            parameters.append(data)
+        elif param_type == "parameters":
+            parameters.extend(data)
+        elif param_type == "request_body":
+            body_fields[param_name] = data
+        elif param_type == "form":
+            form_fields[param_name] = data
+            if self._is_form_field_required(param):
+                form_required.append(param_name)
+        elif param_type == "multipart":  # pragma: no cover
+            multipart_fields[param_name] = data
+            if self._is_form_field_required(param):
+                form_required.append(param_name)
 
     def _resolve_request_body(
         self,
@@ -241,10 +273,13 @@ class ParameterProcessor:
         form_fields: dict,
         multipart_fields: dict,
         has_explicit_embed: bool,
+        form_required: list[str] | None = None,
     ) -> dict | None:
         """Resolve final request body from collected fields"""
         if form_fields or multipart_fields:
-            return self._build_form_request_body(form_fields, multipart_fields)
+            return self._build_form_request_body(
+                form_fields, multipart_fields, form_required or []
+            )
         if len(body_fields) > 1 or has_explicit_embed:
             return self._build_embedded_request_body(body_fields)
         if body_fields:
@@ -496,29 +531,42 @@ class ParameterProcessor:
         }
 
     def _build_form_request_body(
-        self, form_fields: dict, multipart_fields: dict
+        self,
+        form_fields: dict,
+        multipart_fields: dict,
+        required: list[str] | None = None,
     ) -> dict | None:
         """Build request body for form/multipart data"""
         if multipart_fields:
-            # Multipart form data
             all_fields = {**form_fields, **multipart_fields}
-            return {
-                "content": {
-                    "multipart/form-data": {
-                        "schema": {"type": "object", "properties": all_fields}
-                    }
-                }
+            schema: dict[str, Any] = {
+                "type": "object",
+                "properties": all_fields,
             }
+            if required:
+                schema["required"] = required
+            return {"content": {"multipart/form-data": {"schema": schema}}}
         elif form_fields:
-            # URL-encoded form data
+            schema = {
+                "type": "object",
+                "properties": form_fields,
+            }
+            if required:
+                schema["required"] = required
             return {
-                "content": {
-                    "application/x-www-form-urlencoded": {
-                        "schema": {"type": "object", "properties": form_fields}
-                    }
-                }
+                "content": {"application/x-www-form-urlencoded": {"schema": schema}}
             }
         return None
+
+    @staticmethod
+    def _is_form_field_required(param: inspect.Parameter) -> bool:
+        """Check if a Form/File parameter is required"""
+        if isinstance(param.default, BaseParam):
+            return (
+                param.default.default is ...
+                or param.default.default is PydanticUndefined
+            )
+        return param.default is inspect.Parameter.empty
 
     def _build_query_params_from_model(
         self, model_class: type[BaseModel]
@@ -564,7 +612,7 @@ class ResponseBuilder:
     def __init__(self, schema_builder: SchemaBuilder):
         self.schema_builder = schema_builder
 
-    def build_responses(self, route) -> dict:
+    def build_responses(self, route, has_security: bool = False) -> dict:
         """Build responses section with enhanced error handling"""
         from http import HTTPStatus
 
@@ -577,7 +625,7 @@ class ResponseBuilder:
         )
 
         # Add error responses
-        self._add_security_error_responses(responses, route)
+        self._add_security_error_responses(responses, route, has_security)
         self._add_custom_error_responses(responses, route)
 
         return responses
@@ -603,9 +651,11 @@ class ResponseBuilder:
             schema = self.schema_builder.get_model_schema(response_model)
             responses[status_code]["content"] = {"application/json": {"schema": schema}}
 
-    def _add_security_error_responses(self, responses: dict, route) -> None:
+    def _add_security_error_responses(
+        self, responses: dict, route, has_security: bool = False
+    ) -> None:
         """Add security-related error responses"""
-        if not route.meta.get("security"):
+        if not has_security:
             return
 
         error_responses = {"401": "Unauthorized", "403": "Forbidden"}
@@ -763,7 +813,10 @@ class OpenAPIGenerator:
         parameters, request_body = self.parameter_processor.process_route_parameters(
             route
         )
-        responses = self.response_builder.build_responses(route)
+        has_security = bool(
+            route.meta.get("security")
+        ) or self._has_security_dependency(route)
+        responses = self.response_builder.build_responses(route, has_security)
 
         operation = {
             "summary": route.meta.get("summary")
