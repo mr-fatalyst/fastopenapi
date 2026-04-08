@@ -1,4 +1,5 @@
 from collections.abc import Callable
+from typing import Any
 
 from sanic import response
 
@@ -15,7 +16,7 @@ class SanicRouter(BaseAdapter):
     PATH_CONVERSIONS = (r"{(\w+)}", r"<\1>")
     extractor_async_cls = SanicRequestDataExtractor
 
-    def add_route(self, path: str, method: str, endpoint: Callable):
+    def add_route(self, path: str, method: str, endpoint: Callable[..., Any]) -> None:
         """Add route to Sanic application"""
         super().add_route(path, method, endpoint)
 
@@ -33,7 +34,7 @@ class SanicRouter(BaseAdapter):
             view_func, sanic_path, methods=[method.upper()], name=route_name
         )
 
-    def build_framework_response(self, response_obj: Response):
+    def build_framework_response(self, response_obj: Response) -> Any:
         """Build Sanic response"""
         content_type = response_obj.headers.get("Content-Type")
 
@@ -71,7 +72,7 @@ class SanicRouter(BaseAdapter):
     def is_framework_response(self, resp: Response | response.BaseHTTPResponse) -> bool:
         return isinstance(resp, response.BaseHTTPResponse)
 
-    def _register_docs_endpoints(self):
+    def _register_docs_endpoints(self) -> None:
         """Register documentation endpoints"""
 
         @self.app.route(self.openapi_url, methods=["GET"])

@@ -2,6 +2,7 @@ import inspect
 import threading
 from collections.abc import Callable
 from contextlib import contextmanager
+from types import MappingProxyType
 from typing import Any
 from weakref import WeakKeyDictionary
 
@@ -25,9 +26,11 @@ class DependencyResolver:
     - Async and sync execution modes
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         # Request-scoped cache (cleared per request)
-        self._request_cache = WeakKeyDictionary()
+        self._request_cache: WeakKeyDictionary[RequestData, dict[str, Any]] = (
+            WeakKeyDictionary()
+        )
         self._request_cache_lock = threading.RLock()
 
         # Execution locks per dependency function to prevent race conditions
@@ -35,11 +38,13 @@ class DependencyResolver:
         self._execution_locks: dict[int, threading.Lock] = {}
 
         # Dependency signature cache
-        self._signature_cache: dict[Callable, dict] = {}
+        self._signature_cache: dict[
+            Callable[..., Any], MappingProxyType[str, inspect.Parameter]
+        ] = {}
 
     def resolve_dependencies(
         self,
-        endpoint: Callable,
+        endpoint: Callable[..., Any],
         request_data: RequestData,
     ) -> dict[str, Any]:
         """
@@ -83,7 +88,7 @@ class DependencyResolver:
                         del self._request_cache[request_data]
 
     def _resolve_endpoint_dependencies(
-        self, endpoint: Callable, request_data: RequestData
+        self, endpoint: Callable[..., Any], request_data: RequestData
     ) -> dict[str, Any]:
         """Resolve dependencies for a specific endpoint"""
         dependencies = {}
@@ -143,7 +148,7 @@ class DependencyResolver:
     def _resolve_security_dependency(
         self,
         security: Security,
-        dependency_func: Callable,
+        dependency_func: Callable[..., Any],
         request_data: RequestData,
         param_name: str,
     ) -> Any:
@@ -157,7 +162,7 @@ class DependencyResolver:
 
     def _resolve_regular_dependency(
         self,
-        dependency_func: Callable,
+        dependency_func: Callable[..., Any],
         request_data: RequestData,
         param_name: str,
     ) -> Any:
@@ -168,7 +173,7 @@ class DependencyResolver:
 
     def _execute_dependency_function(
         self,
-        dependency_func: Callable,
+        dependency_func: Callable[..., Any],
         request_data: RequestData,
         param_name: str,
         security_scopes: SecurityScopes | None = None,
@@ -211,8 +216,8 @@ class DependencyResolver:
 
     def _call_sync_generator(
         self,
-        dependency_func: Callable,
-        kwargs: dict,
+        dependency_func: Callable[..., Any],
+        kwargs: dict[str, Any],
         request_data: RequestData,
     ) -> Any:
         """Execute a sync generator dependency: yield value and save for cleanup."""
@@ -228,8 +233,8 @@ class DependencyResolver:
 
     async def _call_async_generator(
         self,
-        dependency_func: Callable,
-        kwargs: dict,
+        dependency_func: Callable[..., Any],
+        kwargs: dict[str, Any],
         request_data: RequestData,
     ) -> Any:
         """Execute an async generator dependency: yield value and save for cleanup."""
@@ -245,8 +250,8 @@ class DependencyResolver:
 
     def _call_dependency(
         self,
-        dependency_func: Callable,
-        kwargs: dict,
+        dependency_func: Callable[..., Any],
+        kwargs: dict[str, Any],
         request_data: RequestData,
     ) -> Any:
         """Execute the dependency function"""
@@ -261,7 +266,13 @@ class DependencyResolver:
                 f"Dependency function '{dependency_func.__name__}' failed"
             ) from e
 
-    def _classify_params(self, dependency_func, security_scopes):
+    def _classify_params(
+        self,
+        dependency_func: Callable[..., Any],
+        security_scopes: SecurityScopes | None,
+    ) -> tuple[
+        dict[str, Any], dict[str, inspect.Parameter], dict[str, inspect.Parameter]
+    ]:
         """Split function params into injected, dependency, and regular."""
         sig = self._get_signature(dependency_func)
         injected = {}
@@ -278,7 +289,7 @@ class DependencyResolver:
 
     def _resolve_sub_dependencies(
         self,
-        dependency_func: Callable,
+        dependency_func: Callable[..., Any],
         request_data: RequestData,
         security_scopes: SecurityScopes | None = None,
     ) -> dict[str, Any]:
@@ -340,7 +351,7 @@ class DependencyResolver:
 
     async def resolve_dependencies_async(
         self,
-        endpoint: Callable,
+        endpoint: Callable[..., Any],
         request_data: RequestData,
     ) -> dict[str, Any]:
         """
@@ -386,7 +397,7 @@ class DependencyResolver:
                     del self._request_cache[request_data]
 
     async def _resolve_endpoint_dependencies_async(
-        self, endpoint: Callable, request_data: RequestData
+        self, endpoint: Callable[..., Any], request_data: RequestData
     ) -> dict[str, Any]:
         """Resolve dependencies for a specific endpoint (async)"""
         dependencies = {}
@@ -435,7 +446,7 @@ class DependencyResolver:
     async def _resolve_security_dependency_async(
         self,
         security: Security,
-        dependency_func: Callable,
+        dependency_func: Callable[..., Any],
         request_data: RequestData,
         param_name: str,
     ) -> Any:
@@ -450,7 +461,7 @@ class DependencyResolver:
     async def _resolve_regular_dependency_async(
         self,
         depends: Depends,
-        dependency_func: Callable,
+        dependency_func: Callable[..., Any],
         request_data: RequestData,
         param_name: str,
     ) -> Any:
@@ -461,7 +472,7 @@ class DependencyResolver:
 
     async def _execute_dependency_function_async(
         self,
-        dependency_func: Callable,
+        dependency_func: Callable[..., Any],
         request_data: RequestData,
         param_name: str,
         security_scopes: SecurityScopes | None = None,
@@ -489,8 +500,8 @@ class DependencyResolver:
 
     async def _call_dependency_async(
         self,
-        dependency_func: Callable,
-        kwargs: dict,
+        dependency_func: Callable[..., Any],
+        kwargs: dict[str, Any],
         request_data: RequestData,
     ) -> Any:
         """
@@ -515,7 +526,7 @@ class DependencyResolver:
 
     async def _resolve_sub_dependencies_async(
         self,
-        dependency_func: Callable,
+        dependency_func: Callable[..., Any],
         request_data: RequestData,
         security_scopes: SecurityScopes | None = None,
     ) -> dict[str, Any]:
@@ -580,7 +591,7 @@ class DependencyResolver:
         dependency: Depends | Security,
         param_name: str,
         param_annotation: type,
-    ) -> Callable:
+    ) -> Callable[..., Any]:
         """Extract dependency function from Depends/Security instance"""
         dependency_func = dependency.dependency
         if dependency_func is None:
@@ -594,17 +605,17 @@ class DependencyResolver:
         return dependency_func
 
     def _make_cache_key(
-        self, dependency_func: Callable, request_data: RequestData
-    ) -> tuple:
+        self, dependency_func: Callable[..., Any], request_data: RequestData
+    ) -> tuple[int, int]:
         """Create cache key for request-scoped cache"""
         return (id(dependency_func), id(request_data))
 
-    def _get_request_cache(self, request_data: RequestData) -> dict:
+    def _get_request_cache(self, request_data: RequestData) -> dict[str, Any]:
         """Get cache dictionary for current request"""
         return self._request_cache[request_data]
 
     def _try_get_cached(
-        self, cache_key: tuple, request_cache: dict
+        self, cache_key: tuple[int, int], request_cache: dict[str, Any]
     ) -> tuple[bool, Any]:
         """Try to get cached value from request-scoped cache"""
         with self._request_cache_lock:
@@ -613,14 +624,19 @@ class DependencyResolver:
                 return True, resolved[cache_key]
         return False, None
 
-    def _cache_result(self, cache_key: tuple, result: Any, request_cache: dict) -> None:
+    def _cache_result(
+        self, cache_key: tuple[int, int], result: Any, request_cache: dict[str, Any]
+    ) -> None:
         """Store result in request-scoped cache"""
         with self._request_cache_lock:
             request_cache["resolved"][cache_key] = result
 
     @contextmanager
     def _resolving_guard(
-        self, request_cache: dict, dependency_func: Callable, param_name: str
+        self,
+        request_cache: dict[str, Any],
+        dependency_func: Callable[..., Any],
+        param_name: str,
     ):
         """Guard against circular dependencies"""
         resolving = request_cache["resolving"]
@@ -635,7 +651,9 @@ class DependencyResolver:
         finally:
             resolving.discard(dependency_func)
 
-    def _get_signature(self, func: Callable) -> dict[str, inspect.Parameter]:
+    def _get_signature(
+        self, func: Callable[..., Any]
+    ) -> MappingProxyType[str, inspect.Parameter]:
         """Get function signature with caching"""
         if func not in self._signature_cache:
             sig = inspect.signature(func)
@@ -659,14 +677,14 @@ dependency_resolver = DependencyResolver()
 
 # Convenience functions
 def resolve_dependencies(
-    endpoint: Callable, request_data: RequestData
+    endpoint: Callable[..., Any], request_data: RequestData
 ) -> dict[str, Any]:
     """Convenience function to resolve dependencies (sync)"""
     return dependency_resolver.resolve_dependencies(endpoint, request_data)
 
 
 async def resolve_dependencies_async(
-    endpoint: Callable, request_data: RequestData
+    endpoint: Callable[..., Any], request_data: RequestData
 ) -> dict[str, Any]:
     """Convenience function to resolve dependencies (async)"""
     return await dependency_resolver.resolve_dependencies_async(endpoint, request_data)

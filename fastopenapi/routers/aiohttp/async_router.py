@@ -1,5 +1,6 @@
 import functools
 from collections.abc import Callable
+from typing import Any
 
 from aiohttp import web
 from pydantic_core import to_json
@@ -19,7 +20,7 @@ class AioHttpRouter(BaseAdapter):
     def __init__(self, app: web.Application = None, **kwargs):
         super().__init__(app, **kwargs)
 
-    def add_route(self, path: str, method: str, endpoint: Callable):
+    def add_route(self, path: str, method: str, endpoint: Callable[..., Any]) -> None:
         """Add route to AioHttp application"""
         super().add_route(path, method, endpoint)
 
@@ -28,7 +29,9 @@ class AioHttpRouter(BaseAdapter):
             self.app.router.add_route(method.upper(), path, view)
 
     @staticmethod
-    async def _aiohttp_view(request: web.Request, router, endpoint: Callable):
+    async def _aiohttp_view(
+        request: web.Request, router: Any, endpoint: Callable[..., Any]
+    ) -> Any:
         """Handle AioHttp request"""
         env = RequestEnvelope(request=request, path_params=None)
         return await router.handle_request_async(endpoint, env)
@@ -79,7 +82,7 @@ class AioHttpRouter(BaseAdapter):
     def is_framework_response(self, response: Response | web.Response) -> bool:
         return isinstance(response, web.Response)
 
-    def _register_docs_endpoints(self):
+    def _register_docs_endpoints(self) -> None:
         """Register documentation endpoints"""
 
         async def openapi_view(request):

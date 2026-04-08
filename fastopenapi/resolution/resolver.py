@@ -32,7 +32,7 @@ class ProcessedParameter:
         self,
         value: Any,
         needs_validation: bool = False,
-        field_info: tuple | None = None,
+        field_info: tuple[Any, ...] | None = None,
     ):
         self.value = value
         self.needs_validation = needs_validation
@@ -43,12 +43,16 @@ class ParameterResolver:
     """Resolve and validate endpoint parameters"""
 
     # Cache for dynamic models
-    _param_model_cache: dict[frozenset, type[BaseModel]] = {}
+    _param_model_cache: dict[frozenset[tuple[str, ...]], type[BaseModel]] = {}
     # Cache endpoint signature
-    _signature_cache: dict[Callable, MappingProxyType] = {}
+    _signature_cache: dict[
+        Callable[..., Any], MappingProxyType[str, inspect.Parameter]
+    ] = {}
 
     @classmethod
-    def _get_signature(cls, endpoint) -> MappingProxyType[str, inspect.Parameter]:
+    def _get_signature(
+        cls, endpoint: Callable[..., Any]
+    ) -> MappingProxyType[str, inspect.Parameter]:
         """Get cached signature parameters for endpoint"""
         if endpoint not in cls._signature_cache:
             sig = inspect.signature(endpoint)
@@ -56,7 +60,9 @@ class ParameterResolver:
         return cls._signature_cache[endpoint]
 
     @classmethod
-    def resolve(cls, endpoint: Callable, request_data: RequestData) -> dict[str, Any]:
+    def resolve(
+        cls, endpoint: Callable[..., Any], request_data: RequestData
+    ) -> dict[str, Any]:
         """Resolve all parameters for an endpoint"""
         params = cls._get_signature(endpoint)
         method = getattr(endpoint, "__route_meta__", {}).get("method")
@@ -82,7 +88,7 @@ class ParameterResolver:
 
     @classmethod
     async def resolve_async(
-        cls, endpoint: Callable, request_data: RequestData
+        cls, endpoint: Callable[..., Any], request_data: RequestData
     ) -> dict[str, Any]:
         params = cls._get_signature(endpoint)
         method = getattr(endpoint, "__route_meta__", {}).get("method")
@@ -106,14 +112,14 @@ class ParameterResolver:
 
     @staticmethod
     def _resolve_dependencies(
-        endpoint: Callable, request_data: RequestData
+        endpoint: Callable[..., Any], request_data: RequestData
     ) -> dict[str, Any]:
         """Resolve endpoint dependencies"""
         return dependency_resolver.resolve_dependencies(endpoint, request_data)
 
     @staticmethod
     async def _resolve_dependencies_async(
-        endpoint: Callable, request_data: RequestData
+        endpoint: Callable[..., Any], request_data: RequestData
     ) -> dict[str, Any]:
         """Resolve endpoint dependencies"""
         return await dependency_resolver.resolve_dependencies_async(
@@ -146,7 +152,7 @@ class ParameterResolver:
         params: MappingProxyType[str, inspect.Parameter],
         request_data: RequestData,
         method: str | None = None,
-    ) -> tuple[dict[str, Any], dict[str, tuple], dict[str, Any]]:
+    ) -> tuple[dict[str, Any], dict[str, tuple[Any, ...] | None], dict[str, Any]]:
         """Process all endpoint parameters"""
         regular_kwargs = {}
         model_fields = {}
@@ -365,7 +371,7 @@ class ParameterResolver:
         return param.annotation != inspect.Parameter.empty
 
     @staticmethod
-    def _build_field_info(param: inspect.Parameter) -> tuple:
+    def _build_field_info(param: inspect.Parameter) -> tuple[Any, ...]:
         """Build field info for Pydantic model creation from Param instance"""
         param_obj = param.default
         annotation = (
@@ -382,7 +388,7 @@ class ParameterResolver:
 
     @staticmethod
     def _process_numeric_constraints(
-        constraint, constraint_type: str, field_kwargs: dict
+        constraint: Any, constraint_type: str, field_kwargs: dict[str, Any]
     ) -> None:
         """Process numeric constraints (gt, ge, lt, le, multiple_of)"""
         constraint_mapping = {
@@ -400,7 +406,7 @@ class ParameterResolver:
 
     @staticmethod
     def _process_string_constraints(
-        constraint, constraint_type: str, field_kwargs: dict
+        constraint: Any, constraint_type: str, field_kwargs: dict[str, Any]
     ) -> None:
         """Process string constraints (min_length, max_length)"""
         if constraint_type == "MinLen" and hasattr(constraint, "min_length"):
@@ -409,21 +415,25 @@ class ParameterResolver:
             field_kwargs["max_length"] = constraint.max_length
 
     @staticmethod
-    def _process_pattern_constraint(constraint, field_kwargs: dict) -> None:
+    def _process_pattern_constraint(
+        constraint: Any, field_kwargs: dict[str, Any]
+    ) -> None:
         """Process pattern constraint"""
         if hasattr(constraint, "pattern"):
             field_kwargs["pattern"] = constraint.pattern
 
     @staticmethod
     def _process_strict_mode(
-        constraint, constraint_type: str, field_kwargs: dict
+        constraint: Any, constraint_type: str, field_kwargs: dict[str, Any]
     ) -> None:
         """Process strict mode constraint"""
         if constraint_type == "Strict":
             field_kwargs["strict"] = constraint.strict
 
     @staticmethod
-    def _process_float_decimal_constraints(constraint, field_kwargs: dict) -> None:
+    def _process_float_decimal_constraints(
+        constraint: Any, field_kwargs: dict[str, Any]
+    ) -> None:
         """Process float/decimal specific constraints"""
         float_decimal_attrs = ["allow_inf_nan", "max_digits", "decimal_places"]
 
@@ -432,7 +442,7 @@ class ParameterResolver:
                 field_kwargs[attr] = getattr(constraint, attr)
 
     @staticmethod
-    def _process_metadata(param_obj: Param, field_kwargs: dict) -> None:
+    def _process_metadata(param_obj: Param, field_kwargs: dict[str, Any]) -> None:
         """Process metadata fields (description, title)"""
         for meta in ["description", "title"]:
             value = getattr(param_obj, meta, None)
@@ -442,7 +452,7 @@ class ParameterResolver:
     @classmethod
     def _build_field_constraints(cls, param_obj: Param) -> dict[str, Any]:
         """Build field constraints from Param object"""
-        field_kwargs = {}
+        field_kwargs: dict[str, Any] = {}
         metadata = getattr(param_obj, "metadata", [])
 
         for constraint in metadata:
@@ -461,13 +471,13 @@ class ParameterResolver:
         return field_kwargs
 
     @staticmethod
-    def _is_pydantic_model(annotation) -> bool:
+    def _is_pydantic_model(annotation: Any) -> bool:
         """Check if annotation is a Pydantic model"""
         return isinstance(annotation, type) and issubclass(annotation, BaseModel)
 
     @staticmethod
     def _resolve_pydantic_model(
-        model_class: type[BaseModel], data: dict[str, Any] | list, param_name: str
+        model_class: type[BaseModel], data: dict[str, Any] | list[Any], param_name: str
     ) -> BaseModel:
         """Create Pydantic model instance from data"""
         try:
@@ -511,7 +521,9 @@ class ParameterResolver:
 
     @classmethod
     def _get_or_create_validation_model(
-        cls, endpoint: Callable, model_fields: dict[str, tuple]
+        cls,
+        endpoint: Callable[..., Any],
+        model_fields: dict[str, tuple[Any, ...] | None],
     ) -> type[BaseModel]:
         """Get or create validation model for given fields"""
         # Create cache key
@@ -529,7 +541,7 @@ class ParameterResolver:
             cls._param_model_cache[cache_key] = create_model(
                 "ParamsModel",
                 __base__=_ParamsBase,
-                **model_fields,
+                **model_fields,  # type: ignore[call-overload]
             )
 
         return cls._param_model_cache[cache_key]
@@ -537,8 +549,8 @@ class ParameterResolver:
     @classmethod
     def _validate_parameters(
         cls,
-        endpoint: Callable,
-        model_fields: dict[str, tuple],
+        endpoint: Callable[..., Any],
+        model_fields: dict[str, tuple[Any, ...] | None],
         model_values: dict[str, Any],
     ) -> dict[str, Any]:
         """Validate parameters using dynamic Pydantic model"""

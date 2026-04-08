@@ -13,22 +13,22 @@ class BaseRequestDataExtractor(ABC):
 
     @classmethod
     @abstractmethod
-    def _get_path_params(cls, request: Any) -> dict:
+    def _get_path_params(cls, request: Any) -> dict[str, Any]:
         """Extract path parameters"""
 
     @classmethod
     @abstractmethod
-    def _get_query_params(cls, request: Any) -> dict:
+    def _get_query_params(cls, request: Any) -> dict[str, Any]:
         """Extract query parameters"""
 
     @classmethod
     @abstractmethod
-    def _get_headers(cls, request: Any) -> dict:
+    def _get_headers(cls, request: Any) -> dict[str, Any]:
         """Extract headers"""
 
     @classmethod
     @abstractmethod
-    def _get_cookies(cls, request: Any) -> dict:
+    def _get_cookies(cls, request: Any) -> dict[str, Any]:
         """Extract cookies"""
 
     @classmethod
@@ -38,7 +38,7 @@ class BaseRequestDataExtractor(ABC):
 
     @classmethod
     @abstractmethod
-    def _get_form_data(cls, request: Any) -> dict:
+    def _get_form_data(cls, request: Any) -> dict[str, Any]:
         """Extract form data"""
 
     @classmethod
@@ -47,12 +47,12 @@ class BaseRequestDataExtractor(ABC):
         """Extract files"""
 
     @staticmethod
-    def _normalize_headers(headers: dict) -> dict:
+    def _normalize_headers(headers: dict[str, Any]) -> dict[str, Any]:
         """Normalize headers to lowercase"""
         return {k.lower(): v for k, v in headers.items()} if headers else {}
 
     @staticmethod
-    def _safe_json_parse(data: Any) -> dict | None:
+    def _safe_json_parse(data: Any) -> dict[str, Any] | None:
         """Safely parse JSON data"""
         if not data:
             return None
@@ -101,7 +101,7 @@ class BaseAsyncRequestDataExtractor(BaseRequestDataExtractor, ABC):
 
     @classmethod
     @abstractmethod
-    async def _get_form_data(cls, request: Any) -> dict:
+    async def _get_form_data(cls, request: Any) -> dict[str, Any]:
         """Extract form data"""
 
     @classmethod

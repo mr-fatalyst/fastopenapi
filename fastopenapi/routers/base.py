@@ -24,14 +24,14 @@ class BaseAdapter(BaseRouter, ABC):
 
     # Path conversion pattern
     PATH_CONVERSIONS = (r"{(\w+)}", r"{\1}")
-    EXCEPTION_MAPPER = {}
+    EXCEPTION_MAPPER: dict[type, type] = {}
 
     extractor_cls = BaseRequestDataExtractor
     extractor_async_cls = BaseAsyncRequestDataExtractor
     req_param_resolver_cls = ParameterResolver
     response_builder_cls = ResponseBuilder
 
-    _type_adapter_cache: dict[type, TypeAdapter] = {}
+    _type_adapter_cache: dict[type, TypeAdapter[Any]] = {}
     _cache_lock = threading.Lock()
 
     @abstractmethod
@@ -49,7 +49,7 @@ class BaseAdapter(BaseRouter, ABC):
         return re.sub(pattern, replacement, path)
 
     @classmethod
-    def _get_type_adapter(cls, resp_model):
+    def _get_type_adapter(cls, resp_model: Any) -> Any:
         """Get or create cached TypeAdapter"""
         if resp_model not in cls._type_adapter_cache:
             with cls._cache_lock:
@@ -59,7 +59,7 @@ class BaseAdapter(BaseRouter, ABC):
         return cls._type_adapter_cache[resp_model]
 
     @classmethod
-    def _validate_response(cls, result, response_model):
+    def _validate_response(cls, result: Any, response_model: Any) -> Any:
         try:
             if isinstance(response_model, type) and issubclass(
                 response_model, BaseModel
@@ -76,7 +76,7 @@ class BaseAdapter(BaseRouter, ABC):
                 details=f"Response validation failed: {e}",
             )
 
-    def handle_request(self, endpoint: Callable, env: RequestEnvelope) -> Any:
+    def handle_request(self, endpoint: Callable[..., Any], env: RequestEnvelope) -> Any:
         """Handle synchronous request"""
         try:
             request_data = self.extractor_cls.extract_request_data(env)
@@ -102,7 +102,7 @@ class BaseAdapter(BaseRouter, ABC):
             )
 
     async def handle_request_async(
-        self, endpoint: Callable, env: RequestEnvelope
+        self, endpoint: Callable[..., Any], env: RequestEnvelope
     ) -> Any:
         """Handle asynchronous request"""
         try:

@@ -1,6 +1,7 @@
 import inspect
 import re
 from collections.abc import Callable
+from typing import Any
 
 from django.core.exceptions import BadRequest, PermissionDenied
 from django.http import Http404, HttpResponse, HttpResponseBase, JsonResponse
@@ -34,16 +35,18 @@ class DjangoRouter(BaseAdapter):
 
     extractor_cls = DjangoRequestDataExtractor
 
-    def __init__(self, app=None, **kwargs):
-        self._views = {}
+    def __init__(self, app: Any = None, **kwargs: Any) -> None:
+        self._views: dict[str, Any] = {}
         super().__init__(app, **kwargs)
 
-    def add_route(self, path: str, method: str, endpoint: Callable):
+    def add_route(self, path: str, method: str, endpoint: Callable[..., Any]) -> None:
         """Add route to Django URL patterns"""
         super().add_route(path, method, endpoint)
         self._create_or_update_view(path, method, endpoint)
 
-    def _create_or_update_view(self, path: str, method: str, endpoint: Callable):
+    def _create_or_update_view(
+        self, path: str, method: str, endpoint: Callable[..., Any]
+    ) -> Any:
         """Create or update Django view for the path"""
         view = self._views.get(path)
         if not view:
@@ -110,7 +113,7 @@ class DjangoRouter(BaseAdapter):
     def is_framework_response(self, response: Response | HttpResponseBase) -> bool:
         return isinstance(response, HttpResponseBase)
 
-    def _register_docs_endpoints(self):  # pragma: no cover
+    def _register_docs_endpoints(self) -> None:  # pragma: no cover
         """Register documentation endpoints"""
         outer = self
 

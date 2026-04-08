@@ -11,12 +11,12 @@ from fastopenapi.routers.extractors import (
 
 class DjangoRequestDataExtractor(BaseRequestDataExtractor):
     @classmethod
-    def _get_path_params(cls, request: Any) -> dict:
+    def _get_path_params(cls, request: Any) -> dict[str, Any]:
         """Extract path parameters"""
         return getattr(request, "path_params", {})
 
     @classmethod
-    def _get_query_params(cls, request: Any) -> dict:
+    def _get_query_params(cls, request: Any) -> dict[str, Any]:
         """Extract query parameters"""
         query_params = {}
         for key in request.GET.keys():
@@ -25,12 +25,12 @@ class DjangoRequestDataExtractor(BaseRequestDataExtractor):
         return query_params
 
     @classmethod
-    def _get_headers(cls, request: Any) -> dict:
+    def _get_headers(cls, request: Any) -> dict[str, Any]:
         """Extract headers"""
         return dict(request.headers)
 
     @classmethod
-    def _get_cookies(cls, request: Any) -> dict:
+    def _get_cookies(cls, request: Any) -> dict[str, Any]:
         """Extract cookies"""
         return dict(request.COOKIES)
 
@@ -44,7 +44,7 @@ class DjangoRequestDataExtractor(BaseRequestDataExtractor):
         return {}
 
     @classmethod
-    def _get_form_data(cls, request: Any) -> dict:
+    def _get_form_data(cls, request: Any) -> dict[str, Any]:
         """Extract form data"""
         if hasattr(request, "POST"):
             form_data = {}
@@ -84,7 +84,7 @@ class DjangoAsyncRequestDataExtractor(
         return super()._get_body(request)
 
     @classmethod
-    async def _get_form_data(cls, request: Any) -> dict:
+    async def _get_form_data(cls, request: Any) -> dict[str, Any]:
         """Extract form data"""
         return super()._get_form_data(request)
 

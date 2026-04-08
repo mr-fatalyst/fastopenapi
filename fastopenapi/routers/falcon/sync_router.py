@@ -1,5 +1,6 @@
 import inspect
 from collections.abc import Callable
+from typing import Any
 
 import falcon
 
@@ -27,10 +28,10 @@ class FalconRouter(BaseAdapter):
     }
 
     def __init__(self, app: falcon.App = None, **kwargs):
-        self._resources = {}
+        self._resources: dict[str, Any] = {}
         super().__init__(app, **kwargs)
 
-    def add_route(self, path: str, method: str, endpoint: Callable):
+    def add_route(self, path: str, method: str, endpoint: Callable[..., Any]) -> None:
         """Add route to Falcon application"""
         super().add_route(path, method, endpoint)
 
@@ -38,7 +39,9 @@ class FalconRouter(BaseAdapter):
             resource = self._create_or_update_resource(path, method.upper(), endpoint)
             self.app.add_route(path, resource)
 
-    def _create_or_update_resource(self, path: str, method: str, endpoint):
+    def _create_or_update_resource(
+        self, path: str, method: str, endpoint: Callable[..., Any]
+    ) -> Any:
         """Create or update Falcon resource"""
         resource = self._get_or_create_resource(path)
         method_name = self.METHODS_MAPPER.get(method, f"on_{method.lower()}")
@@ -46,13 +49,15 @@ class FalconRouter(BaseAdapter):
         setattr(resource, method_name, handler)
         return resource
 
-    def _get_or_create_resource(self, path: str):
+    def _get_or_create_resource(self, path: str) -> Any:
         """Get existing resource or create new one"""
         if path not in self._resources:
             self._resources[path] = type("DynamicResource", (), {})()
         return self._resources[path]
 
-    def _build_response_handler(self, endpoint: Callable):
+    def _build_response_handler(
+        self, endpoint: Callable[..., Any]
+    ) -> Callable[..., None]:
         """Build request handler function for endpoint"""
 
         def handle(request, response, **path_params):
@@ -73,7 +78,7 @@ class FalconRouter(BaseAdapter):
 
         return handle
 
-    def _apply_falcon_response(self, result_response: Response, response):
+    def _apply_falcon_response(self, result_response: Response, response: Any) -> None:
         """Apply our Response to Falcon response object"""
         response.status = result_response.status_code
 
@@ -104,7 +109,7 @@ class FalconRouter(BaseAdapter):
             if key.lower() != "content-type":
                 response.set_header(key, value)
 
-    def _copy_falcon_response(self, source: falcon.Response, target):
+    def _copy_falcon_response(self, source: falcon.Response, target: Any) -> None:
         """Copy Falcon Response to response object"""
         target.status = source.status_code
         target.media = source.media
@@ -118,7 +123,7 @@ class FalconRouter(BaseAdapter):
     def is_framework_response(self, response: Response | falcon.Response) -> bool:
         return isinstance(response, falcon.Response)
 
-    def _register_docs_endpoints(self):
+    def _register_docs_endpoints(self) -> None:
         """Register documentation endpoints"""
         outer = self
 

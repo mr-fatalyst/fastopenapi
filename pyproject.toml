@@ -50,6 +50,12 @@ Repository = "https://github.com/mr-fatalyst/fastopenapi"
 Documentation = "https://fastopenapi.fatalyst.dev/"
 Issues = "https://github.com/mr-fatalyst/fastopenapi/issues"
 
+[tool.mypy]
+python_version = "3.10"
+packages = ["fastopenapi"]
+strict = true
+ignore_missing_imports = true
+
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
 build-backend = "poetry.core.masonry.api"

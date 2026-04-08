@@ -1,5 +1,8 @@
+from typing import Any
+
+
 class MissingRouter:
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         raise ImportError("This framework is not installed.")
 
 

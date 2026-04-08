@@ -1,5 +1,6 @@
 import inspect
 from collections.abc import Callable
+from typing import Any
 
 from flask import Response as FlaskResponse
 from flask import jsonify, make_response, request
@@ -18,7 +19,7 @@ class FlaskRouter(BaseAdapter):
 
     extractor_cls = FlaskRequestDataExtractor
 
-    def add_route(self, path: str, method: str, endpoint: Callable):
+    def add_route(self, path: str, method: str, endpoint: Callable[..., Any]) -> None:
         """Add route to Flask application"""
         super().add_route(path, method, endpoint)
 
@@ -72,7 +73,7 @@ class FlaskRouter(BaseAdapter):
     def is_framework_response(self, response: Response | FlaskResponse) -> bool:
         return isinstance(response, FlaskResponse)
 
-    def _register_docs_endpoints(self):
+    def _register_docs_endpoints(self) -> None:
         """Register documentation endpoints"""
 
         @self.app.route(self.openapi_url, methods=["GET"])

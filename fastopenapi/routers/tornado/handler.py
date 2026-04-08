@@ -1,3 +1,5 @@
+from typing import Any
+
 from tornado.web import RequestHandler
 
 from fastopenapi.routers.common import RequestEnvelope
@@ -7,15 +9,15 @@ from fastopenapi.routers.tornado.utils import json_encode
 class TornadoDynamicHandler(RequestHandler):
     """Dynamic request handler for Tornado"""
 
-    def initialize(self, **kwargs):
+    def initialize(self, **kwargs: Any) -> None:
         self.endpoints = kwargs.get("endpoints", {})
         self.router = kwargs.get("router")
 
-    async def prepare(self):
+    async def prepare(self) -> None:
         """Prepare request data"""
         self.endpoint = self.endpoints.get(self.request.method.upper())
 
-    def _set_response_headers(self, headers):
+    def _set_response_headers(self, headers: dict[str, str]) -> str | None:
         """Set response headers from result"""
         content_type = headers.get("Content-Type")
         if content_type:
@@ -27,7 +29,9 @@ class TornadoDynamicHandler(RequestHandler):
 
         return content_type
 
-    async def _send_response(self, content, content_type, status_code):
+    async def _send_response(
+        self, content: Any, content_type: str | None, status_code: int
+    ) -> None:
         """Send response based on content type"""
         if status_code == 204:
             await self.finish()
@@ -54,7 +58,7 @@ class TornadoDynamicHandler(RequestHandler):
                 self.set_header("Content-Type", "application/json")
             await self.finish(json_encode(content))
 
-    async def handle_request(self):
+    async def handle_request(self) -> None:
         """Common request handling"""
         if not hasattr(self, "endpoint") or not self.endpoint:
             self.send_error(405)
@@ -69,23 +73,23 @@ class TornadoDynamicHandler(RequestHandler):
             result_response.content, content_type, result_response.status_code
         )
 
-    async def get(self, *args, **kwargs):
+    async def get(self, *args: Any, **kwargs: Any) -> None:
         await self.handle_request()
 
-    async def post(self, *args, **kwargs):
+    async def post(self, *args: Any, **kwargs: Any) -> None:
         await self.handle_request()
 
-    async def put(self, *args, **kwargs):
+    async def put(self, *args: Any, **kwargs: Any) -> None:
         await self.handle_request()
 
-    async def patch(self, *args, **kwargs):
+    async def patch(self, *args: Any, **kwargs: Any) -> None:
         await self.handle_request()
 
-    async def delete(self, *args, **kwargs):
+    async def delete(self, *args: Any, **kwargs: Any) -> None:
         await self.handle_request()
 
-    async def head(self, *args, **kwargs):
+    async def head(self, *args: Any, **kwargs: Any) -> None:
         await self.handle_request()
 
-    async def options(self, *args, **kwargs):
+    async def options(self, *args: Any, **kwargs: Any) -> None:
         await self.handle_request()

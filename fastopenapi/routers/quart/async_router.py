@@ -1,4 +1,5 @@
 from collections.abc import Callable
+from typing import Any
 
 from quart import Response as QuartResponse
 from quart import jsonify, request
@@ -17,7 +18,7 @@ class QuartRouter(BaseAdapter):
 
     extractor_async_cls = QuartRequestDataExtractor
 
-    def add_route(self, path: str, method: str, endpoint: Callable):
+    def add_route(self, path: str, method: str, endpoint: Callable[..., Any]) -> None:
         """Add route to Quart application"""
         super().add_route(path, method, endpoint)
 
@@ -33,7 +34,7 @@ class QuartRouter(BaseAdapter):
                 quart_path, rule_endpoint, view_func, methods=[method.upper()]
             )
 
-    def build_framework_response(self, response: Response):
+    def build_framework_response(self, response: Response) -> Any:
         """Build Quart response"""
         if response.status_code in (204, 304):
             return "", response.status_code, {}
@@ -57,7 +58,7 @@ class QuartRouter(BaseAdapter):
     def is_framework_response(self, response: Response | QuartResponse) -> bool:
         return isinstance(response, QuartResponse)
 
-    def _register_docs_endpoints(self):
+    def _register_docs_endpoints(self) -> None:
         """Register documentation endpoints"""
 
         @self.app.route(self.openapi_url, methods=["GET"])

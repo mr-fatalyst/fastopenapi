@@ -13,12 +13,12 @@ _MULTIPART_CACHE_ATTR = "_fastopenapi_multipart_cache"
 
 class FalconRequestDataExtractor(BaseRequestDataExtractor):
     @classmethod
-    def _get_path_params(cls, request: Any) -> dict:
+    def _get_path_params(cls, request: Any) -> dict[str, Any]:
         """Extract path parameters"""
         return getattr(request, "path_params", {})
 
     @classmethod
-    def _get_query_params(cls, request: Any) -> dict:
+    def _get_query_params(cls, request: Any) -> dict[str, Any]:
         """Extract query parameters"""
         query_params = {}
         for key in request.params.keys():
@@ -31,12 +31,12 @@ class FalconRequestDataExtractor(BaseRequestDataExtractor):
         return query_params
 
     @classmethod
-    def _get_headers(cls, request: Any) -> dict:
+    def _get_headers(cls, request: Any) -> dict[str, Any]:
         """Extract headers"""
         return dict(request.headers)
 
     @classmethod
-    def _get_cookies(cls, request: Any) -> dict:
+    def _get_cookies(cls, request: Any) -> dict[str, Any]:
         """Extract cookies"""
         return dict(request.cookies)
 
@@ -55,13 +55,13 @@ class FalconRequestDataExtractor(BaseRequestDataExtractor):
     @classmethod
     def _parse_multipart(
         cls, request: Any
-    ) -> tuple[dict, dict[str, FileUpload | list[FileUpload]]]:
+    ) -> tuple[dict[str, Any], dict[str, FileUpload | list[FileUpload]]]:
         """Parse multipart stream once and cache the result on the request."""
         cached = getattr(request, _MULTIPART_CACHE_ATTR, None)
         if isinstance(cached, tuple):
             return cached
 
-        form_data = {}
+        form_data: dict[str, Any] = {}
         files: dict[str, FileUpload | list[FileUpload]] = {}
 
         form = request.get_media()
@@ -69,7 +69,7 @@ class FalconRequestDataExtractor(BaseRequestDataExtractor):
             filename = getattr(part, "secure_filename", None) or getattr(
                 part, "filename", None
             )
-            field_name = getattr(part, "name", filename)
+            field_name: str = getattr(part, "name", filename) or ""
 
             if filename:
                 content = part.stream.read()
@@ -94,7 +94,7 @@ class FalconRequestDataExtractor(BaseRequestDataExtractor):
         return result
 
     @classmethod
-    def _get_form_data(cls, request: Any) -> dict:
+    def _get_form_data(cls, request: Any) -> dict[str, Any]:
         """Extract form data"""
         ct = str(request.content_type or "").lower()
 
@@ -137,7 +137,7 @@ class FalconAsyncRequestDataExtractor(
         return {}
 
     @classmethod
-    async def _get_form_data(cls, request: Any) -> dict:
+    async def _get_form_data(cls, request: Any) -> dict[str, Any]:
         """Extract form data"""
         return super()._get_form_data(request)
 

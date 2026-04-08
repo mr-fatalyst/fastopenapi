@@ -10,12 +10,12 @@ _MULTIPART_CACHE_ATTR = "_fastopenapi_multipart_cache"
 
 class AioHttpRequestDataExtractor(BaseAsyncRequestDataExtractor):
     @classmethod
-    def _get_path_params(cls, request: Any) -> dict:
+    def _get_path_params(cls, request: Any) -> dict[str, Any]:
         """Extract path parameters"""
         return dict(request.match_info)
 
     @classmethod
-    def _get_query_params(cls, request: Any) -> dict:
+    def _get_query_params(cls, request: Any) -> dict[str, Any]:
         """Extract query parameters"""
         query_params = {}
         for key in request.query:
@@ -24,12 +24,12 @@ class AioHttpRequestDataExtractor(BaseAsyncRequestDataExtractor):
         return query_params
 
     @classmethod
-    def _get_headers(cls, request: Any) -> dict:
+    def _get_headers(cls, request: Any) -> dict[str, Any]:
         """Extract headers"""
         return dict(request.headers)
 
     @classmethod
-    def _get_cookies(cls, request: Any) -> dict:
+    def _get_cookies(cls, request: Any) -> dict[str, Any]:
         """Extract cookies"""
         return dict(request.cookies)
 
@@ -48,7 +48,7 @@ class AioHttpRequestDataExtractor(BaseAsyncRequestDataExtractor):
     @classmethod
     async def _parse_multipart(
         cls, request: Any
-    ) -> tuple[dict, dict[str, FileUpload | list[FileUpload]]]:
+    ) -> tuple[dict[str, Any], dict[str, FileUpload | list[FileUpload]]]:
         """Parse multipart stream once and cache the result on the request."""
         cached = getattr(request, _MULTIPART_CACHE_ATTR, None)
         if isinstance(cached, tuple):
@@ -83,7 +83,7 @@ class AioHttpRequestDataExtractor(BaseAsyncRequestDataExtractor):
         return result
 
     @classmethod
-    async def _get_form_data(cls, request: Any) -> dict:
+    async def _get_form_data(cls, request: Any) -> dict[str, Any]:
         """Extract form data"""
         content_type = request.content_type or ""
 

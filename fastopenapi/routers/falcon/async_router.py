@@ -1,3 +1,6 @@
+from collections.abc import Callable
+from typing import Any
+
 from falcon import Response as FalconResponse
 
 from fastopenapi.core.types import Response
@@ -10,7 +13,9 @@ from fastopenapi.routers.falcon.sync_router import FalconRouter
 class FalconAsyncRouter(FalconRouter):
     extractor_async_cls = FalconAsyncRequestDataExtractor
 
-    def _create_or_update_resource(self, path: str, method: str, endpoint):
+    def _create_or_update_resource(
+        self, path: str, method: str, endpoint: Callable[..., Any]
+    ) -> Any:
         """Create or update Falcon resource"""
         resource = self._resources.get(path)
         if not resource:
@@ -33,7 +38,7 @@ class FalconAsyncRouter(FalconRouter):
         setattr(resource, method_name, handle)
         return resource
 
-    def _register_docs_endpoints(self):
+    def _register_docs_endpoints(self) -> None:
         """Register documentation endpoints"""
         outer = self
 

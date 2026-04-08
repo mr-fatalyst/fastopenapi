@@ -1,4 +1,5 @@
 from collections.abc import Callable
+from typing import Any
 
 from django.http import HttpResponse, JsonResponse
 from django.views import View
@@ -13,7 +14,9 @@ from fastopenapi.routers.django.sync_router import DjangoRouter
 class DjangoAsyncRouter(DjangoRouter):
     extractor_async_cls = DjangoAsyncRequestDataExtractor
 
-    def _create_or_update_view(self, path: str, method: str, endpoint: Callable):
+    def _create_or_update_view(
+        self, path: str, method: str, endpoint: Callable[..., Any]
+    ) -> Any:
         """Create or update Django view for the path"""
         view = self._views.get(path)
         if not view:
@@ -32,7 +35,7 @@ class DjangoAsyncRouter(DjangoRouter):
         setattr(view, method_name, handle)
         return view
 
-    def _register_docs_endpoints(self):
+    def _register_docs_endpoints(self) -> None:
         """Register documentation endpoints"""
         outer = self
 

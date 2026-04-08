@@ -21,6 +21,7 @@ from fastopenapi.core.params import (
     Param,
     Security,
 )
+from fastopenapi.core.router import BaseRouter, RouteInfo
 
 # Thread-safe compiled regex patterns
 PATH_PARAM_PATTERN = re.compile(r"<(?:[^:>]+:)?([^>]+)>")
@@ -33,22 +34,22 @@ class ParameterInfo:
 
     name: str
     location: str
-    schema: dict
+    schema: dict[str, Any]
     required: bool = False
     description: str | None = None
-    examples: dict | None = None
+    examples: dict[str, Any] | None = None
     deprecated: bool = False
 
 
 class SchemaBuilder:
     """Helper class for building OpenAPI schemas"""
 
-    def __init__(self, definitions: dict, cache_lock: threading.Lock):
+    def __init__(self, definitions: dict[str, Any], cache_lock: threading.Lock):
         self.definitions = definitions
         self._cache_lock = cache_lock
-        self._model_schema_cache = {}
+        self._model_schema_cache: dict[str, Any] = {}
 
-    def build_parameter_schema(self, annotation) -> dict:
+    def build_parameter_schema(self, annotation: Any) -> dict[str, Any]:
         """Build OpenAPI schema for a parameter annotation"""
         origin = typing.get_origin(annotation)
 
@@ -62,7 +63,7 @@ class SchemaBuilder:
 
         return {"type": PYTHON_TYPE_MAPPING.get(annotation, "string")}
 
-    def _build_array_schema(self, annotation) -> dict:
+    def _build_array_schema(self, annotation: Any) -> dict[str, Any]:
         """Build schema for array types"""
         args = typing.get_args(annotation)
         item_type = "string"
@@ -70,7 +71,7 @@ class SchemaBuilder:
             item_type = PYTHON_TYPE_MAPPING[args[0]]
         return {"type": "array", "items": {"type": item_type}}
 
-    def _build_union_schema(self, annotation) -> dict:
+    def _build_union_schema(self, annotation: Any) -> dict[str, Any]:
         """Build schema for Union types (including Optional)"""
         args = typing.get_args(annotation)
         if type(None) in args:
@@ -82,7 +83,9 @@ class SchemaBuilder:
                 return schema
         return {"type": "string"}
 
-    def build_parameter_schema_from_param(self, param: inspect.Parameter) -> dict:
+    def build_parameter_schema_from_param(
+        self, param: inspect.Parameter
+    ) -> dict[str, Any]:
         """Build OpenAPI schema from Param object with full constraint support"""
         param_obj = param.default
         annotation = (
@@ -96,13 +99,17 @@ class SchemaBuilder:
 
         return schema
 
-    def _apply_param_constraints(self, schema: dict, param_obj: BaseParam) -> None:
+    def _apply_param_constraints(
+        self, schema: dict[str, Any], param_obj: BaseParam
+    ) -> None:
         """Apply validation constraints from Param object to schema"""
         self._apply_metadata_constraints(schema, param_obj)
         self._apply_object_metadata(schema, param_obj)
         self._apply_default_value(schema, param_obj)
 
-    def _apply_metadata_constraints(self, schema: dict, param_obj: BaseParam) -> None:
+    def _apply_metadata_constraints(
+        self, schema: dict[str, Any], param_obj: BaseParam
+    ) -> None:
         """Apply constraints from param metadata"""
         if not (hasattr(param_obj, "metadata") and param_obj.metadata):
             return
@@ -130,7 +137,9 @@ class SchemaBuilder:
             ):
                 schema["pattern"] = constraint.pattern
 
-    def _apply_object_metadata(self, schema: dict, param_obj: BaseParam) -> None:
+    def _apply_object_metadata(
+        self, schema: dict[str, Any], param_obj: BaseParam
+    ) -> None:
         """Apply object-level metadata"""
         attrs = ["title", "description", "example", "examples"]
         for attr in attrs:
@@ -139,7 +148,9 @@ class SchemaBuilder:
                 if value:
                     schema[attr] = value
 
-    def _apply_default_value(self, schema: dict, param_obj: BaseParam) -> None:
+    def _apply_default_value(
+        self, schema: dict[str, Any], param_obj: BaseParam
+    ) -> None:
         """Apply default value if serializable"""
         if not (
             hasattr(param_obj, "default")
@@ -157,7 +168,7 @@ class SchemaBuilder:
         except (TypeError, ValueError):
             pass
 
-    def get_model_schema(self, model: type[BaseModel]) -> dict:
+    def get_model_schema(self, model: type[BaseModel]) -> dict[str, Any]:
         """Get OpenAPI schema for a Pydantic model with thread-safe caching"""
         model_name = model.__name__
         cache_key = f"{model.__module__}.{model_name}"
@@ -193,16 +204,18 @@ class ParameterProcessor:
     def __init__(self, schema_builder: SchemaBuilder):
         self.schema_builder = schema_builder
 
-    def process_route_parameters(self, route) -> tuple[list[dict], dict | None]:
+    def process_route_parameters(
+        self, route: RouteInfo
+    ) -> tuple[list[dict[str, Any]], dict[str, Any] | None]:
         """Process route parameters and return parameters list and request body"""
         sig = inspect.signature(route.endpoint)
         path_params = self._extract_path_parameters(route.path)
 
-        parameters = []
-        body_fields: dict[str, dict] = {}
-        form_fields = {}
-        multipart_fields = {}
-        form_required = []
+        parameters: list[dict[str, Any]] = []
+        body_fields: dict[str, dict[str, Any]] = {}
+        form_fields: dict[str, Any] = {}
+        multipart_fields: dict[str, Any] = {}
+        form_required: list[str] = []
         has_explicit_embed = False
 
         for param_name, param in sig.parameters.items():
@@ -243,11 +256,11 @@ class ParameterProcessor:
         result: tuple[str, Any],
         param_name: str,
         param: inspect.Parameter,
-        parameters: list,
-        body_fields: dict,
-        form_fields: dict,
-        multipart_fields: dict,
-        form_required: list,
+        parameters: list[dict[str, Any]],
+        body_fields: dict[str, Any],
+        form_fields: dict[str, Any],
+        multipart_fields: dict[str, Any],
+        form_required: list[str],
     ) -> None:
         """Classify a processed parameter result into the appropriate collection"""
         param_type, data = result
@@ -269,12 +282,12 @@ class ParameterProcessor:
 
     def _resolve_request_body(
         self,
-        body_fields: dict[str, dict],
-        form_fields: dict,
-        multipart_fields: dict,
+        body_fields: dict[str, dict[str, Any]],
+        form_fields: dict[str, Any],
+        multipart_fields: dict[str, Any],
         has_explicit_embed: bool,
         form_required: list[str] | None = None,
-    ) -> dict | None:
+    ) -> dict[str, Any] | None:
         """Resolve final request body from collected fields"""
         if form_fields or multipart_fields:
             return self._build_form_request_body(
@@ -286,7 +299,7 @@ class ParameterProcessor:
             return next(iter(body_fields.values()))
         return None
 
-    def _extract_path_parameters(self, path: str) -> set:
+    def _extract_path_parameters(self, path: str) -> set[str]:
         """Extract path parameters from route path"""
         openapi_path = PATH_PARAM_PATTERN.sub(r"{\1}", path)
         return set(OPENAPI_PATH_PATTERN.findall(openapi_path))
@@ -303,7 +316,11 @@ class ParameterProcessor:
         return False
 
     def _process_single_parameter(
-        self, param_name: str, param: inspect.Parameter, path_params: set, method: str
+        self,
+        param_name: str,
+        param: inspect.Parameter,
+        path_params: set[str],
+        method: str,
     ) -> tuple[str, Any] | None:
         """Process a single parameter and return its type and data"""
 
@@ -351,8 +368,8 @@ class ParameterProcessor:
             return "request_body", request_body
 
     def _build_parameter_info(
-        self, param_name: str, param: inspect.Parameter, path_params: set
-    ) -> dict | None:
+        self, param_name: str, param: inspect.Parameter, path_params: set[str]
+    ) -> dict[str, Any] | None:
         """Build parameter info with full Param object integration"""
         param_obj = param.default
 
@@ -387,7 +404,7 @@ class ParameterProcessor:
         return param_info
 
     def _determine_parameter_location_and_name(
-        self, param_name: str, param_obj: Any, path_params: set
+        self, param_name: str, param_obj: Any, path_params: set[str]
     ) -> tuple[str, str]:
         """Determine parameter location and actual name"""
         if isinstance(param_obj, Param):
@@ -413,7 +430,9 @@ class ParameterProcessor:
 
         return location, actual_name
 
-    def _build_parameter_schema(self, param: inspect.Parameter, param_obj: Any) -> dict:
+    def _build_parameter_schema(
+        self, param: inspect.Parameter, param_obj: Any
+    ) -> dict[str, Any]:
         """Build parameter schema"""
         if isinstance(param_obj, Param):
             result = self.schema_builder.build_parameter_schema_from_param(param)
@@ -435,7 +454,7 @@ class ParameterProcessor:
             return param.default is inspect.Parameter.empty or location == "path"
 
     def _add_parameter_metadata(
-        self, param_info: dict, param_obj: Any, actual_name: str
+        self, param_info: dict[str, Any], param_obj: Any, actual_name: str
     ) -> None:
         """Add metadata to parameter info"""
         # Add OpenAPI-specific fields from Param object
@@ -467,7 +486,7 @@ class ParameterProcessor:
 
     def _build_form_field_schema(
         self, param_name: str, param: inspect.Parameter
-    ) -> dict:
+    ) -> dict[str, Any]:
         """Build schema for form field"""
         schema = self.schema_builder.build_parameter_schema_from_param(param)
         if "type" not in schema:
@@ -476,7 +495,7 @@ class ParameterProcessor:
 
     def _build_file_field_schema(
         self, param_name: str, param: inspect.Parameter
-    ) -> dict:
+    ) -> dict[str, Any]:
         """Build schema for file field"""
         schema = {"type": "string", "format": "binary"}
 
@@ -485,7 +504,7 @@ class ParameterProcessor:
 
         return schema
 
-    def _build_body_request_body(self, param: inspect.Parameter) -> dict:
+    def _build_body_request_body(self, param: inspect.Parameter) -> dict[str, Any]:
         """Build request body for Body parameter"""
         param_obj = param.default
         content_type = getattr(param_obj, "media_type", "application/json")
@@ -503,7 +522,9 @@ class ParameterProcessor:
         return request_body
 
     @staticmethod
-    def _build_embedded_request_body(body_fields: dict[str, dict]) -> dict:
+    def _build_embedded_request_body(
+        body_fields: dict[str, dict[str, Any]],
+    ) -> dict[str, Any]:
         """Build request body with multiple body params embedded by name"""
         properties = {}
         required = []
@@ -532,10 +553,10 @@ class ParameterProcessor:
 
     def _build_form_request_body(
         self,
-        form_fields: dict,
-        multipart_fields: dict,
+        form_fields: dict[str, Any],
+        multipart_fields: dict[str, Any],
         required: list[str] | None = None,
-    ) -> dict | None:
+    ) -> dict[str, Any] | None:
         """Build request body for form/multipart data"""
         if multipart_fields:
             all_fields = {**form_fields, **multipart_fields}
@@ -570,7 +591,7 @@ class ParameterProcessor:
 
     def _build_query_params_from_model(
         self, model_class: type[BaseModel]
-    ) -> list[dict]:
+    ) -> list[dict[str, Any]]:
         """Convert Pydantic model fields to query parameters"""
         parameters = []
         model_schema = model_class.model_json_schema(mode="serialization")
@@ -601,7 +622,7 @@ class ParameterProcessor:
         return parameters
 
     @staticmethod
-    def _is_pydantic_model(annotation) -> bool:
+    def _is_pydantic_model(annotation: Any) -> bool:
         """Check if annotation is a Pydantic model"""
         return isinstance(annotation, type) and issubclass(annotation, BaseModel)
 
@@ -612,7 +633,9 @@ class ResponseBuilder:
     def __init__(self, schema_builder: SchemaBuilder):
         self.schema_builder = schema_builder
 
-    def build_responses(self, route, has_security: bool = False) -> dict:
+    def build_responses(
+        self, route: RouteInfo, has_security: bool = False
+    ) -> dict[str, Any]:
         """Build responses section with enhanced error handling"""
         from http import HTTPStatus
 
@@ -631,7 +654,7 @@ class ResponseBuilder:
         return responses
 
     def _add_response_model(
-        self, responses: dict, status_code: str, response_model
+        self, responses: dict[str, Any], status_code: str, response_model: Any
     ) -> None:
         """Add response model to responses"""
         if not response_model:
@@ -654,7 +677,7 @@ class ResponseBuilder:
         responses[status_code]["content"] = {"application/json": {"schema": schema}}
 
     def _add_security_error_responses(
-        self, responses: dict, route, has_security: bool = False
+        self, responses: dict[str, Any], route: RouteInfo, has_security: bool = False
     ) -> None:
         """Add security-related error responses"""
         if not has_security:
@@ -672,7 +695,9 @@ class ResponseBuilder:
                 },
             }
 
-    def _add_custom_error_responses(self, responses: dict, route) -> None:
+    def _add_custom_error_responses(
+        self, responses: dict[str, Any], route: RouteInfo
+    ) -> None:
         """Add custom error responses"""
         from http import HTTPStatus
 
@@ -721,7 +746,7 @@ class ResponseBuilder:
                     }
 
     @staticmethod
-    def _is_pydantic_model(annotation) -> bool:
+    def _is_pydantic_model(annotation: Any) -> bool:
         """Check if annotation is a Pydantic model"""
         return isinstance(annotation, type) and issubclass(annotation, BaseModel)
 
@@ -729,9 +754,9 @@ class ResponseBuilder:
 class OpenAPIGenerator:
     """Generate OpenAPI schema from routes with full params.py integration"""
 
-    def __init__(self, router):
+    def __init__(self, router: BaseRouter):
         self.router = router
-        self.definitions = {}
+        self.definitions: dict[str, Any] = {}
         self._cache_lock = threading.Lock()
 
         # Initialize helper classes
@@ -739,7 +764,7 @@ class OpenAPIGenerator:
         self.parameter_processor = ParameterProcessor(self.schema_builder)
         self.response_builder = ResponseBuilder(self.schema_builder)
 
-    def generate(self) -> dict:
+    def generate(self) -> dict[str, Any]:
         """Generate complete OpenAPI schema"""
         self._add_error_schemas()
         paths = self._build_paths()
@@ -750,9 +775,9 @@ class OpenAPIGenerator:
 
         return schema
 
-    def _build_paths(self) -> dict:
+    def _build_paths(self) -> dict[str, Any]:
         """Build paths section from routes"""
-        paths = {}
+        paths: dict[str, Any] = {}
 
         for route in self.router.get_routes():
             openapi_path = self._convert_path(route.path)
@@ -765,7 +790,7 @@ class OpenAPIGenerator:
 
         return paths
 
-    def _build_base_schema(self, paths: dict) -> dict:
+    def _build_base_schema(self, paths: dict[str, Any]) -> dict[str, Any]:
         """Build base OpenAPI schema structure"""
         return {
             "openapi": self.router.openapi_version,
@@ -778,12 +803,12 @@ class OpenAPIGenerator:
             "components": {"schemas": self.definitions},
         }
 
-    def _add_security_schemes(self, schema: dict) -> None:
+    def _add_security_schemes(self, schema: dict[str, Any]) -> None:
         """Add security schemes if defined"""
         if hasattr(self.router, "_security_schemes") and self.router._security_schemes:
             schema["components"]["securitySchemes"] = self.router._security_schemes
 
-    def _add_global_security(self, schema: dict) -> None:
+    def _add_global_security(self, schema: dict[str, Any]) -> None:
         """Add global security if defined"""
         if hasattr(self.router, "_global_security") and self.router._global_security:
             schema["security"] = self.router._global_security
@@ -793,7 +818,7 @@ class OpenAPIGenerator:
         """Convert path format to OpenAPI format with caching"""
         return PATH_PARAM_PATTERN.sub(r"{\1}", path)
 
-    def _has_security_dependency(self, route) -> bool:
+    def _has_security_dependency(self, route: RouteInfo) -> bool:
         """Check if route has Security dependencies"""
         sig = inspect.signature(route.endpoint)
         for param in sig.parameters.values():
@@ -801,7 +826,7 @@ class OpenAPIGenerator:
                 return True
         return False
 
-    def _extract_security_scopes(self, route) -> list[str]:
+    def _extract_security_scopes(self, route: RouteInfo) -> list[str]:
         """Extract scopes from Security dependencies"""
         sig = inspect.signature(route.endpoint)
         all_scopes = []
@@ -810,7 +835,7 @@ class OpenAPIGenerator:
                 all_scopes.extend(param.default.scopes)
         return list(set(all_scopes))  # Remove duplicates
 
-    def _build_operation(self, route) -> dict:
+    def _build_operation(self, route: RouteInfo) -> dict[str, Any]:
         """Build operation object for a route"""
         parameters, request_body = self.parameter_processor.process_route_parameters(
             route
@@ -845,7 +870,11 @@ class OpenAPIGenerator:
         return operation
 
     def _add_optional_operation_fields(
-        self, operation: dict, route, parameters: list[dict], request_body: dict | None
+        self,
+        operation: dict[str, Any],
+        route: RouteInfo,
+        parameters: list[dict[str, Any]],
+        request_body: dict[str, Any] | None,
     ) -> None:
         """Add optional fields to operation"""
         if parameters:
@@ -862,7 +891,7 @@ class OpenAPIGenerator:
         if description:
             operation["description"] = description
 
-    def _add_error_schemas(self):
+    def _add_error_schemas(self) -> None:
         """Add comprehensive error response schemas"""
         self.definitions.update(
             {
@@ -871,7 +900,7 @@ class OpenAPIGenerator:
             }
         )
 
-    def _build_error_schema(self) -> dict:
+    def _build_error_schema(self) -> dict[str, Any]:
         """Build general error schema"""
         return {
             "type": "object",
@@ -890,7 +919,7 @@ class OpenAPIGenerator:
             "required": ["error"],
         }
 
-    def _build_pagination_params_schema(self) -> dict:
+    def _build_pagination_params_schema(self) -> dict[str, Any]:
         """Build pagination parameters schema"""
         return {
             "type": "object",

@@ -12,7 +12,9 @@ from fastopenapi.core.constants import (
 class RouteInfo:
     """Container for route information"""
 
-    def __init__(self, path: str, method: str, endpoint: Callable, meta: dict):
+    def __init__(
+        self, path: str, method: str, endpoint: Callable[..., Any], meta: dict[str, Any]
+    ):
         if method.upper() not in SUPPORTED_METHODS:
             raise ValueError(f"Unsupported method: {method}")
         self.path = path
@@ -38,7 +40,7 @@ class BaseRouter:
         version: str = "0.1.0",
         description: str = "API documentation",
         security_scheme: (
-            SecuritySchemeType | dict | None
+            SecuritySchemeType | dict[str, Any] | None
         ) = SecuritySchemeType.BEARER_JWT,
     ):
         self.app = app
@@ -50,9 +52,9 @@ class BaseRouter:
         self.version = version
         self.description = description
         self._routes: list[RouteInfo] = []
-        self._openapi_schema = None
-        self._security_schemes = None
-        self._global_security = []
+        self._openapi_schema: dict[str, Any] | None = None
+        self._security_schemes: dict[str, Any] | None = None
+        self._global_security: list[dict[str, list[str]]] = []
 
         if security_scheme:
             if isinstance(security_scheme, dict):
@@ -79,7 +81,7 @@ class BaseRouter:
         if self.app is not None and openapi_url:
             self._register_docs_endpoints()
 
-    def add_route(self, path: str, method: str, endpoint: Callable):
+    def add_route(self, path: str, method: str, endpoint: Callable[..., Any]) -> None:
         """Add a route to the router"""
         try:
             if not hasattr(endpoint, "__route_meta__"):
@@ -92,7 +94,7 @@ class BaseRouter:
         self._routes.append(route)
         self._openapi_schema = None
 
-    def include_router(self, other: "BaseRouter", prefix: str = ""):
+    def include_router(self, other: "BaseRouter", prefix: str = "") -> None:
         """Include routes from another router"""
         for route in other._routes:
             path = (
@@ -118,31 +120,33 @@ class BaseRouter:
         return self._routes
 
     # HTTP method decorators
-    def get(self, path: str, **meta):
+    def get(self, path: str, **meta: Any) -> Callable[..., Any]:
         return self._create_route_decorator(path, "GET", meta)
 
-    def post(self, path: str, **meta):
+    def post(self, path: str, **meta: Any) -> Callable[..., Any]:
         return self._create_route_decorator(path, "POST", meta)
 
-    def put(self, path: str, **meta):
+    def put(self, path: str, **meta: Any) -> Callable[..., Any]:
         return self._create_route_decorator(path, "PUT", meta)
 
-    def patch(self, path: str, **meta):
+    def patch(self, path: str, **meta: Any) -> Callable[..., Any]:
         return self._create_route_decorator(path, "PATCH", meta)
 
-    def delete(self, path: str, **meta):
+    def delete(self, path: str, **meta: Any) -> Callable[..., Any]:
         return self._create_route_decorator(path, "DELETE", meta)
 
-    def head(self, path: str, **meta):
+    def head(self, path: str, **meta: Any) -> Callable[..., Any]:
         return self._create_route_decorator(path, "HEAD", meta)
 
-    def options(self, path: str, **meta):
+    def options(self, path: str, **meta: Any) -> Callable[..., Any]:
         return self._create_route_decorator(path, "OPTIONS", meta)
 
-    def _create_route_decorator(self, path: str, method: str, meta: dict):
+    def _create_route_decorator(
+        self, path: str, method: str, meta: dict[str, Any]
+    ) -> Callable[..., Any]:
         """Create a decorator for route registration"""
 
-        def decorator(func: Callable):
+        def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
             meta["method"] = method
             func.__route_meta__ = meta
             self.add_route(path, method, func)
@@ -150,12 +154,12 @@ class BaseRouter:
 
         return decorator
 
-    def _register_docs_endpoints(self):
+    def _register_docs_endpoints(self) -> None:
         """Register documentation endpoints (to be implemented in routers)"""
         raise NotImplementedError
 
     @property
-    def openapi(self) -> dict:
+    def openapi(self) -> dict[str, Any]:
         """Get OpenAPI schema (lazy loading)"""
         if self._openapi_schema is None:
             from fastopenapi.openapi.generator import OpenAPIGenerator

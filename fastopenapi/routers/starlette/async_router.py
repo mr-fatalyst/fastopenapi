@@ -1,5 +1,6 @@
 import functools
 from collections.abc import Callable
+from typing import Any
 
 from pydantic_core import to_json
 from starlette.applications import Starlette
@@ -23,10 +24,10 @@ class StarletteRouter(BaseAdapter):
     extractor_async_cls = StarletteRequestDataExtractor
 
     def __init__(self, app: Starlette = None, **kwargs):
-        self._routes_starlette = []
+        self._routes_starlette: list[Route] = []
         super().__init__(app, **kwargs)
 
-    def add_route(self, path: str, method: str, endpoint: Callable):
+    def add_route(self, path: str, method: str, endpoint: Callable[..., Any]) -> None:
         """Add route to Starlette application"""
         super().add_route(path, method, endpoint)
 
@@ -88,7 +89,7 @@ class StarletteRouter(BaseAdapter):
     def is_framework_response(self, response: Response | StarletteResponse) -> bool:
         return isinstance(response, StarletteResponse)
 
-    def _register_docs_endpoints(self):
+    def _register_docs_endpoints(self) -> None:
         """Register documentation endpoints"""
 
         async def openapi_view(request):

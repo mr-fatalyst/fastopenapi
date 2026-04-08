@@ -8,12 +8,12 @@ from fastopenapi.routers.extractors import BaseAsyncRequestDataExtractor
 
 class StarletteRequestDataExtractor(BaseAsyncRequestDataExtractor):
     @classmethod
-    def _get_path_params(cls, request: Any) -> dict:
+    def _get_path_params(cls, request: Any) -> dict[str, Any]:
         """Extract path parameters"""
         return dict(request.path_params)
 
     @classmethod
-    def _get_query_params(cls, request: Any) -> dict:
+    def _get_query_params(cls, request: Any) -> dict[str, Any]:
         """Extract query parameters"""
         query_params = {}
         for key in request.query_params:
@@ -22,12 +22,12 @@ class StarletteRequestDataExtractor(BaseAsyncRequestDataExtractor):
         return query_params
 
     @classmethod
-    def _get_headers(cls, request: Any) -> dict:
+    def _get_headers(cls, request: Any) -> dict[str, Any]:
         """Extract headers"""
         return dict(request.headers)
 
     @classmethod
-    def _get_cookies(cls, request: Any) -> dict:
+    def _get_cookies(cls, request: Any) -> dict[str, Any]:
         """Extract cookies"""
         return dict(request.cookies)
 
@@ -42,7 +42,7 @@ class StarletteRequestDataExtractor(BaseAsyncRequestDataExtractor):
         return {}
 
     @classmethod
-    async def _get_form_data(cls, request: Any) -> dict:
+    async def _get_form_data(cls, request: Any) -> dict[str, Any]:
         """Extract form data"""
         form_data = {}
         content_type = request.headers.get("content-type", "")
@@ -61,7 +61,7 @@ class StarletteRequestDataExtractor(BaseAsyncRequestDataExtractor):
     @classmethod
     async def _get_files(cls, request: Any) -> dict[str, FileUpload | list[FileUpload]]:
         """Extract files from Starlette request"""
-        files = {}
+        files: dict[str, FileUpload | list[FileUpload]] = {}
         content_type = request.headers.get("content-type", "")
 
         if "multipart/form-data" in content_type:

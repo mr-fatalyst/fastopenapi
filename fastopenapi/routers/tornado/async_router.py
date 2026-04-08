@@ -1,4 +1,5 @@
 from collections.abc import Callable
+from typing import Any
 
 from tornado.web import Application, RequestHandler, url
 
@@ -18,12 +19,12 @@ class TornadoRouter(BaseAdapter):
     extractor_async_cls = TornadoRequestDataExtractor
 
     def __init__(self, app: Application = None, **kwargs):
-        self.routes = []
-        self._endpoint_map: dict[str, dict[str, Callable]] = {}
+        self.routes: list[Any] = []
+        self._endpoint_map: dict[str, dict[str, Callable[..., Any]]] = {}
         self._registered_paths: set[str] = set()
         super().__init__(app, **kwargs)
 
-    def add_route(self, path: str, method: str, endpoint: Callable):
+    def add_route(self, path: str, method: str, endpoint: Callable[..., Any]) -> None:
         """Add route to Tornado application"""
         super().add_route(path, method, endpoint)
 
@@ -50,7 +51,7 @@ class TornadoRouter(BaseAdapter):
                     rule.target_kwargs["endpoints"] = self._endpoint_map[tornado_path]
                     break
 
-    def build_framework_response(self, response: Response):
+    def build_framework_response(self, response: Response) -> Response:
         """Build Tornado response - handled directly in handler"""
         return response
 
@@ -58,7 +59,7 @@ class TornadoRouter(BaseAdapter):
         # I think we don't work with Tornado Response. It's always False.
         return False
 
-    def _register_docs_endpoints(self):
+    def _register_docs_endpoints(self) -> None:
         """Register documentation endpoints"""
         router = self
 
