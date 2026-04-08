@@ -56,6 +56,20 @@ packages = ["fastopenapi"]
 strict = true
 ignore_missing_imports = true
 
+[[tool.mypy.overrides]]
+module = [
+    "fastopenapi.routers.extractors",
+    "fastopenapi.routers.aiohttp.extractors",
+    "fastopenapi.routers.django.extractors",
+    "fastopenapi.routers.falcon.extractors",
+    "fastopenapi.routers.flask.extractors",
+    "fastopenapi.routers.quart.extractors",
+    "fastopenapi.routers.sanic.extractors",
+    "fastopenapi.routers.starlette.extractors",
+    "fastopenapi.routers.tornado.extractors",
+]
+disable_error_code = ["override"]
+
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
 build-backend = "poetry.core.masonry.api"
