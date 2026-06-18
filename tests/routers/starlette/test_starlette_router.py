@@ -5,7 +5,6 @@ from fastopenapi.routers import StarletteRouter
 
 
 class TestStarletteRouter:
-
     def test_router_initialization(self):
         """Test router initialization"""
         app = Starlette()

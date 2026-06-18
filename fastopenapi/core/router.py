@@ -1,5 +1,8 @@
 from collections.abc import Callable
-from typing import Any
+from typing import Any, Type
+from typing_extensions import Unpack, NotRequired, TypedDict
+
+from pydantic import BaseModel
 
 from fastopenapi.core.constants import (
     SECURITY_SCHEME_NAMES,
@@ -117,29 +120,46 @@ class BaseRouter:
         """Get all registered routes"""
         return self._routes
 
+    # TODO: move it later
+    class Meta(TypedDict):
+        response_model: NotRequired[Type[BaseModel]]
+        """Pydantic model used for response validation and generate OpenApi sepc"""
+
+        status_code: NotRequired[int]
+        """Status code returned, 200 by default"""
+
+        summary: NotRequired[str]
+        """TODO"""
+
+        description: NotRequired[str]
+        """Default to docstring if not specified"""
+
+        deprecated: NotRequired[bool]
+        """Mark the operation as deprecated, False by default"""
+
     # HTTP method decorators
-    def get(self, path: str, **meta):
+    def get(self, path: str, **meta: Unpack[Meta]):
         return self._create_route_decorator(path, "GET", meta)
 
-    def post(self, path: str, **meta):
+    def post(self, path: str, **meta: Unpack[Meta]):
         return self._create_route_decorator(path, "POST", meta)
 
-    def put(self, path: str, **meta):
+    def put(self, path: str, **meta: Unpack[Meta]):
         return self._create_route_decorator(path, "PUT", meta)
 
-    def patch(self, path: str, **meta):
+    def patch(self, path: str, **meta: Unpack[Meta]):
         return self._create_route_decorator(path, "PATCH", meta)
 
-    def delete(self, path: str, **meta):
+    def delete(self, path: str, **meta: Unpack[Meta]):
         return self._create_route_decorator(path, "DELETE", meta)
 
-    def head(self, path: str, **meta):
+    def head(self, path: str, **meta: Unpack[Meta]):
         return self._create_route_decorator(path, "HEAD", meta)
 
-    def options(self, path: str, **meta):
+    def options(self, path: str, **meta: Unpack[Meta]):
         return self._create_route_decorator(path, "OPTIONS", meta)
 
-    def _create_route_decorator(self, path: str, method: str, meta: dict):
+    def _create_route_decorator(self, path: str, method: str, meta: Meta):
         """Create a decorator for route registration"""
 
         def decorator(func: Callable):
