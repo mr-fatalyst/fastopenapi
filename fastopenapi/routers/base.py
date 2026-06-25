@@ -1,4 +1,5 @@
 import inspect
+import logging
 import re
 import threading
 from abc import ABC, abstractmethod
@@ -17,6 +18,8 @@ from fastopenapi.routers.extractors import (
     BaseAsyncRequestDataExtractor,
     BaseRequestDataExtractor,
 )
+
+logger = logging.getLogger("fastopenapi")
 
 
 class BaseAdapter(BaseRouter, ABC):
@@ -93,13 +96,7 @@ class BaseAdapter(BaseRouter, ABC):
                 response.content = None
             return self.build_framework_response(response)
         except Exception as e:
-            api_error = APIError.from_exception(e, self.EXCEPTION_MAPPER)
-            return self.build_framework_response(
-                Response(
-                    content=api_error.to_response(),
-                    status_code=api_error.status_code,
-                )
-            )
+            return self.handle_exception(e)
 
     async def handle_request_async(
         self, endpoint: Callable[..., Any], env: RequestEnvelope
@@ -125,10 +122,28 @@ class BaseAdapter(BaseRouter, ABC):
                 response.content = None
             return self.build_framework_response(response)
         except Exception as e:
-            api_error = APIError.from_exception(e, self.EXCEPTION_MAPPER)
-            return self.build_framework_response(
-                Response(
-                    content=api_error.to_response(),
-                    status_code=api_error.status_code,
-                )
+            return self.handle_exception(e)
+
+    def handle_exception(self, exc: Exception) -> Any:
+        """Convert an exception into a framework response.
+
+        Override to customize how errors are turned into responses.
+        """
+        api_error = APIError.from_exception(exc, self.EXCEPTION_MAPPER)
+        self.log_exception(exc, api_error)
+        return self.build_framework_response(
+            Response(
+                content=api_error.to_response(),
+                status_code=api_error.status_code,
             )
+        )
+
+    def log_exception(self, exc: Exception, api_error: APIError) -> None:
+        """Log unexpected server faults.
+
+        Only server errors (status >= 500) are logged with a traceback;
+        intentional 4xx responses are left untouched. Override to redirect
+        logging (e.g. Sentry) or to silence it entirely.
+        """
+        if api_error.status_code >= 500:
+            logger.error("Unhandled exception while processing request", exc_info=exc)
