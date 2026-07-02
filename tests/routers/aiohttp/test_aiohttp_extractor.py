@@ -107,6 +107,7 @@ class TestAioHttpRequestDataExtractor:
     async def test_get_body_json(self):
         """Test JSON body extraction"""
         request = Mock()
+        request.content_type = "application/json"
         request.read = AsyncMock(return_value=b'{"key": "value"}')
         request.json = AsyncMock(return_value={"key": "value"})
 
@@ -119,6 +120,7 @@ class TestAioHttpRequestDataExtractor:
     async def test_get_body_empty(self):
         """Test empty body"""
         request = Mock()
+        request.content_type = "application/json"
         request.read = AsyncMock(return_value=b"")
 
         result = await AioHttpRequestDataExtractor._get_body(request)
@@ -130,6 +132,7 @@ class TestAioHttpRequestDataExtractor:
     async def test_get_body_json_error(self):
         """Test body with JSON parsing error"""
         request = Mock()
+        request.content_type = "application/json"
         request.read = AsyncMock(return_value=b'{"invalid": json}')
         request.json = AsyncMock(side_effect=Exception("Invalid JSON"))
 

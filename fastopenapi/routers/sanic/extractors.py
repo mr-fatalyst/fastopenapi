@@ -26,8 +26,18 @@ class SanicRequestDataExtractor(BaseAsyncRequestDataExtractor):
 
     @classmethod
     def _get_cookies(cls, request: Any) -> dict[str, Any]:
-        """Extract cookies"""
-        return dict(request.cookies)
+        """Extract cookies.
+
+        Sanic's cookie container is a dict of lists, so plain dict() over it
+        would yield list values.
+        """
+        raw = request.cookies
+        getlist = getattr(raw, "getlist", None)
+        cookies = {}
+        for key in raw:
+            values = getlist(key) if getlist else [raw[key]]
+            cookies[key] = values[0] if len(values) == 1 else values
+        return cookies
 
     @classmethod
     async def _get_body(cls, request: Any) -> dict | list | None:

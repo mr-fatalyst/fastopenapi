@@ -35,7 +35,14 @@ class AioHttpRequestDataExtractor(BaseAsyncRequestDataExtractor):
 
     @classmethod
     async def _get_body(cls, request: Any) -> dict | list | None:
-        """Extract JSON body"""
+        """Extract JSON body.
+
+        Non-JSON payloads are left untouched: reading them here would
+        drain the stream that the multipart parser consumes later.
+        """
+        content_type = str(request.content_type or "")
+        if content_type != "application/json" and not content_type.endswith("+json"):
+            return {}
         try:
             body_bytes = await request.read()
             if body_bytes:

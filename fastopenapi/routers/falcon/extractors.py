@@ -40,10 +40,28 @@ class FalconRequestDataExtractor(BaseRequestDataExtractor):
         """Extract cookies"""
         return dict(request.cookies)
 
+    @staticmethod
+    def _mimetype(request: Any) -> str:
+        """Content type without parameters such as charset or boundary"""
+        return str(request.content_type or "").partition(";")[0].strip().lower()
+
+    @staticmethod
+    def _add_file(
+        files: dict[str, FileUpload | list[FileUpload]],
+        field_name: str,
+        file_upload: FileUpload,
+    ) -> None:
+        existing = files.get(field_name)
+        if existing is None:
+            files[field_name] = file_upload
+        elif isinstance(existing, list):
+            existing.append(file_upload)
+        else:
+            files[field_name] = [existing, file_upload]
+
     @classmethod
     def _get_body(cls, request: Any) -> dict | list | None:
-        ct = (request.content_type or "").lower()
-        if ct == "application/json":
+        if cls._mimetype(request) == "application/json":
             try:
                 body_bytes = request.bounded_stream.read()
                 if body_bytes:
@@ -64,14 +82,12 @@ class FalconRequestDataExtractor(BaseRequestDataExtractor):
         form_data: dict[str, Any] = {}
         files: dict[str, FileUpload | list[FileUpload]] = {}
 
-        form = request.get_media()
-        for part in form:
-            filename = getattr(part, "secure_filename", None) or getattr(
-                part, "filename", None
-            )
-            field_name: str = getattr(part, "name", filename) or ""
-
-            if filename:
+        for part in request.get_media():
+            field_name = getattr(part, "name", None) or ""
+            if part.filename:
+                # secure_filename raises for parts without a filename,
+                # so it may only be read inside this branch
+                filename = getattr(part, "secure_filename", None) or part.filename
                 content = part.stream.read()
                 file_upload = FileUpload(
                     filename=filename,
@@ -79,13 +95,7 @@ class FalconRequestDataExtractor(BaseRequestDataExtractor):
                     size=len(content),
                     file=content,
                 )
-                if field_name in files:
-                    if isinstance(files[field_name], list):
-                        files[field_name].append(file_upload)
-                    else:
-                        files[field_name] = [files[field_name], file_upload]
-                else:
-                    files[field_name] = file_upload
+                cls._add_file(files, field_name, file_upload)
             else:
                 form_data[field_name] = part.text
 
@@ -96,12 +106,12 @@ class FalconRequestDataExtractor(BaseRequestDataExtractor):
     @classmethod
     def _get_form_data(cls, request: Any) -> dict[str, Any]:
         """Extract form data"""
-        ct = str(request.content_type or "").lower()
+        mimetype = cls._mimetype(request)
 
-        if ct == "application/x-www-form-urlencoded":
+        if mimetype == "application/x-www-form-urlencoded":
             return request.media or {}
 
-        if "multipart/form-data" in ct and hasattr(request, "get_media"):
+        if mimetype == "multipart/form-data" and hasattr(request, "get_media"):
             form_data, _ = cls._parse_multipart(request)
             return form_data
 
@@ -110,9 +120,9 @@ class FalconRequestDataExtractor(BaseRequestDataExtractor):
     @classmethod
     def _get_files(cls, request: Any) -> dict[str, FileUpload | list[FileUpload]]:
         """Extract files from Falcon request (sync)"""
-        ct = str(request.content_type or "").lower()
+        mimetype = cls._mimetype(request)
 
-        if "multipart/form-data" in ct and hasattr(request, "get_media"):
+        if mimetype == "multipart/form-data" and hasattr(request, "get_media"):
             _, files = cls._parse_multipart(request)
             return files
 
@@ -126,8 +136,7 @@ class FalconAsyncRequestDataExtractor(
     @classmethod
     async def _get_body(cls, request: Any) -> bytes | str | dict:
         """Extract body"""
-        ct = (request.content_type or "").lower()
-        if ct == "application/json":
+        if cls._mimetype(request) == "application/json":
             try:
                 body_bytes = await request.bounded_stream.read()
                 if body_bytes:
@@ -137,11 +146,58 @@ class FalconAsyncRequestDataExtractor(
         return {}
 
     @classmethod
+    async def _parse_multipart(
+        cls, request: Any
+    ) -> tuple[dict[str, Any], dict[str, FileUpload | list[FileUpload]]]:
+        """Parse multipart stream once and cache the result on the request."""
+        cached = getattr(request, _MULTIPART_CACHE_ATTR, None)
+        if isinstance(cached, tuple):
+            return cached
+
+        form_data: dict[str, Any] = {}
+        files: dict[str, FileUpload | list[FileUpload]] = {}
+
+        form = await request.get_media()
+        async for part in form:
+            field_name = getattr(part, "name", None) or ""
+            if part.filename:
+                filename = getattr(part, "secure_filename", None) or part.filename
+                content = await part.get_data()
+                file_upload = FileUpload(
+                    filename=filename,
+                    content_type=getattr(part, "content_type", None),
+                    size=len(content),
+                    file=content,
+                )
+                cls._add_file(files, field_name, file_upload)
+            else:
+                form_data[field_name] = await part.get_text()
+
+        result = (form_data, files)
+        setattr(request, _MULTIPART_CACHE_ATTR, result)
+        return result
+
+    @classmethod
     async def _get_form_data(cls, request: Any) -> dict[str, Any]:
         """Extract form data"""
-        return super()._get_form_data(request)
+        mimetype = cls._mimetype(request)
+
+        if mimetype == "application/x-www-form-urlencoded":
+            return (await request.get_media()) or {}
+
+        if mimetype == "multipart/form-data" and hasattr(request, "get_media"):
+            form_data, _ = await cls._parse_multipart(request)
+            return form_data
+
+        return {}
 
     @classmethod
     async def _get_files(cls, request: Any) -> dict[str, FileUpload | list[FileUpload]]:
         """Extract files"""
-        return super()._get_files(request)
+        mimetype = cls._mimetype(request)
+
+        if mimetype == "multipart/form-data" and hasattr(request, "get_media"):
+            _, files = await cls._parse_multipart(request)
+            return files
+
+        return {}
