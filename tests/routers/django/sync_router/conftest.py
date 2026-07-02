@@ -264,6 +264,9 @@ def django_settings(urls):
     globals()["urlpatterns"] = [path("", urls)]
     if not settings.configured:
         settings.configure(ROOT_URLCONF=__name__)
+    # Point resolution at this module even if another suite configured first
+    settings.ROOT_URLCONF = __name__
+    clear_url_caches()
     try:
         yield settings
     finally:

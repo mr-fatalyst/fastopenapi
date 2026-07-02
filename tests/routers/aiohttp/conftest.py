@@ -1,4 +1,5 @@
 import pytest
+import pytest_asyncio
 from aiohttp import web
 from pydantic import BaseModel
 
@@ -165,14 +166,12 @@ def app(items_db):  # noqa: C901
     return app
 
 
-@pytest.fixture
-def client(app, event_loop):
+@pytest_asyncio.fixture
+async def client(app):
     from aiohttp.test_utils import TestClient, TestServer
 
-    server = TestServer(app, loop=event_loop)
-    event_loop.run_until_complete(server.start_server())
-    client = TestClient(server, loop=event_loop)
-    event_loop.run_until_complete(client.start_server())
+    server = TestServer(app)
+    client = TestClient(server)
+    await client.start_server()
     yield client
-    event_loop.run_until_complete(client.close())
-    event_loop.run_until_complete(server.close())
+    await client.close()

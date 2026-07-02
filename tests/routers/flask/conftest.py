@@ -36,6 +36,7 @@ def items_db():
 @pytest.fixture
 def app(items_db):  # noqa: C901
     app = Flask(__name__)
+    app.testing = True
     router = FlaskRouter(
         app=app,
         title="Test API",

@@ -21,7 +21,7 @@ class TestAioHttpRouter:
         assert router.version == "1.0.0"
         assert router.app == app
 
-    def test_add_route(self, event_loop):
+    def test_add_route(self):
         """Test adding a route"""
         app = web.Application()
         router = AioHttpRouter(app=app)
@@ -37,7 +37,7 @@ class TestAioHttpRouter:
         ]
         assert len(routes) == 1
 
-    def test_include_router(self, event_loop):
+    def test_include_router(self):
         """Test including a sub-router"""
         app = web.Application()
         main_router = AioHttpRouter(app=app)

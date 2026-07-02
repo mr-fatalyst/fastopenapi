@@ -36,14 +36,14 @@ class TestFlaskIntegration:
         assert result["received"] == "test-123"
 
     def test_get_items_async(self, client):
-        """Test fetching an item by ID"""
+        """Test that an async endpoint on the sync router raises an error"""
         with pytest.raises(Exception) as excinfo:
             client.get("/items-async")
-            err_msg = (
-                "Async endpoint 'get_items_async'"
-                " cannot be used with Flask. Use Quart for async support."
-            )
-            assert err_msg in str(excinfo.value)
+        err_msg = (
+            "Async endpoint 'get_items_async'"
+            " cannot be used with Flask. Use Quart for async support."
+        )
+        assert err_msg in str(excinfo.value)
 
     def test_get_items_fail(self, client):
         """Test fetching all items with an error"""
