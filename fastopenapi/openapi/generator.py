@@ -10,7 +10,11 @@ from typing import Any
 from pydantic import BaseModel
 from pydantic_core import PydanticUndefined
 
-from fastopenapi.core.constants import PYTHON_TYPE_MAPPING, ParameterSource
+from fastopenapi.core.constants import (
+    NO_BODY_METHODS,
+    PYTHON_TYPE_MAPPING,
+    ParameterSource,
+)
 from fastopenapi.core.params import (
     BaseParam,
     Body,
@@ -20,6 +24,7 @@ from fastopenapi.core.params import (
     Header,
     Param,
     Security,
+    unwrap_annotated_parameter,
 )
 from fastopenapi.core.router import BaseRouter, RouteInfo
 
@@ -51,6 +56,9 @@ class SchemaBuilder:
 
     def build_parameter_schema(self, annotation: Any) -> dict[str, Any]:
         """Build OpenAPI schema for a parameter annotation"""
+        if hasattr(annotation, "__metadata__"):
+            annotation = annotation.__origin__
+
         origin = typing.get_origin(annotation)
 
         if origin is list:
@@ -219,6 +227,7 @@ class ParameterProcessor:
         has_explicit_embed = False
 
         for param_name, param in sig.parameters.items():
+            param = unwrap_annotated_parameter(param)
             if self._should_skip_parameter(param):
                 continue
 
@@ -340,6 +349,13 @@ class ParameterProcessor:
         if isinstance(param.default, Body):
             return "request_body", self._build_body_request_body(param)
 
+        # Handle containers of models (list[Model], Model | None, ...)
+        if (
+            self._is_body_model_annotation(param.annotation)
+            and method not in NO_BODY_METHODS
+        ):
+            return "request_body", self._build_model_container_body(param)
+
         # Handle regular parameters
         param_info = self._build_parameter_info(param_name, param, path_params)
         if param_info:
@@ -351,8 +367,8 @@ class ParameterProcessor:
         self, param: inspect.Parameter, method: str
     ) -> tuple[str, Any]:
         """Process Pydantic model parameter"""
-        if method == "GET":
-            # For GET, extract as query parameters
+        if method in NO_BODY_METHODS:
+            # For no-body methods, extract as query parameters
             query_params = self._build_query_params_from_model(param.annotation)
             return (
                 "parameters",
@@ -366,6 +382,51 @@ class ParameterProcessor:
                 "required": param.default is inspect.Parameter.empty,
             }
             return "request_body", request_body
+
+    @classmethod
+    def _is_body_model_annotation(cls, annotation: Any) -> bool:
+        """Check if annotation is a model or a container of models"""
+        if cls._is_pydantic_model(annotation):
+            return True
+        origin = typing.get_origin(annotation)
+        args = typing.get_args(annotation)
+        if origin is list:
+            return bool(args) and cls._is_body_model_annotation(args[0])
+        if origin is typing.Union or origin is types.UnionType:
+            return any(
+                cls._is_body_model_annotation(arg)
+                for arg in args
+                if arg is not type(None)
+            )
+        return False
+
+    def _build_model_container_body(self, param: inspect.Parameter) -> dict[str, Any]:
+        """Build request body for containers of models"""
+        return {
+            "content": {
+                "application/json": {
+                    "schema": self._model_container_schema(param.annotation)
+                }
+            },
+            "required": param.default is inspect.Parameter.empty,
+        }
+
+    def _model_container_schema(self, annotation: Any) -> dict[str, Any]:
+        """Build schema for a model or a container of models"""
+        if self._is_pydantic_model(annotation):
+            return self.schema_builder.get_model_schema(annotation)
+        origin = typing.get_origin(annotation)
+        args = typing.get_args(annotation)
+        if origin is list and args:
+            return {"type": "array", "items": self._model_container_schema(args[0])}
+        if origin is typing.Union or origin is types.UnionType:
+            non_none = [arg for arg in args if arg is not type(None)]
+            if len(non_none) == 1:
+                schema = self._model_container_schema(non_none[0])
+                if type(None) in args:
+                    schema = {**schema, "nullable": True}
+                return schema
+        return self.schema_builder.build_parameter_schema(annotation)
 
     def _build_parameter_info(
         self, param_name: str, param: inspect.Parameter, path_params: set[str]
@@ -822,7 +883,7 @@ class OpenAPIGenerator:
         """Check if route has Security dependencies"""
         sig = inspect.signature(route.endpoint)
         for param in sig.parameters.values():
-            if isinstance(param.default, Security):
+            if isinstance(unwrap_annotated_parameter(param).default, Security):
                 return True
         return False
 
@@ -831,8 +892,9 @@ class OpenAPIGenerator:
         sig = inspect.signature(route.endpoint)
         all_scopes = []
         for param in sig.parameters.values():
-            if isinstance(param.default, Security):
-                all_scopes.extend(param.default.scopes)
+            default = unwrap_annotated_parameter(param).default
+            if isinstance(default, Security):
+                all_scopes.extend(default.scopes)
         return list(set(all_scopes))  # Remove duplicates
 
     def _build_operation(self, route: RouteInfo) -> dict[str, Any]:

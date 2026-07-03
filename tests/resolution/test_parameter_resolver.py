@@ -320,7 +320,7 @@ class TestParameterResolver:
         source = ParameterResolver._determine_source("data", param, {})
         assert source == ParameterSource.BODY
 
-    @pytest.mark.parametrize("method", ["GET", "HEAD", "DELETE"])
+    @pytest.mark.parametrize("method", ["GET", "HEAD"])
     def test_determine_source_pydantic_model_no_body_methods(self, method) -> None:
         """Test that Pydantic models resolve as QUERY for NO_BODY methods"""
 
@@ -338,7 +338,7 @@ class TestParameterResolver:
         )
         assert source == ParameterSource.QUERY
 
-    @pytest.mark.parametrize("method", ["POST", "PUT", "PATCH"])
+    @pytest.mark.parametrize("method", ["POST", "PUT", "PATCH", "DELETE"])
     def test_determine_source_pydantic_model_body_methods(self, method) -> None:
         """Test that Pydantic models resolve as BODY for body-carrying methods"""
 
@@ -988,9 +988,7 @@ class TestParameterResolver:
 
     def test_get_or_create_validation_model_caching(self) -> None:
         """Test validation model caching"""
-
-        def endpoint(param1: int, param2: str) -> None:
-            pass
+        owner = (__name__, "endpoint")
 
         # Use simple tuples to ensure consistent cache keys
         model_fields = {
@@ -1002,11 +1000,11 @@ class TestParameterResolver:
         ParameterResolver._param_model_cache.clear()
 
         # First call - creates model
-        ParameterResolver._get_or_create_validation_model(endpoint, model_fields)
+        ParameterResolver._get_or_create_validation_model(owner, model_fields)
         cache_size_after_first = len(ParameterResolver._param_model_cache)
 
         # Second call - should use cache (cache size shouldn't increase)
-        ParameterResolver._get_or_create_validation_model(endpoint, model_fields)
+        ParameterResolver._get_or_create_validation_model(owner, model_fields)
         cache_size_after_second = len(ParameterResolver._param_model_cache)
 
         # Verify caching worked
@@ -1015,15 +1013,13 @@ class TestParameterResolver:
 
     def test_get_or_create_validation_model_different_fields(self) -> None:
         """Test validation model creation for different field sets"""
-
-        def endpoint(param: int) -> None:
-            pass
+        owner = (__name__, "endpoint")
 
         fields1 = {"param1": (int, ...)}
         fields2 = {"param2": (str, ...)}
 
-        model1 = ParameterResolver._get_or_create_validation_model(endpoint, fields1)
-        model2 = ParameterResolver._get_or_create_validation_model(endpoint, fields2)
+        model1 = ParameterResolver._get_or_create_validation_model(owner, fields1)
+        model2 = ParameterResolver._get_or_create_validation_model(owner, fields2)
 
         assert model1 is not model2
         assert len(ParameterResolver._param_model_cache) == 2
@@ -1083,7 +1079,6 @@ class TestParameterResolver:
 
         with patch("fastopenapi.resolution.resolver.create_model") as mock_create:
             mock_model = Mock()
-            mock_instance = Mock()
 
             # Create PydanticValidationError with empty errors list
             from pydantic import ValidationError as PydanticValidationError
@@ -1092,8 +1087,7 @@ class TestParameterResolver:
                 "TestModel", []
             )
 
-            mock_model.return_value = mock_instance
-            mock_instance.model_dump.side_effect = validation_error
+            mock_model.side_effect = validation_error
             mock_create.return_value = mock_model
 
             with pytest.raises(ValidationError, match="Parameter validation failed"):

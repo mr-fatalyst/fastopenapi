@@ -284,7 +284,7 @@ class TestDependencyResolver:
         with patch(
             "fastopenapi.resolution.resolver.ParameterResolver"
         ) as mock_resolver:
-            mock_resolver.resolve.side_effect = Exception("Resolver failed")
+            mock_resolver.resolve_params.side_effect = Exception("Resolver failed")
 
             with pytest.raises(
                 DependencyError, match="Failed to resolve required parameter"
@@ -304,7 +304,7 @@ class TestDependencyResolver:
         with patch(
             "fastopenapi.resolution.resolver.ParameterResolver"
         ) as mock_resolver:
-            mock_resolver.resolve.side_effect = ValidationError("Bad param")
+            mock_resolver.resolve_params.side_effect = ValidationError("Bad param")
 
             with pytest.raises(ValidationError, match="Bad param"):
                 self.resolver.resolve_dependencies(endpoint, self.request_data)
@@ -321,7 +321,7 @@ class TestDependencyResolver:
         with patch(
             "fastopenapi.resolution.resolver.ParameterResolver"
         ) as mock_resolver:
-            mock_resolver.resolve.side_effect = Exception("Resolver failed")
+            mock_resolver.resolve_params.side_effect = Exception("Resolver failed")
 
             result = self.resolver.resolve_dependencies(endpoint, self.request_data)
             assert result == {"dep": "default1_42"}
@@ -574,8 +574,6 @@ class TestDependencyResolver:
         # Initial state
         stats = self.resolver.get_cache_stats()
         assert "active_requests" in stats
-        assert "execution_locks" in stats
-        initial_locks = stats["execution_locks"]
 
         def test_dep():
             return "result"
@@ -622,12 +620,8 @@ class TestDependencyResolver:
         stats = self.resolver.get_cache_stats()
         assert stats["active_requests"] == 2
 
-        # Resolve dependencies to create execution locks
+        # Resolution works with pre-seeded request caches
         self.resolver.resolve_dependencies(endpoint, request1)
-
-        # Check execution locks created
-        stats = self.resolver.get_cache_stats()
-        assert stats["execution_locks"] >= initial_locks
 
         # Clean up
         with self.resolver._request_cache_lock:
@@ -642,7 +636,6 @@ class TestDependencyResolver:
         stats = resolver.get_cache_stats()
 
         assert stats["active_requests"] == 0
-        assert stats["execution_locks"] == 0
 
     def test_get_cache_stats_after_request_cleanup(self):
         """Test get_cache_stats after request cache cleanup"""
@@ -677,38 +670,27 @@ class TestDependencyResolver:
 
         assert isinstance(stats, dict)
         assert "active_requests" in stats
-        assert "execution_locks" in stats
         assert stats["active_requests"] >= 0
-        assert stats["execution_locks"] >= 0
 
-    def test_execution_locks_accumulation(self):
-        """Test that execution locks are created for different functions"""
+    def test_signature_cache_does_not_grow_per_request(self):
+        """Repeated resolution must not add new signature-cache entries"""
 
-        def dep1():
-            return "dep1"
+        def dep1(flag: bool = False):
+            return flag
 
-        def dep2():
-            return "dep2"
+        def endpoint(d1: bool = Depends(dep1)):
+            return d1
 
-        def dep3():
-            return "dep3"
-
-        def endpoint(
-            d1: str = Depends(dep1), d2: str = Depends(dep2), d3: str = Depends(dep3)
-        ):
-            return f"{d1}_{d2}_{d3}"
-
-        initial_stats = self.resolver.get_cache_stats()
-        initial_locks = initial_stats["execution_locks"]
-
-        # Resolve dependencies - should create locks for each unique function
         self.resolver.resolve_dependencies(endpoint, self.request_data)
+        size_after_first = len(self.resolver._signature_cache)
 
-        final_stats = self.resolver.get_cache_stats()
-        final_locks = final_stats["execution_locks"]
+        for _ in range(5):
+            request = RequestData(
+                path_params={}, query_params={}, headers={}, cookies={}, body={}
+            )
+            self.resolver.resolve_dependencies(endpoint, request)
 
-        # Should have created at least 3 new locks (one per dependency function)
-        assert final_locks >= initial_locks + 3
+        assert len(self.resolver._signature_cache) == size_after_first
 
     def test_request_cache_hit_performance(self):
         """Test that cache hit prevents function re-execution within same request"""
@@ -1080,7 +1062,7 @@ class TestDependencyResolver:
         with patch(
             "fastopenapi.resolution.resolver.ParameterResolver"
         ) as mock_resolver:
-            mock_resolver.resolve.side_effect = Exception("Resolver failed")
+            mock_resolver.resolve_params.side_effect = Exception("Resolver failed")
             with pytest.raises(
                 DependencyError, match="Failed to resolve required parameter"
             ):
@@ -1102,7 +1084,7 @@ class TestDependencyResolver:
         with patch(
             "fastopenapi.resolution.resolver.ParameterResolver"
         ) as mock_resolver:
-            mock_resolver.resolve.side_effect = ValidationError("Bad param")
+            mock_resolver.resolve_params.side_effect = ValidationError("Bad param")
 
             with pytest.raises(ValidationError, match="Bad param"):
                 await self.resolver.resolve_dependencies_async(
@@ -1122,7 +1104,7 @@ class TestDependencyResolver:
         with patch(
             "fastopenapi.resolution.resolver.ParameterResolver"
         ) as mock_resolver:
-            mock_resolver.resolve.side_effect = Exception("Resolver failed")
+            mock_resolver.resolve_params.side_effect = Exception("Resolver failed")
             result = await self.resolver.resolve_dependencies_async(
                 endpoint, self.request_data
             )

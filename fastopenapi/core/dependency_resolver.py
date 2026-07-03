@@ -6,7 +6,12 @@ from types import MappingProxyType
 from typing import Any
 from weakref import WeakKeyDictionary
 
-from fastopenapi.core.params import Depends, Security, SecurityScopes
+from fastopenapi.core.params import (
+    Depends,
+    Security,
+    SecurityScopes,
+    unwrap_annotated_parameter,
+)
 from fastopenapi.core.types import RequestData
 from fastopenapi.errors.exceptions import (
     APIError,
@@ -32,10 +37,6 @@ class DependencyResolver:
             WeakKeyDictionary()
         )
         self._request_cache_lock = threading.RLock()
-
-        # Execution locks per dependency function to prevent race conditions
-        self._execution_locks_lock = threading.Lock()
-        self._execution_locks: dict[int, threading.Lock] = {}
 
         # Dependency signature cache
         self._signature_cache: dict[
@@ -184,35 +185,22 @@ class DependencyResolver:
         cache_key = self._make_cache_key(dependency_func, request_data)
         request_cache = self._get_request_cache(request_data)
 
-        # First check (without lock)
+        # The cache is request-scoped and a request is handled by a single
+        # thread, so no cross-request synchronization is needed here
         hit, value = self._try_get_cached(cache_key, request_cache)
         if hit:
             return value
 
-        # Get or create lock for this function
-        func_id = id(dependency_func)
-        with self._execution_locks_lock:
-            if func_id not in self._execution_locks:
-                self._execution_locks[func_id] = threading.Lock()
-            func_lock = self._execution_locks[func_id]
-
-        # Synchronize execution per function
-        with func_lock:
-            # Second check (double-checked locking pattern)
-            hit, value = self._try_get_cached(cache_key, request_cache)
-            if hit:
-                return value
-
-            # Guard against circular dependencies
-            with self._resolving_guard(request_cache, dependency_func, param_name):
-                sub_dependencies = self._resolve_sub_dependencies(
-                    dependency_func, request_data, security_scopes
-                )
-                result = self._call_dependency(
-                    dependency_func, sub_dependencies or {}, request_data
-                )
-                self._cache_result(cache_key, result, request_cache)
-                return result
+        # Guard against circular dependencies
+        with self._resolving_guard(request_cache, dependency_func, param_name):
+            sub_dependencies = self._resolve_sub_dependencies(
+                dependency_func, request_data, security_scopes
+            )
+            result = self._call_dependency(
+                dependency_func, sub_dependencies or {}, request_data
+            )
+            self._cache_result(cache_key, result, request_cache)
+            return result
 
     def _call_sync_generator(
         self,
@@ -311,43 +299,52 @@ class DependencyResolver:
 
         # Resolve regular parameters using ParameterResolver
         if regular_params:
-            try:
-                from fastopenapi.resolution.resolver import ParameterResolver
-
-                # Create temporary function with only regular parameters
-                def _temp():  # pragma: no cover
-                    return None
-
-                temp_sig = inspect.Signature(regular_params.values())
-                temp_func = _temp
-                temp_func.__signature__ = temp_sig
-                temp_func.__name__ = f"temp_deps_for_{dependency_func.__name__}"
-
-                # Resolve all regular parameters using full ParameterResolver
-                resolved_regular = ParameterResolver.resolve(temp_func, request_data)
-                sub_dependencies.update(resolved_regular)
-
-            except (DependencyError, APIError):
-                raise
-            except Exception as e:
-                # If ParameterResolver fails completely, use defaults or raise error
-                for param_name, param in regular_params.items():
-                    if param.default is not inspect.Parameter.empty:
-                        # Use default value
-                        default_val = (
-                            param.default
-                            if not isinstance(param.default, (Depends, Security))
-                            else None
-                        )
-                        sub_dependencies[param_name] = default_val
-                    else:
-                        # Required parameter without default - this is an error
-                        raise DependencyError(
-                            f"Failed to resolve required parameter '{param_name}' "
-                            f"for dependency '{dependency_func.__name__}'"
-                        ) from e
+            sub_dependencies.update(
+                self._resolve_regular_params(
+                    dependency_func, regular_params, request_data
+                )
+            )
 
         return sub_dependencies
+
+    @staticmethod
+    def _resolve_regular_params(
+        dependency_func: Callable[..., Any],
+        regular_params: dict[str, inspect.Parameter],
+        request_data: RequestData,
+    ) -> dict[str, Any]:
+        """Resolve non-dependency parameters of a dependency function"""
+        from fastopenapi.resolution.resolver import ParameterResolver
+
+        try:
+            return ParameterResolver.resolve_params(
+                regular_params,
+                request_data,
+                owner=(
+                    getattr(dependency_func, "__module__", "fastopenapi"),
+                    getattr(dependency_func, "__qualname__", repr(dependency_func)),
+                ),
+            )
+        except (DependencyError, APIError):
+            raise
+        except Exception as e:
+            # If ParameterResolver fails completely, use defaults or raise error
+            resolved = {}
+            for param_name, param in regular_params.items():
+                if param.default is not inspect.Parameter.empty:
+                    # Use default value
+                    resolved[param_name] = (
+                        param.default
+                        if not isinstance(param.default, (Depends, Security))
+                        else None
+                    )
+                else:
+                    # Required parameter without default - this is an error
+                    raise DependencyError(
+                        f"Failed to resolve required parameter '{param_name}' "
+                        f"for dependency '{dependency_func.__name__}'"
+                    ) from e
+            return resolved
 
     async def resolve_dependencies_async(
         self,
@@ -365,8 +362,10 @@ class DependencyResolver:
             Dict mapping parameter names to resolved dependency values
         """
         # Initialize request-scoped tracking
+        is_top_level = False
         with self._request_cache_lock:
             if request_data not in self._request_cache:
+                is_top_level = True
                 self._request_cache[request_data] = {
                     "resolved": {},
                     "resolving": set(),
@@ -378,23 +377,24 @@ class DependencyResolver:
                 endpoint, request_data
             )
         finally:
-            # Get generators before deleting cache
-            with self._request_cache_lock:
-                cache = self._request_cache.get(request_data, {})
-                generators = list(cache.get("generators", []))
-            # Close generators (triggers finally blocks)
-            for gen in generators:
-                try:
-                    if inspect.isasyncgen(gen):
-                        await gen.aclose()
-                    else:
-                        gen.close()
-                except Exception:
-                    pass
-            # Clean up request cache
-            with self._request_cache_lock:
-                if request_data in self._request_cache:
-                    del self._request_cache[request_data]
+            if is_top_level:
+                # Get generators before deleting cache
+                with self._request_cache_lock:
+                    cache = self._request_cache.get(request_data, {})
+                    generators = list(cache.get("generators", []))
+                # Close generators (triggers finally blocks)
+                for gen in generators:
+                    try:
+                        if inspect.isasyncgen(gen):
+                            await gen.aclose()
+                        else:
+                            gen.close()
+                    except Exception:
+                        pass
+                # Clean up request cache
+                with self._request_cache_lock:
+                    if request_data in self._request_cache:
+                        del self._request_cache[request_data]
 
     async def _resolve_endpoint_dependencies_async(
         self, endpoint: Callable[..., Any], request_data: RequestData
@@ -548,41 +548,11 @@ class DependencyResolver:
 
         # Resolve regular parameters using ParameterResolver
         if regular_params:
-            try:
-                from fastopenapi.resolution.resolver import ParameterResolver
-
-                # Create temporary function with only regular parameters
-                def _temp():  # pragma: no cover
-                    return None
-
-                temp_sig = inspect.Signature(regular_params.values())
-                temp_func = _temp
-                temp_func.__signature__ = temp_sig
-                temp_func.__name__ = f"temp_deps_for_{dependency_func.__name__}"
-
-                # Resolve all regular parameters using full ParameterResolver
-                resolved_regular = ParameterResolver.resolve(temp_func, request_data)
-                sub_dependencies.update(resolved_regular)
-
-            except (DependencyError, APIError):
-                raise
-            except Exception as e:
-                # If ParameterResolver fails completely, use defaults or raise error
-                for param_name, param in regular_params.items():
-                    if param.default is not inspect.Parameter.empty:
-                        # Use default value
-                        default_val = (
-                            param.default
-                            if not isinstance(param.default, (Depends, Security))
-                            else None
-                        )
-                        sub_dependencies[param_name] = default_val
-                    else:
-                        # Required parameter without default - this is an error
-                        raise DependencyError(
-                            f"Failed to resolve required parameter '{param_name}' "
-                            f"for dependency '{dependency_func.__name__}'"
-                        ) from e
+            sub_dependencies.update(
+                self._resolve_regular_params(
+                    dependency_func, regular_params, request_data
+                )
+            )
 
         return sub_dependencies
 
@@ -657,17 +627,17 @@ class DependencyResolver:
         """Get function signature with caching"""
         if func not in self._signature_cache:
             sig = inspect.signature(func)
-            self._signature_cache[func] = sig.parameters
+            params = {
+                name: unwrap_annotated_parameter(param)
+                for name, param in sig.parameters.items()
+            }
+            self._signature_cache[func] = MappingProxyType(params)
         return self._signature_cache[func]
 
     def get_cache_stats(self) -> dict[str, int]:
         """Get cache statistics for monitoring"""
-        with self._execution_locks_lock:
-            locks_count = len(self._execution_locks)
-
         return {
             "active_requests": len(self._request_cache),
-            "execution_locks": locks_count,
         }
 
 

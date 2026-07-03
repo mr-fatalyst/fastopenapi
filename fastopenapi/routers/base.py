@@ -85,16 +85,7 @@ class BaseAdapter(BaseRouter, ABC):
             request_data = self.extractor_cls.extract_request_data(env)
             kwargs = self.req_param_resolver_cls.resolve(endpoint, request_data)
             result = endpoint(**kwargs)
-            route_meta = endpoint.__route_meta__
-            response_model = route_meta.get("response_model")
-            if response_model:
-                result = self._validate_response(result, response_model)
-            if self.is_framework_response(result):
-                return result
-            response = self.response_builder_cls.build(result, endpoint.__route_meta__)
-            if route_meta.get("status_code") == 204:
-                response.content = None
-            return self.build_framework_response(response)
+            return self._finalize_result(endpoint, result)
         except Exception as e:
             return self.handle_exception(e)
 
@@ -111,18 +102,24 @@ class BaseAdapter(BaseRouter, ABC):
                 result = await endpoint(**kwargs)
             else:
                 result = endpoint(**kwargs)
-            route_meta = endpoint.__route_meta__
-            response_model = route_meta.get("response_model")
-            if response_model:
-                result = self._validate_response(result, response_model)
-            if self.is_framework_response(result):
-                return result
-            response = self.response_builder_cls.build(result, route_meta)
-            if route_meta.get("status_code") == 204:
-                response.content = None
-            return self.build_framework_response(response)
+            return self._finalize_result(endpoint, result)
         except Exception as e:
             return self.handle_exception(e)
+
+    def _finalize_result(self, endpoint: Callable[..., Any], result: Any) -> Any:
+        """Validate and convert an endpoint result into a framework response"""
+        if self.is_framework_response(result):
+            return result
+        route_meta = endpoint.__route_meta__
+        response_model = route_meta.get("response_model")
+        # Explicit Response objects and (body, status, ...) tuples opt out
+        # of response-model validation
+        if response_model and not isinstance(result, (Response, tuple)):
+            result = self._validate_response(result, response_model)
+        response = self.response_builder_cls.build(result, route_meta)
+        if route_meta.get("status_code") == 204:
+            response.content = None
+        return self.build_framework_response(response)
 
     def handle_exception(self, exc: Exception) -> Any:
         """Convert an exception into a framework response.

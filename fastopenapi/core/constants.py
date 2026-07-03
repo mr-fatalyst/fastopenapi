@@ -5,7 +5,8 @@ REDOC_URL = "https://cdn.jsdelivr.net/npm/redoc@next/bundles/redoc.standalone.js
 
 # HTTP methods
 SUPPORTED_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"]
-NO_BODY_METHODS = {"GET", "HEAD", "DELETE"}
+# DELETE is allowed to carry a body (RFC 9110, FastAPI-compatible)
+NO_BODY_METHODS = {"GET", "HEAD"}
 
 # Type mappings
 PYTHON_TYPE_MAPPING = {

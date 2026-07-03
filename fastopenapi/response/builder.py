@@ -41,8 +41,6 @@ class ResponseBuilder:
         """Serialize response data"""
         if isinstance(data, BaseModel):
             return data.model_dump(by_alias=True, mode="json")
-        if isinstance(data, list) and data and isinstance(data[0], BaseModel):
-            return [item.model_dump(by_alias=True, mode="json") for item in data]
         if isinstance(data, list):
             return [cls._serialize(item) for item in data]
         if isinstance(data, dict):

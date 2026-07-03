@@ -3,6 +3,8 @@ FastAPI-compatible parameter system for FastOpenAPI
 Pydantic v2 only, no deprecated features
 """
 
+import copy
+import inspect
 from collections.abc import Callable, Sequence
 from typing import Any
 
@@ -557,3 +559,32 @@ class SecurityScopes:
 
     def __init__(self, scopes: list[str] | None = None):
         self.scopes = scopes or []
+
+
+def unwrap_annotated_parameter(param: inspect.Parameter) -> inspect.Parameter:
+    """Extract a Param/Depends marker from Annotated[...] metadata.
+
+    Turns ``x: Annotated[int, Query(ge=1)] = 5`` into the equivalent of
+    ``x: int = Query(ge=1, default=5)`` so the rest of the pipeline sees
+    the default-value declaration style.
+    """
+    metadata = getattr(param.annotation, "__metadata__", None)
+    if not metadata:
+        return param
+
+    marker = None
+    for meta in metadata:
+        if isinstance(meta, (BaseParam, Depends)):
+            marker = meta
+    if marker is None:
+        return param
+
+    base_type = param.annotation.__origin__
+
+    if isinstance(marker, Depends):
+        return param.replace(annotation=base_type, default=marker)
+
+    field = copy.copy(marker)
+    if param.default is not inspect.Parameter.empty:
+        field.default = param.default
+    return param.replace(annotation=base_type, default=field)
