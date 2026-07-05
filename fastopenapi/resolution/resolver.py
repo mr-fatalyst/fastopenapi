@@ -60,14 +60,16 @@ class ParameterResolver:
         cls, endpoint: Callable[..., Any]
     ) -> MappingProxyType[str, inspect.Parameter]:
         """Get cached signature parameters for endpoint"""
-        if endpoint not in cls._signature_cache:
+        cached = cls._signature_cache.get(endpoint)
+        if cached is None:
             sig = inspect.signature(endpoint)
             params = {
                 name: unwrap_annotated_parameter(param)
                 for name, param in sig.parameters.items()
             }
-            cls._signature_cache[endpoint] = MappingProxyType(params)
-        return cls._signature_cache[endpoint]
+            # setdefault keeps concurrent computations consistent without a lock
+            cached = cls._signature_cache.setdefault(endpoint, MappingProxyType(params))
+        return cached
 
     @classmethod
     def _get_type_adapter(cls, annotation: Any) -> TypeAdapter[Any]:
@@ -639,18 +641,23 @@ class ParameterResolver:
         )
 
         # Get or create model
-        if cache_key not in cls._param_model_cache:
+        model_class = cls._param_model_cache.get(cache_key)
+        if model_class is None:
 
             class _ParamsBase(BaseModel):
                 model_config = ConfigDict(arbitrary_types_allowed=True)
 
-            cls._param_model_cache[cache_key] = create_model(
-                "ParamsModel",
-                __base__=_ParamsBase,
-                **model_fields,  # type: ignore[call-overload]
+            # setdefault keeps concurrent computations consistent without a lock
+            model_class = cls._param_model_cache.setdefault(
+                cache_key,
+                create_model(
+                    "ParamsModel",
+                    __base__=_ParamsBase,
+                    **model_fields,  # type: ignore[call-overload]
+                ),
             )
 
-        return cls._param_model_cache[cache_key]
+        return model_class
 
     @classmethod
     def _validate_parameters(

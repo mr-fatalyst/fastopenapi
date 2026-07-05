@@ -526,17 +526,11 @@ class TestOpenAPIGenerator:
         assert "message" in error_schema["properties"]["error"]["properties"]
         assert "status" in error_schema["properties"]["error"]["properties"]
 
-    def test_pagination_params_schema(self):
-        """Test pagination parameters schema"""
+    def test_no_unreferenced_builtin_schemas(self):
+        """Only ErrorSchema is added implicitly; no PaginationParams junk"""
         schema = self.generator.generate()
 
-        assert "PaginationParams" in schema["components"]["schemas"]
-        pagination_schema = schema["components"]["schemas"]["PaginationParams"]
-
-        assert "page" in pagination_schema["properties"]
-        assert "limit" in pagination_schema["properties"]
-        assert pagination_schema["properties"]["page"]["minimum"] == 1
-        assert pagination_schema["properties"]["limit"]["maximum"] == 100
+        assert "ErrorSchema" in schema["components"]["schemas"]
 
     def test_schema_builder_init(self):
         """Test SchemaBuilder initialization"""
@@ -575,11 +569,21 @@ class TestOpenAPIGenerator:
             assert schema == {"type": "array", "items": {"type": "string"}}
 
     def test_schema_builder_build_union_schema_non_optional(self):
-        """Test building schema for non-Optional Union types"""
+        """Non-Optional unions become anyOf instead of degrading to string"""
         builder = SchemaBuilder({}, threading.Lock())
 
         schema = builder._build_union_schema(Union[str, int])
-        assert schema == {"type": "string"}
+        assert schema == {"anyOf": [{"type": "string"}, {"type": "integer"}]}
+
+    def test_schema_builder_build_union_schema_optional_multi(self):
+        """Optional multi-unions are nullable anyOf"""
+        builder = SchemaBuilder({}, threading.Lock())
+
+        schema = builder._build_union_schema(Optional[Union[str, int]])
+        assert schema == {
+            "anyOf": [{"type": "string"}, {"type": "integer"}],
+            "nullable": True,
+        }
 
     def test_schema_builder_build_union_schema_empty(self):
         """Test building schema for empty"""
@@ -1094,8 +1098,8 @@ class TestOpenAPIGenerator:
 
         assert param_info["example"] == "laptop"
 
-    def test_parameter_processor_add_parameter_metadata_common_descriptions(self):
-        """Test adding common parameter descriptions"""
+    def test_parameter_processor_does_not_invent_descriptions(self):
+        """The library must not guess semantics of user parameter names"""
         processor = ParameterProcessor(self.generator.schema_builder)
 
         param_info = {}
@@ -1103,7 +1107,7 @@ class TestOpenAPIGenerator:
 
         processor._add_parameter_metadata(param_info, param_obj, "page")
 
-        assert param_info["description"] == "Pagination page"
+        assert "description" not in param_info
 
     def test_parameter_processor_build_form_field_schema(self):
         """Test building form field schema"""
@@ -1847,3 +1851,154 @@ class TestOpenAPIGenerator:
         assert content_schema.get("type") != "object" or "title" in content_schema.get(
             "properties", {}
         )
+
+
+class TestSchemaCorrectness:
+    """Regressions for schema-level correctness (stage 6)"""
+
+    def setup_method(self):
+        self.router = BaseRouter(title="Test API", version="1.0.0")
+        self.generator = OpenAPIGenerator(self.router)
+
+    def test_same_name_models_get_distinct_schemas(self):
+        """Two different models named alike must not share one schema"""
+        from pydantic import create_model
+
+        UserA = create_model("User", a=(int, ...))
+        UserA.__module__ = "app.module_a"
+        UserB = create_model("User", b=(str, ...))
+        UserB.__module__ = "app.module_b"
+
+        @self.router.post("/a")
+        def handler_a(user: UserA):
+            pass
+
+        @self.router.post("/b")
+        def handler_b(user: UserB):
+            pass
+
+        schema = self.generator.generate()
+        schemas = schema["components"]["schemas"]
+
+        assert "User" in schemas
+        assert "User2" in schemas
+        ref_a = schema["paths"]["/a"]["post"]["requestBody"]["content"][
+            "application/json"
+        ]["schema"]["$ref"]
+        ref_b = schema["paths"]["/b"]["post"]["requestBody"]["content"][
+            "application/json"
+        ]["schema"]["$ref"]
+        assert ref_a != ref_b
+
+    def test_list_of_models_body_uses_ref_items(self):
+        """list[Model] body schema must reference the model, not 'string'"""
+
+        class Item(BaseModel):
+            name: str
+
+        @self.router.post("/items")
+        def create_items(items: list[Item] = Body(...)):
+            pass
+
+        schema = self.generator.generate()
+        body_schema = schema["paths"]["/items"]["post"]["requestBody"]["content"][
+            "application/json"
+        ]["schema"]
+
+        assert body_schema == {
+            "type": "array",
+            "items": {"$ref": "#/components/schemas/Item"},
+        }
+        assert "Item" in schema["components"]["schemas"]
+
+    def test_optional_model_body_nullable_30(self):
+        """Model | None body: 3.0 uses allOf + nullable (not nullable on $ref)"""
+
+        class Item(BaseModel):
+            name: str
+
+        @self.router.post("/maybe")
+        def maybe(item: Item | None = None):
+            pass
+
+        schema = self.generator.generate()
+        body_schema = schema["paths"]["/maybe"]["post"]["requestBody"]["content"][
+            "application/json"
+        ]["schema"]
+
+        assert body_schema == {
+            "allOf": [{"$ref": "#/components/schemas/Item"}],
+            "nullable": True,
+        }
+
+    def test_nullable_style_for_openapi_31(self):
+        """OpenAPI 3.1 uses JSON Schema null types, not 'nullable'"""
+        router = BaseRouter(title="T", version="1", openapi_version="3.1.0")
+
+        @router.get("/x")
+        def x(q: int | None = None):
+            pass
+
+        schema = OpenAPIGenerator(router).generate()
+        param_schema = schema["paths"]["/x"]["get"]["parameters"][0]["schema"]
+
+        assert param_schema == {"type": ["integer", "null"]}
+
+    def test_duplicate_handler_names_get_unique_operation_ids(self):
+        """Same method+function name across routes must not collide"""
+
+        def make_handler():
+            def handler():
+                pass
+
+            return handler
+
+        self.router.add_route("/one", "GET", make_handler())
+        self.router.add_route("/two", "GET", make_handler())
+
+        schema = self.generator.generate()
+        op_ids = [
+            op["operationId"]
+            for path in schema["paths"].values()
+            for op in path.values()
+        ]
+
+        assert len(op_ids) == len(set(op_ids))
+        assert "get_handler" in op_ids
+        assert "get_handler_2" in op_ids
+
+    def test_query_model_nested_defs_land_in_components(self):
+        """GET model-in-query: nested model $refs must stay resolvable"""
+
+        class Inner(BaseModel):
+            tag: str
+
+        class Filter(BaseModel):
+            inner: Inner
+            q: str = "x"
+
+        @self.router.get("/filter")
+        def filter_items(f: Filter):
+            pass
+
+        schema = self.generator.generate()
+        params = schema["paths"]["/filter"]["get"]["parameters"]
+        inner_param = next(p for p in params if p["name"] == "inner")
+
+        assert inner_param["schema"] == {"$ref": "#/components/schemas/Inner"}
+        assert "Inner" in schema["components"]["schemas"]
+        # the wrapper model itself is not registered as a component
+        assert "Filter" not in schema["components"]["schemas"]
+
+    def test_security_schemes_absent_by_default(self):
+        """No securitySchemes unless explicitly configured (like FastAPI)"""
+        schema = self.generator.generate()
+
+        assert "securitySchemes" not in schema["components"]
+
+    def test_oauth2_enum_requires_explicit_configuration(self):
+        """SecuritySchemeType.OAUTH2 has no meaningful default (tokenUrl)"""
+        import pytest
+
+        with pytest.raises(ValueError, match="explicit configuration"):
+            BaseRouter(security_scheme=SecuritySchemeType.OAUTH2)

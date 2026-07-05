@@ -39,9 +39,7 @@ class BaseRouter:
         title: str = "My App",
         version: str = "0.1.0",
         description: str = "API documentation",
-        security_scheme: (
-            SecuritySchemeType | dict[str, Any] | None
-        ) = SecuritySchemeType.BEARER_JWT,
+        security_scheme: SecuritySchemeType | dict[str, Any] | None = None,
         debug: bool = False,
     ):
         self.app = app
@@ -75,6 +73,12 @@ class BaseRouter:
                     name = "CustomAuth"
                 self._security_schemes = {name: security_scheme}
             else:
+                if security_scheme is SecuritySchemeType.OAUTH2:
+                    raise ValueError(
+                        "OAuth2 security scheme requires explicit configuration: "
+                        "pass a dict with your flows (tokenUrl, scopes) as "
+                        "security_scheme instead of SecuritySchemeType.OAUTH2"
+                    )
                 scheme_name = SECURITY_SCHEME_NAMES[security_scheme]
                 self._security_schemes = {
                     scheme_name: SECURITY_SCHEMES[security_scheme]

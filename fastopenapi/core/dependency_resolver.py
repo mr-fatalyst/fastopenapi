@@ -625,14 +625,16 @@ class DependencyResolver:
         self, func: Callable[..., Any]
     ) -> MappingProxyType[str, inspect.Parameter]:
         """Get function signature with caching"""
-        if func not in self._signature_cache:
+        cached = self._signature_cache.get(func)
+        if cached is None:
             sig = inspect.signature(func)
             params = {
                 name: unwrap_annotated_parameter(param)
                 for name, param in sig.parameters.items()
             }
-            self._signature_cache[func] = MappingProxyType(params)
-        return self._signature_cache[func]
+            # setdefault keeps concurrent computations consistent without a lock
+            cached = self._signature_cache.setdefault(func, MappingProxyType(params))
+        return cached
 
     def get_cache_stats(self) -> dict[str, int]:
         """Get cache statistics for monitoring"""

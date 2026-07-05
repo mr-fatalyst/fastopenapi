@@ -48,6 +48,8 @@ SECURITY_SCHEME_NAMES = {
 }
 
 
+# OAuth2 has no default entry: flows/tokenUrl are deployment-specific,
+# so it must be configured explicitly via a dict security_scheme
 SECURITY_SCHEMES = {
     SecuritySchemeType.BEARER_JWT: {
         "type": "http",
@@ -67,18 +69,5 @@ SECURITY_SCHEMES = {
     SecuritySchemeType.BASIC_AUTH: {
         "type": "http",
         "scheme": "basic",
-    },
-    SecuritySchemeType.OAUTH2: {
-        "type": "oauth2",
-        "flows": {
-            "password": {
-                "tokenUrl": "https://example.com/oauth/token",
-                "scopes": {
-                    "read": "Read access",
-                    "write": "Write access",
-                    "admin": "Admin access",
-                },
-            }
-        },
     },
 }

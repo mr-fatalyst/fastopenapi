@@ -25,6 +25,7 @@ from fastopenapi.core.params import (
     Param,
     Security,
     is_body_model_annotation,
+    is_pydantic_model,
     unwrap_annotated_parameter,
 )
 from fastopenapi.core.router import BaseRouter, RouteInfo
@@ -32,6 +33,16 @@ from fastopenapi.core.router import BaseRouter, RouteInfo
 # Thread-safe compiled regex patterns
 PATH_PARAM_PATTERN = re.compile(r"<(?:[^:>]+:)?([^>]+)>")
 OPENAPI_PATH_PATTERN = re.compile(r"{(\w+)}")
+
+
+@lru_cache(maxsize=256)
+def _convert_path_to_openapi(path: str) -> str:
+    """Convert framework path format to OpenAPI format.
+
+    Module-level so lru_cache does not key on (and retain) generator
+    instances.
+    """
+    return PATH_PARAM_PATTERN.sub(r"{\1}", path)
 
 
 @dataclass
@@ -50,15 +61,26 @@ class ParameterInfo:
 class SchemaBuilder:
     """Helper class for building OpenAPI schemas"""
 
-    def __init__(self, definitions: dict[str, Any], cache_lock: threading.Lock):
+    def __init__(
+        self,
+        definitions: dict[str, Any],
+        cache_lock: threading.Lock,
+        openapi_version: str = "3.0.0",
+    ):
         self.definitions = definitions
         self._cache_lock = cache_lock
         self._model_schema_cache: dict[str, Any] = {}
+        # cache_key -> schema name assigned in components (collision-safe)
+        self._schema_names: dict[str, str] = {}
+        self._openapi_31 = openapi_version.startswith("3.1")
 
     def build_parameter_schema(self, annotation: Any) -> dict[str, Any]:
         """Build OpenAPI schema for a parameter annotation"""
         if hasattr(annotation, "__metadata__"):
             annotation = annotation.__origin__
+
+        if self._is_pydantic_model(annotation):
+            return self.get_model_schema(annotation)
 
         origin = typing.get_origin(annotation)
 
@@ -75,22 +97,40 @@ class SchemaBuilder:
     def _build_array_schema(self, annotation: Any) -> dict[str, Any]:
         """Build schema for array types"""
         args = typing.get_args(annotation)
-        item_type = "string"
-        if args and args[0] in PYTHON_TYPE_MAPPING:
-            item_type = PYTHON_TYPE_MAPPING[args[0]]
-        return {"type": "array", "items": {"type": item_type}}
+        items = self.build_parameter_schema(args[0]) if args else {"type": "string"}
+        return {"type": "array", "items": items}
 
     def _build_union_schema(self, annotation: Any) -> dict[str, Any]:
         """Build schema for Union types (including Optional)"""
         args = typing.get_args(annotation)
-        if type(None) in args:
-            # It's Optional[T]
-            non_none_args = [arg for arg in args if arg is not type(None)]
-            if non_none_args:  # pragma: no cover
-                schema = self.build_parameter_schema(non_none_args[0])
-                schema["nullable"] = True
-                return schema
-        return {"type": "string"}
+        non_none_args = [arg for arg in args if arg is not type(None)]
+        nullable = type(None) in args
+
+        if not non_none_args:
+            return {"type": "null"} if self._openapi_31 else {"type": "string"}
+
+        if len(non_none_args) == 1:
+            schema = self.build_parameter_schema(non_none_args[0])
+        else:
+            schema = {
+                "anyOf": [self.build_parameter_schema(arg) for arg in non_none_args]
+            }
+
+        return self.make_nullable(schema) if nullable else schema
+
+    def make_nullable(self, schema: dict[str, Any]) -> dict[str, Any]:
+        """Mark a schema as nullable per the target OpenAPI version.
+
+        3.1 is JSON Schema ('null' type / anyOf); 3.0.x uses the
+        'nullable' keyword, which must not sit next to a bare $ref.
+        """
+        if self._openapi_31:
+            if isinstance(schema.get("type"), str):
+                return {**schema, "type": [schema["type"], "null"]}
+            return {"anyOf": [schema, {"type": "null"}]}
+        if "$ref" in schema:
+            return {"allOf": [schema], "nullable": True}
+        return {**schema, "nullable": True}
 
     def build_parameter_schema_from_param(
         self, param: inspect.Parameter
@@ -177,19 +217,51 @@ class SchemaBuilder:
         except (TypeError, ValueError):
             pass
 
+    @staticmethod
+    def _is_pydantic_model(annotation: Any) -> bool:
+        return is_pydantic_model(annotation)
+
     def get_model_schema(self, model: type[BaseModel]) -> dict[str, Any]:
-        """Get OpenAPI schema for a Pydantic model with thread-safe caching"""
-        model_name = model.__name__
-        cache_key = f"{model.__module__}.{model_name}"
+        """Get OpenAPI schema for a Pydantic model with thread-safe caching.
+
+        Distinct models sharing a __name__ get suffixed schema names
+        (User, User2, ...) instead of silently reusing the first schema.
+        """
+        cache_key = f"{model.__module__}.{model.__qualname__}"
 
         with self._cache_lock:
-            if cache_key not in self._model_schema_cache:
-                self._cache_model_schema(model, cache_key)
+            schema_name = self._schema_names.get(cache_key)
+            if schema_name is None:
+                schema_name = self._assign_schema_name(model)
+                self._schema_names[cache_key] = schema_name
+                if cache_key not in self._model_schema_cache:
+                    self._cache_model_schema(model, cache_key)
+                self.definitions[schema_name] = self._model_schema_cache[cache_key]
 
-            if model_name not in self.definitions:
-                self.definitions[model_name] = self._model_schema_cache[cache_key]
+        return {"$ref": f"#/components/schemas/{schema_name}"}
 
-        return {"$ref": f"#/components/schemas/{model_name}"}
+    def _assign_schema_name(self, model: type[BaseModel]) -> str:
+        """Pick a components/schemas name that is not taken by another model"""
+        base = model.__name__
+        name = base
+        counter = 2
+        taken = set(self.definitions) | set(self._schema_names.values())
+        while name in taken:
+            name = f"{base}{counter}"
+            counter += 1
+        return name
+
+    def build_inline_model_schema(self, model: type[BaseModel]) -> dict[str, Any]:
+        """Model schema for inline use (query params from a model):
+        nested $defs are moved into components so their $refs stay valid,
+        but the model itself is not registered as a component."""
+        schema = model.model_json_schema(
+            mode="serialization",
+            ref_template="#/components/schemas/{model}",
+        )
+        with self._cache_lock:
+            self._extract_nested_definitions(schema)
+        return schema
 
     def _cache_model_schema(self, model: type[BaseModel], cache_key: str) -> None:
         """Cache model schema and process nested definitions"""
@@ -197,14 +269,16 @@ class SchemaBuilder:
             mode="serialization",
             ref_template="#/components/schemas/{model}",
         )
+        self._extract_nested_definitions(model_schema)
+        self._model_schema_cache[cache_key] = model_schema
 
-        # Process nested definitions
+    def _extract_nested_definitions(self, model_schema: dict[str, Any]) -> None:
+        """Move nested $defs into components without clobbering existing ones"""
         for key in ("definitions", "$defs"):
             if key in model_schema:
-                self.definitions.update(model_schema[key])
+                for name, sub_schema in model_schema[key].items():
+                    self.definitions.setdefault(name, sub_schema)
                 del model_schema[key]
-
-        self._model_schema_cache[cache_key] = model_schema
 
 
 class ParameterProcessor:
@@ -410,10 +484,15 @@ class ParameterProcessor:
             return {"type": "array", "items": self._model_container_schema(args[0])}
         if origin is typing.Union or origin is types.UnionType:
             non_none = [arg for arg in args if arg is not type(None)]
-            if len(non_none) == 1:
-                schema = self._model_container_schema(non_none[0])
+            if non_none:
+                if len(non_none) == 1:
+                    schema = self._model_container_schema(non_none[0])
+                else:
+                    schema = {
+                        "anyOf": [self._model_container_schema(a) for a in non_none]
+                    }
                 if type(None) in args:
-                    schema = {**schema, "nullable": True}
+                    schema = self.schema_builder.make_nullable(schema)
                 return schema
         return self.schema_builder.build_parameter_schema(annotation)
 
@@ -520,19 +599,6 @@ class ParameterProcessor:
                 }
             if hasattr(param_obj, "deprecated") and param_obj.deprecated:
                 param_info["deprecated"] = True
-
-        # Add default descriptions for common parameters
-        if "description" not in param_info:
-            common_descriptions = {
-                "page": "Pagination page",
-                "limit": "Pagination limit",
-                "offset": "Pagination offset",
-                "sort": "Sorting sort",
-                "order": "Sorting order",
-                "sort_by": "Sorting sort_by",
-            }
-            if actual_name.lower() in common_descriptions:
-                param_info["description"] = common_descriptions[actual_name.lower()]
 
     def _build_form_field_schema(
         self, param_name: str, param: inspect.Parameter
@@ -644,7 +710,9 @@ class ParameterProcessor:
     ) -> list[dict[str, Any]]:
         """Convert Pydantic model fields to query parameters"""
         parameters = []
-        model_schema = model_class.model_json_schema(mode="serialization")
+        # Inline schema: nested $defs land in components so $refs in
+        # field schemas stay resolvable
+        model_schema = self.schema_builder.build_inline_model_schema(model_class)
         required_fields = model_schema.get("required", [])
         properties = model_schema.get("properties", {})
 
@@ -808,9 +876,12 @@ class OpenAPIGenerator:
         self.router = router
         self.definitions: dict[str, Any] = {}
         self._cache_lock = threading.Lock()
+        self._operation_ids: set[str] = set()
 
         # Initialize helper classes
-        self.schema_builder = SchemaBuilder(self.definitions, self._cache_lock)
+        self.schema_builder = SchemaBuilder(
+            self.definitions, self._cache_lock, router.openapi_version
+        )
         self.parameter_processor = ParameterProcessor(self.schema_builder)
         self.response_builder = ResponseBuilder(self.schema_builder)
 
@@ -863,10 +934,29 @@ class OpenAPIGenerator:
         if hasattr(self.router, "_global_security") and self.router._global_security:
             schema["security"] = self.router._global_security
 
-    @lru_cache(maxsize=128)
+    def _build_operation_id(self, route: RouteInfo) -> str:
+        """Build a unique operationId (spec requires uniqueness).
+
+        Explicit operation_id is used verbatim; autogenerated ones get a
+        numeric suffix when two handlers share a method and function name.
+        """
+        explicit = route.meta.get("operation_id")
+        if explicit:
+            self._operation_ids.add(explicit)
+            return explicit
+
+        base = f"{route.method.lower()}_{route.endpoint.__name__}"
+        operation_id = base
+        counter = 2
+        while operation_id in self._operation_ids:
+            operation_id = f"{base}_{counter}"
+            counter += 1
+        self._operation_ids.add(operation_id)
+        return operation_id
+
     def _convert_path(self, path: str) -> str:
         """Convert path format to OpenAPI format with caching"""
-        return PATH_PARAM_PATTERN.sub(r"{\1}", path)
+        return _convert_path_to_openapi(path)
 
     def _has_security_dependency(self, route: RouteInfo) -> bool:
         """Check if route has Security dependencies"""
@@ -900,8 +990,7 @@ class OpenAPIGenerator:
             "summary": route.meta.get("summary")
             or route.endpoint.__name__.replace("_", " ").title(),
             "responses": responses,
-            "operationId": route.meta.get("operation_id")
-            or f"{route.method.lower()}_{route.endpoint.__name__}",
+            "operationId": self._build_operation_id(route),
         }
 
         # Add optional fields
@@ -943,13 +1032,8 @@ class OpenAPIGenerator:
             operation["description"] = description
 
     def _add_error_schemas(self) -> None:
-        """Add comprehensive error response schemas"""
-        self.definitions.update(
-            {
-                "ErrorSchema": self._build_error_schema(),
-                "PaginationParams": self._build_pagination_params_schema(),
-            }
-        )
+        """Add the error envelope schema referenced by error responses"""
+        self.definitions["ErrorSchema"] = self._build_error_schema()
 
     def _build_error_schema(self) -> dict[str, Any]:
         """Build general error schema"""
@@ -968,25 +1052,4 @@ class OpenAPIGenerator:
                 }
             },
             "required": ["error"],
-        }
-
-    def _build_pagination_params_schema(self) -> dict[str, Any]:
-        """Build pagination parameters schema"""
-        return {
-            "type": "object",
-            "properties": {
-                "page": {
-                    "type": "integer",
-                    "minimum": 1,
-                    "default": 1,
-                    "description": "Page number",
-                },
-                "limit": {
-                    "type": "integer",
-                    "minimum": 1,
-                    "maximum": 100,
-                    "default": 20,
-                    "description": "Items per page",
-                },
-            },
         }
