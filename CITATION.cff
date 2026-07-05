@@ -6,7 +6,6 @@ authors:
   - given-names: Nikita
     family-names: Ryzhenkov
     email: nikita.ryzhenkoff@gmail.com
-identifiers:
 repository-code: 'https://github.com/mr-fatalyst/fastopenapi'
 url: 'https://fastopenapi.fatalyst.dev/'
 abstract: >-

@@ -75,6 +75,9 @@ disable_error_code = ["override"]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
 build-backend = "poetry.core.masonry.api"
 
+[tool.poetry]
+include = [{ path = "fastopenapi/py.typed", format = ["sdist", "wheel"] }]
+
 [tool.poetry.group.dev.dependencies]
 mypy = "^1.15.0"
 flake8 = "^7.1.2"

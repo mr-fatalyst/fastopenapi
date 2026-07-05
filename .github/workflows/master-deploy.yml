@@ -26,9 +26,10 @@ jobs:
           poetry run coverage xml
 
       - name: Upload coverage to Codecov
-        env:
-          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
-        run: bash <(curl -s https://codecov.io/bash) -t $CODECOV_TOKEN -f coverage.xml
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: coverage.xml
 
   deploy-prod:
     needs: coverage
