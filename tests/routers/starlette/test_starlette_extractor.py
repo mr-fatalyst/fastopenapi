@@ -117,7 +117,7 @@ class TestStarletteRequestDataExtractor:
         request.headers = headers_mock
 
         form_mock = Mock()
-        form_mock.items = Mock(
+        form_mock.multi_items = Mock(
             return_value=[("field1", "value1"), ("field2", "value2")]
         )
         request.form = AsyncMock(return_value=form_mock)
@@ -172,7 +172,7 @@ class TestStarletteRequestDataExtractor:
         request.body = AsyncMock(return_value=b'{"data": "test"}')
 
         form_mock = Mock()
-        form_mock.items = Mock(return_value=[("form_field", "form_value")])
+        form_mock.multi_items = Mock(return_value=[("form_field", "form_value")])
         request.form = AsyncMock(return_value=form_mock)
 
         env = RequestEnvelope(request=request, path_params=None)
@@ -201,7 +201,7 @@ class TestStarletteRequestDataExtractor:
         mock_file.filename = "photo.jpg"
 
         form_mock = Mock()
-        form_mock.items = Mock(
+        form_mock.multi_items = Mock(
             return_value=[
                 ("username", "john"),
                 ("avatar", mock_file),  # This should be skipped
@@ -230,7 +230,7 @@ class TestStarletteRequestDataExtractor:
         mock_file.size = 1024
 
         form_mock = Mock()
-        form_mock.items = Mock(return_value=[("avatar", mock_file)])
+        form_mock.multi_items = Mock(return_value=[("avatar", mock_file)])
         request.form = AsyncMock(return_value=form_mock)
 
         result = await StarletteRequestDataExtractor._get_files(request)
@@ -265,7 +265,7 @@ class TestStarletteRequestDataExtractor:
         mock_file3.size = 700
 
         form_mock = Mock()
-        form_mock.items = Mock(
+        form_mock.multi_items = Mock(
             return_value=[
                 ("docs", mock_file1),
                 ("docs", mock_file2),
@@ -296,7 +296,7 @@ class TestStarletteRequestDataExtractor:
         mock_file.content_type = "text/plain"
 
         form_mock = Mock()
-        form_mock.items = Mock(return_value=[("upload", mock_file)])
+        form_mock.multi_items = Mock(return_value=[("upload", mock_file)])
         request.form = AsyncMock(return_value=form_mock)
 
         result = await StarletteRequestDataExtractor._get_files(request)
@@ -333,7 +333,7 @@ class TestStarletteRequestDataExtractor:
         mock_field = Mock(spec=[])  # No filename attribute
 
         form_mock = Mock()
-        form_mock.items = Mock(
+        form_mock.multi_items = Mock(
             return_value=[
                 ("title", mock_field),
                 ("document", mock_file),
@@ -358,7 +358,7 @@ class TestStarletteRequestDataExtractor:
         request.headers = headers_mock
 
         form_mock = Mock()
-        form_mock.items = Mock(return_value=[])
+        form_mock.multi_items = Mock(return_value=[])
         request.form = AsyncMock(return_value=form_mock)
 
         result = await StarletteRequestDataExtractor._get_files(request)

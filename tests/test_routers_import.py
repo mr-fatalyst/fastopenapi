@@ -37,18 +37,21 @@ class TestFastOpenAPIRouters:
         importlib.reload(routers)
         from fastopenapi.routers import MissingRouter
 
-        assert routers.AioHttpRouter is MissingRouter
-        assert routers.FalconRouter is MissingRouter
-        assert routers.FalconAsyncRouter is MissingRouter
-        assert routers.FlaskRouter is MissingRouter
-        assert routers.QuartRouter is MissingRouter
-        assert routers.SanicRouter is MissingRouter
-        assert routers.StarletteRouter is MissingRouter
-        assert routers.TornadoRouter is MissingRouter
-        assert routers.DjangoRouter is MissingRouter
-        assert routers.DjangoAsyncRouter is MissingRouter
+        assert issubclass(routers.AioHttpRouter, MissingRouter)
+        assert issubclass(routers.FalconRouter, MissingRouter)
+        assert issubclass(routers.FalconAsyncRouter, MissingRouter)
+        assert issubclass(routers.FlaskRouter, MissingRouter)
+        assert issubclass(routers.QuartRouter, MissingRouter)
+        assert issubclass(routers.SanicRouter, MissingRouter)
+        assert issubclass(routers.StarletteRouter, MissingRouter)
+        assert issubclass(routers.TornadoRouter, MissingRouter)
+        assert issubclass(routers.DjangoRouter, MissingRouter)
+        assert issubclass(routers.DjangoAsyncRouter, MissingRouter)
 
-        with pytest.raises(ImportError, match="This framework is not installed."):
+        with pytest.raises(
+            ImportError,
+            match=r"Falcon is not installed. Try: pip install fastopenapi\[falcon\]",
+        ):
             routers.FalconRouter()
 
     def test_all_variable(self):

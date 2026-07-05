@@ -5,9 +5,12 @@ Pydantic v2 only, no deprecated features
 
 import copy
 import inspect
+import types
+import typing
 from collections.abc import Callable, Sequence
 from typing import Any
 
+from pydantic import BaseModel
 from pydantic.fields import FieldInfo
 
 from fastopenapi.core.constants import ParameterSource
@@ -559,6 +562,31 @@ class SecurityScopes:
 
     def __init__(self, scopes: list[str] | None = None):
         self.scopes = scopes or []
+
+
+def is_pydantic_model(annotation: Any) -> bool:
+    """Check if annotation is a Pydantic model class"""
+    return isinstance(annotation, type) and issubclass(annotation, BaseModel)
+
+
+def is_body_model_annotation(annotation: Any) -> bool:
+    """Check if annotation is a model or a container of models
+    (list[Model], Model | None, list[Model] | None, ...).
+
+    Single source of truth for the resolver and the OpenAPI generator —
+    their body-vs-query decisions must never drift apart.
+    """
+    if is_pydantic_model(annotation):
+        return True
+    origin = typing.get_origin(annotation)
+    args = typing.get_args(annotation)
+    if origin is list:
+        return bool(args) and is_body_model_annotation(args[0])
+    if origin is typing.Union or origin is types.UnionType:
+        return any(
+            is_body_model_annotation(arg) for arg in args if arg is not type(None)
+        )
+    return False
 
 
 def unwrap_annotated_parameter(param: inspect.Parameter) -> inspect.Parameter:

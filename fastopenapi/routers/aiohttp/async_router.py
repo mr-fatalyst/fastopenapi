@@ -3,10 +3,9 @@ from collections.abc import Callable
 from typing import Any
 
 from aiohttp import web
-from pydantic_core import to_json
 
-from fastopenapi.core.types import Response
 from fastopenapi.openapi.ui import render_redoc_ui, render_swagger_ui
+from fastopenapi.response.serializer import WireResponse
 from fastopenapi.routers.aiohttp.extractors import AioHttpRequestDataExtractor
 from fastopenapi.routers.base import BaseAdapter
 from fastopenapi.routers.common import RequestEnvelope
@@ -18,6 +17,8 @@ class AioHttpRouter(BaseAdapter):
     extractor_async_cls = AioHttpRequestDataExtractor
 
     def __init__(self, app: web.Application = None, **kwargs):
+        self._explicit_head_paths: set[str] = set()
+        self._auto_head_paths: set[str] = set()
         super().__init__(app, **kwargs)
 
     def add_route(self, path: str, method: str, endpoint: Callable[..., Any]) -> None:
@@ -25,8 +26,20 @@ class AioHttpRouter(BaseAdapter):
         super().add_route(path, method, endpoint)
 
         if self.app is not None:
+            method = method.upper()
+            if method == "HEAD" and path in self._auto_head_paths:
+                raise TypeError(
+                    f"Explicit HEAD route for '{path}' must be registered "
+                    f"before its GET route (auto-HEAD is already in place)"
+                )
             view = functools.partial(self._aiohttp_view, router=self, endpoint=endpoint)
-            self.app.router.add_route(method.upper(), path, view)
+            self.app.router.add_route(method, path, view)
+            if method == "HEAD":
+                self._explicit_head_paths.add(path)
+            elif method == "GET" and path not in self._explicit_head_paths:
+                # aiohttp itself omits the body for HEAD responses
+                self.app.router.add_route("HEAD", path, view)
+                self._auto_head_paths.add(path)
 
     @staticmethod
     async def _aiohttp_view(
@@ -36,51 +49,17 @@ class AioHttpRouter(BaseAdapter):
         env = RequestEnvelope(request=request, path_params=None)
         return await router.handle_request_async(endpoint, env)
 
-    def build_framework_response(self, response: Response) -> web.Response:
-        """Build AioHttp response"""
-        content_type = response.headers.get("Content-Type")
-
-        # Binary content
-        if isinstance(response.content, bytes):
-            return web.Response(
-                body=response.content,
-                status=response.status_code,
-                headers={
-                    **response.headers,
-                    "Content-Type": content_type or "application/octet-stream",
-                },
-            )
-
-        if response.status_code in (204, 304):
-            return web.Response(status=response.status_code)
-
-        # String non-JSON content (CSV, XML, plain text, etc.)
-        if isinstance(response.content, str) and content_type not in [
-            "application/json",
-            "text/json",
-        ]:
-            return web.Response(
-                text=response.content,
-                status=response.status_code,
-                headers={
-                    **response.headers,
-                    "Content-Type": content_type or "text/plain",
-                },
-            )
-
-        # JSON content (dict, list, None)
-        body_bytes = to_json(response.content)
+    def build_framework_response(self, response: WireResponse) -> web.Response:
+        """Wrap the finalized triple into an aiohttp response"""
         return web.Response(
-            body=body_bytes,
-            status=response.status_code,
-            headers={
-                **response.headers,
-                "Content-Type": content_type or "application/json",
-            },
+            body=response.body,
+            status=response.status,
+            headers=response.headers,
         )
 
-    def is_framework_response(self, response: Response | web.Response) -> bool:
-        return isinstance(response, web.Response)
+    def is_framework_response(self, response: Any) -> bool:
+        # StreamResponse covers web.Response, FileResponse and streaming
+        return isinstance(response, web.StreamResponse)
 
     def _register_docs_endpoints(self) -> None:
         """Register documentation endpoints"""

@@ -11,8 +11,10 @@ from pydantic import BaseModel, TypeAdapter, ValidationError
 from fastopenapi.core.router import BaseRouter
 from fastopenapi.core.types import Response
 from fastopenapi.errors.exceptions import APIError, InternalServerError
+from fastopenapi.resolution.profile import ExtractionProfileBuilder
 from fastopenapi.resolution.resolver import ParameterResolver
 from fastopenapi.response.builder import ResponseBuilder
+from fastopenapi.response.serializer import ResponseSerializer, WireResponse
 from fastopenapi.routers.common import RequestEnvelope
 from fastopenapi.routers.extractors import (
     BaseAsyncRequestDataExtractor,
@@ -36,6 +38,7 @@ class BaseAdapter(BaseRouter, ABC):
     extractor_async_cls = BaseAsyncRequestDataExtractor
     req_param_resolver_cls = ParameterResolver
     response_builder_cls = ResponseBuilder
+    serializer_cls = ResponseSerializer
 
     _type_adapter_cache: dict[type, TypeAdapter[Any]] = {}
     _cache_lock = threading.Lock()
@@ -49,11 +52,12 @@ class BaseAdapter(BaseRouter, ABC):
         super().add_route(path, method, endpoint)
 
     @abstractmethod
-    def build_framework_response(self, response: Response) -> Any:
-        """Build framework-specific response object"""
+    def build_framework_response(self, response: WireResponse) -> Any:
+        """Wrap the finalized wire triple into a framework response object
+        (or return it for adapters that apply it in their own handler)"""
 
     @abstractmethod
-    def is_framework_response(self, response: Response) -> bool:
+    def is_framework_response(self, response: Any) -> bool:
         """Check if response is framework-ready"""
 
     @classmethod
@@ -93,7 +97,8 @@ class BaseAdapter(BaseRouter, ABC):
     def handle_request(self, endpoint: Callable[..., Any], env: RequestEnvelope) -> Any:
         """Handle synchronous request"""
         try:
-            request_data = self.extractor_cls.extract_request_data(env)
+            profile = ExtractionProfileBuilder.get(endpoint)
+            request_data = self.extractor_cls.extract_request_data(env, profile)
             kwargs = self.req_param_resolver_cls.resolve(endpoint, request_data)
             result = endpoint(**kwargs)
             return self._finalize_result(endpoint, result)
@@ -105,7 +110,10 @@ class BaseAdapter(BaseRouter, ABC):
     ) -> Any:
         """Handle asynchronous request"""
         try:
-            request_data = await self.extractor_async_cls.extract_request_data(env)
+            profile = ExtractionProfileBuilder.get(endpoint)
+            request_data = await self.extractor_async_cls.extract_request_data(
+                env, profile
+            )
             kwargs = await self.req_param_resolver_cls.resolve_async(
                 endpoint, request_data
             )
@@ -128,9 +136,8 @@ class BaseAdapter(BaseRouter, ABC):
         if response_model and not isinstance(result, (Response, tuple)):
             result = self._validate_response(result, response_model)
         response = self.response_builder_cls.build(result, route_meta)
-        if route_meta.get("status_code") == 204:
-            response.content = None
-        return self.build_framework_response(response)
+        wire = self.serializer_cls.finalize(response)
+        return self.build_framework_response(wire)
 
     def handle_exception(self, exc: Exception) -> Any:
         """Convert an exception into a framework response.
@@ -141,12 +148,13 @@ class BaseAdapter(BaseRouter, ABC):
             exc, self.EXCEPTION_MAPPER, debug=self.debug
         )
         self.log_exception(exc, api_error)
-        return self.build_framework_response(
+        wire = self.serializer_cls.finalize(
             Response(
                 content=api_error.to_response(),
                 status_code=api_error.status_code,
             )
         )
+        return self.build_framework_response(wire)
 
     def log_exception(self, exc: Exception, api_error: APIError) -> None:
         """Log unexpected server faults.

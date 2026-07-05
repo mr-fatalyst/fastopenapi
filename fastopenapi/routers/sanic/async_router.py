@@ -3,8 +3,8 @@ from typing import Any
 
 from sanic import response
 
-from fastopenapi.core.types import Response
 from fastopenapi.openapi.ui import render_redoc_ui, render_swagger_ui
+from fastopenapi.response.serializer import WireResponse
 from fastopenapi.routers.base import BaseAdapter
 from fastopenapi.routers.common import RequestEnvelope
 from fastopenapi.routers.sanic.extractors import SanicRequestDataExtractor
@@ -16,6 +16,11 @@ class SanicRouter(BaseAdapter):
     PATH_CONVERSIONS = (r"{(\w+)}", r"<\1>")
     extractor_async_cls = SanicRequestDataExtractor
 
+    def __init__(self, app: Any = None, **kwargs):
+        self._explicit_head_paths: set[str] = set()
+        self._auto_head_paths: set[str] = set()
+        super().__init__(app, **kwargs)
+
     def add_route(self, path: str, method: str, endpoint: Callable[..., Any]) -> None:
         """Add route to Sanic application"""
         super().add_route(path, method, endpoint)
@@ -23,53 +28,43 @@ class SanicRouter(BaseAdapter):
         if self.app is None:
             return
 
+        method = method.upper()
         sanic_path = self._convert_path_for_framework(path)
 
         async def view_func(request, **path_params):
             env = RequestEnvelope(request=request, path_params=path_params)
             return await self.handle_request_async(endpoint, env)
 
+        methods = [method]
+        if method == "HEAD":
+            if path in self._auto_head_paths:
+                raise TypeError(
+                    f"Explicit HEAD route for '{path}' must be registered "
+                    f"before its GET route (auto-HEAD is already in place)"
+                )
+            self._explicit_head_paths.add(path)
+        elif method == "GET" and path not in self._explicit_head_paths:
+            # Sanic itself omits the body for HEAD responses
+            methods.append("HEAD")
+            self._auto_head_paths.add(path)
+
         route_name = f"{endpoint.__name__}_{method.lower()}_{path.replace('/', '_')}"
-        self.app.add_route(
-            view_func, sanic_path, methods=[method.upper()], name=route_name
+        self.app.add_route(view_func, sanic_path, methods=methods, name=route_name)
+
+    def build_framework_response(self, response_obj: WireResponse) -> Any:
+        """Wrap the finalized triple into a Sanic response"""
+        headers = dict(response_obj.headers)
+        content_type = None
+        for key in [k for k in headers if k.lower() == "content-type"]:
+            content_type = headers.pop(key)
+        return response.raw(
+            response_obj.body if response_obj.body is not None else b"",
+            status=response_obj.status,
+            headers=headers,
+            content_type=content_type,
         )
 
-    def build_framework_response(self, response_obj: Response) -> Any:
-        """Build Sanic response"""
-        content_type = response_obj.headers.get("Content-Type")
-
-        # Binary content
-        if isinstance(response_obj.content, bytes):
-            return response.raw(
-                response_obj.content,
-                status=response_obj.status_code,
-                headers=response_obj.headers,
-                content_type=content_type or "application/octet-stream",
-            )
-
-        if response_obj.status_code in (204, 304):
-            return response.empty(response_obj.status_code)
-
-        # String non-JSON content
-        if isinstance(response_obj.content, str) and content_type not in [
-            "application/json",
-            "text/json",
-        ]:
-            return response.text(
-                response_obj.content,
-                status=response_obj.status_code,
-                headers=response_obj.headers,
-                content_type=content_type or "text/plain",
-            )
-
-        # JSON content
-        return response.json(
-            response_obj.content,
-            status=response_obj.status_code,
-            headers=response_obj.headers,
-        )
-
-    def is_framework_response(self, resp: Response | response.BaseHTTPResponse) -> bool:
+    def is_framework_response(self, resp: Any) -> bool:
         return isinstance(resp, response.BaseHTTPResponse)
 
     def _register_docs_endpoints(self) -> None:

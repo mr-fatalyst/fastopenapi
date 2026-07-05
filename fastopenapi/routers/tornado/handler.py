@@ -2,6 +2,7 @@ from typing import Any
 
 from tornado.web import RequestHandler
 
+from fastopenapi.response.serializer import NO_BODY_STATUSES
 from fastopenapi.routers.common import RequestEnvelope
 from fastopenapi.routers.tornado.utils import json_encode
 
@@ -17,60 +18,47 @@ class TornadoDynamicHandler(RequestHandler):
         """Prepare request data"""
         self.endpoint = self.endpoints.get(self.request.method.upper())
 
-    def _set_response_headers(self, headers: dict[str, str]) -> str | None:
-        """Set response headers from result"""
-        content_type = headers.get("Content-Type")
-        if content_type:
-            self.set_header("Content-Type", content_type)
-
-        for key, value in headers.items():
-            if key.lower() != "content-type":
-                self.set_header(key, value)
-
-        return content_type
-
-    async def _send_response(
-        self, content: Any, content_type: str | None, status_code: int
-    ) -> None:
-        """Send response based on content type"""
-        if status_code == 204:
-            await self.finish()
-            return
-
-        # Binary content
-        if isinstance(content, bytes):
-            if not content_type:
-                self.set_header("Content-Type", "application/octet-stream")
-            await self.finish(content)
-
-        # String non-JSON content
-        elif isinstance(content, str) and content_type not in [
-            "application/json",
-            "text/json",
-        ]:
-            if not content_type:
-                self.set_header("Content-Type", "text/plain")
-            await self.finish(content)
-
-        # JSON content
-        else:
-            if not content_type:
-                self.set_header("Content-Type", "application/json")
-            await self.finish(json_encode(content))
-
     async def handle_request(self) -> None:
         """Common request handling"""
-        if not hasattr(self, "endpoint") or not self.endpoint:
-            self.send_error(405)
+        method = self.request.method.upper()
+        endpoint = getattr(self, "endpoint", None)
+        if endpoint is None and method == "HEAD":
+            # Auto-HEAD: serve HEAD from the GET pipeline
+            endpoint = self.endpoints.get("GET")
+        if endpoint is None:
+            self._send_method_not_allowed()
             return
 
         env = RequestEnvelope(request=self.request, path_params=self.path_kwargs)
-        result_response = await self.router.handle_request_async(self.endpoint, env)
+        wire = await self.router.handle_request_async(endpoint, env)
 
-        self.set_status(result_response.status_code)
-        content_type = self._set_response_headers(result_response.headers)
-        await self._send_response(
-            result_response.content, content_type, result_response.status_code
+        self.set_status(wire.status)
+        for key, value in wire.headers.items():
+            self.set_header(key, value)
+
+        no_body = wire.status in NO_BODY_STATUSES or method == "HEAD"
+        if wire.body is not None and not no_body:
+            self.write(wire.body)
+        await self.finish()
+
+    def _send_method_not_allowed(self) -> None:
+        """JSON 405 with an Allow header instead of tornado's HTML page"""
+        allowed = set(self.endpoints)
+        if "GET" in allowed:
+            allowed.add("HEAD")
+        self.set_status(405)
+        self.set_header("Allow", ", ".join(sorted(allowed)))
+        self.set_header("Content-Type", "application/json")
+        self.write(
+            json_encode(
+                {
+                    "error": {
+                        "type": "method_not_allowed",
+                        "message": "Method Not Allowed",
+                        "status": 405,
+                    }
+                }
+            )
         )
 
     async def get(self, *args: Any, **kwargs: Any) -> None:

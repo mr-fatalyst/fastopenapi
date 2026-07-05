@@ -38,7 +38,13 @@ class FlaskRequestDataExtractor(BaseRequestDataExtractor):
     @classmethod
     def _get_form_data(cls, request: Any) -> dict[str, Any]:
         """Extract form data"""
-        return dict(request.form) if hasattr(request, "form") else {}
+        if not hasattr(request, "form"):
+            return {}
+        form_data = {}
+        for key in request.form:
+            values = request.form.getlist(key)
+            form_data[key] = values[0] if len(values) == 1 else values
+        return form_data
 
     @classmethod
     def _get_files(cls, request: Any) -> dict[str, FileUpload | list[FileUpload]]:

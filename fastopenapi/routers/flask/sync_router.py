@@ -2,10 +2,10 @@ from collections.abc import Callable
 from typing import Any
 
 from flask import Response as FlaskResponse
-from flask import jsonify, make_response, request
+from flask import jsonify, request
 
-from fastopenapi.core.types import Response
 from fastopenapi.openapi.ui import render_redoc_ui, render_swagger_ui
+from fastopenapi.response.serializer import WireResponse
 from fastopenapi.routers.base import BaseAdapter
 from fastopenapi.routers.common import RequestEnvelope
 from fastopenapi.routers.flask.extractors import FlaskRequestDataExtractor
@@ -35,35 +35,21 @@ class FlaskRouter(BaseAdapter):
                 flask_path, rule_endpoint, view_func, methods=[method.upper()]
             )
 
-    def build_framework_response(self, response: Response) -> FlaskResponse:
-        """Build Flask response"""
-        if response.status_code in (204, 304):
-            return make_response("", response.status_code)
-
-        content_type = response.headers.get("Content-Type")
-
-        # Binary content
-        if isinstance(response.content, bytes):
-            flask_response = make_response(response.content)
-            flask_response.status_code = response.status_code
-        # String non-JSON content
-        elif isinstance(response.content, str) and content_type not in [
-            "application/json",
-            "text/json",
-        ]:
-            flask_response = make_response(response.content)
-            flask_response.status_code = response.status_code
-        # JSON content
-        else:
-            flask_response = jsonify(response.content)
-            flask_response.status_code = response.status_code
-
+    def build_framework_response(self, response: WireResponse) -> FlaskResponse:
+        """Wrap the finalized triple into a Flask response"""
+        flask_response = FlaskResponse(
+            response=response.body if response.body is not None else b"",
+            status=response.status,
+        )
+        # Werkzeug pre-sets a default text/html Content-Type; the wire
+        # headers are the single source of truth
+        if "Content-Type" not in response.headers:
+            flask_response.headers.remove("Content-Type")
         for key, value in response.headers.items():
             flask_response.headers[key] = value
-
         return flask_response
 
-    def is_framework_response(self, response: Response | FlaskResponse) -> bool:
+    def is_framework_response(self, response: Any) -> bool:
         return isinstance(response, FlaskResponse)
 
     def _register_docs_endpoints(self) -> None:

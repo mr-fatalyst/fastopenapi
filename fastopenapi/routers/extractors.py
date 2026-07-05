@@ -1,3 +1,4 @@
+import inspect
 from abc import ABC, abstractmethod
 from typing import Any
 
@@ -6,6 +7,7 @@ from pydantic_core import from_json
 from fastopenapi.core.constants import NO_BODY_METHODS
 from fastopenapi.core.types import FileUpload, RequestData
 from fastopenapi.errors.exceptions import ValidationError
+from fastopenapi.resolution.profile import EXTRACT_ALL, ExtractionProfile
 from fastopenapi.routers.common import RequestEnvelope
 
 
@@ -84,33 +86,63 @@ class BaseRequestDataExtractor(ABC):
             return None
 
     @classmethod
-    def extract_request_data(cls, env: RequestEnvelope) -> RequestData:
-        """Synchronous request data extraction"""
+    def extract_request_data(
+        cls, env: RequestEnvelope, profile: ExtractionProfile | None = None
+    ) -> RequestData:
+        """Synchronous request data extraction.
+
+        Stream-consuming payloads (body/form/files) are read only when the
+        endpoint's extraction profile references them.
+        """
+        profile = profile or EXTRACT_ALL
         _path_params = env.path_params
         request = env.request
         if _path_params is None:
             _path_params = cls._get_path_params(request)
+        has_payload = request.method not in NO_BODY_METHODS
         return RequestData(
             path_params=_path_params,
             query_params=cls._get_query_params(request),
             headers=cls._normalize_headers(cls._get_headers(request)),
             cookies=cls._get_cookies(request),
-            body=(
-                cls._get_body(request) if request.method not in NO_BODY_METHODS else {}
-            ),
+            body=(cls._get_body(request) if has_payload and profile.needs_body else {}),
             form_data=(
                 cls._get_form_data(request)
-                if request.method not in NO_BODY_METHODS
+                if has_payload and profile.needs_form
                 else {}
             ),
             files=(
-                cls._get_files(request) if request.method not in NO_BODY_METHODS else {}
+                cls._get_files(request) if has_payload and profile.needs_files else {}
             ),
         )
 
 
 class BaseAsyncRequestDataExtractor(BaseRequestDataExtractor, ABC):
     """Base async request data extractor with common logic extraction"""
+
+    _REQUIRED_ASYNC = ("_get_body", "_get_form_data", "_get_files")
+
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        """Refuse subclasses that inherit synchronous payload readers.
+
+        Guards against the Falcon-ASGI class of bugs: an async extractor
+        silently inheriting WSGI code fails at import time, not per request.
+        """
+        super().__init_subclass__(**kwargs)
+        for name in cls._REQUIRED_ASYNC:
+            attr = inspect.getattr_static(cls, name, None)
+            if attr is None:
+                continue
+            func = (
+                attr.__func__ if isinstance(attr, (classmethod, staticmethod)) else attr
+            )
+            if getattr(func, "__isabstractmethod__", False):
+                continue
+            if not inspect.iscoroutinefunction(func):
+                raise TypeError(
+                    f"{cls.__name__}.{name} must be 'async def': async "
+                    f"extractors must not inherit synchronous payload readers"
+                )
 
     @classmethod
     @abstractmethod
@@ -128,12 +160,20 @@ class BaseAsyncRequestDataExtractor(BaseRequestDataExtractor, ABC):
         """Extract files"""
 
     @classmethod
-    async def extract_request_data(cls, env: RequestEnvelope) -> RequestData:
-        """Asynchronous request data extraction"""
+    async def extract_request_data(
+        cls, env: RequestEnvelope, profile: ExtractionProfile | None = None
+    ) -> RequestData:
+        """Asynchronous request data extraction.
+
+        Stream-consuming payloads (body/form/files) are read only when the
+        endpoint's extraction profile references them.
+        """
+        profile = profile or EXTRACT_ALL
         _path_params = env.path_params
         request = env.request
         if _path_params is None:
             _path_params = cls._get_path_params(request)
+        has_payload = request.method not in NO_BODY_METHODS
         return RequestData(
             path_params=_path_params,
             query_params=cls._get_query_params(request),
@@ -141,17 +181,17 @@ class BaseAsyncRequestDataExtractor(BaseRequestDataExtractor, ABC):
             cookies=cls._get_cookies(request),
             body=(
                 await cls._get_body(request)
-                if request.method not in NO_BODY_METHODS
+                if has_payload and profile.needs_body
                 else {}
             ),
             form_data=(
                 await cls._get_form_data(request)
-                if request.method not in NO_BODY_METHODS
+                if has_payload and profile.needs_form
                 else {}
             ),
             files=(
                 await cls._get_files(request)
-                if request.method not in NO_BODY_METHODS
+                if has_payload and profile.needs_files
                 else {}
             ),
         )

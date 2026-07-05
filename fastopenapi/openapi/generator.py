@@ -24,6 +24,7 @@ from fastopenapi.core.params import (
     Header,
     Param,
     Security,
+    is_body_model_annotation,
     unwrap_annotated_parameter,
 )
 from fastopenapi.core.router import BaseRouter, RouteInfo
@@ -383,22 +384,10 @@ class ParameterProcessor:
             }
             return "request_body", request_body
 
-    @classmethod
-    def _is_body_model_annotation(cls, annotation: Any) -> bool:
+    @staticmethod
+    def _is_body_model_annotation(annotation: Any) -> bool:
         """Check if annotation is a model or a container of models"""
-        if cls._is_pydantic_model(annotation):
-            return True
-        origin = typing.get_origin(annotation)
-        args = typing.get_args(annotation)
-        if origin is list:
-            return bool(args) and cls._is_body_model_annotation(args[0])
-        if origin is typing.Union or origin is types.UnionType:
-            return any(
-                cls._is_body_model_annotation(arg)
-                for arg in args
-                if arg is not type(None)
-            )
-        return False
+        return is_body_model_annotation(annotation)
 
     def _build_model_container_body(self, param: inspect.Parameter) -> dict[str, Any]:
         """Build request body for containers of models"""

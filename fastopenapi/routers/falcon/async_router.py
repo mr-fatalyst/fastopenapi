@@ -3,8 +3,8 @@ from typing import Any
 
 from falcon import Response as FalconResponse
 
-from fastopenapi.core.types import Response
 from fastopenapi.openapi.ui import render_redoc_ui, render_swagger_ui
+from fastopenapi.response.serializer import WireResponse
 from fastopenapi.routers.common import RequestEnvelope
 from fastopenapi.routers.falcon.extractors import FalconAsyncRequestDataExtractor
 from fastopenapi.routers.falcon.sync_router import FalconRouter
@@ -15,30 +15,32 @@ class FalconAsyncRouter(FalconRouter):
     ASYNC_ENDPOINT_ERROR = None
     extractor_async_cls = FalconAsyncRequestDataExtractor
 
-    def _create_or_update_resource(
-        self, path: str, method: str, endpoint: Callable[..., Any]
-    ) -> Any:
-        """Create or update Falcon resource"""
-        resource = self._resources.get(path)
-        if not resource:
-            resource = type("DynamicResource", (), {})()
-            self._resources[path] = resource
-
-        method_name = self.METHODS_MAPPER.get(method, f"on_{method.lower()}")
+    def _build_response_handler(
+        self, endpoint: Callable[..., Any]
+    ) -> Callable[..., Any]:
+        """Build async request handler function for endpoint"""
 
         async def handle(request, response, **path_params):
             env = RequestEnvelope(request=request, path_params=path_params)
+            result = await self.handle_request_async(endpoint, env)
 
-            result_response = await self.handle_request_async(endpoint, env)
+            if isinstance(result, WireResponse):
+                self._apply_wire_response(result, response)
+            elif isinstance(result, FalconResponse):  # pragma: no cover
+                self._copy_falcon_response(result, response)
 
-            # Falcon needs special handling
-            if isinstance(result_response, Response):
-                self._apply_falcon_response(result_response, response)
-            elif isinstance(result_response, FalconResponse):  # pragma: no cover
-                self._copy_falcon_response(result_response, response)
+        return handle
 
-        setattr(resource, method_name, handle)
-        return resource
+    def _build_head_handler(self, get_handler: Callable) -> Callable[..., Any]:
+        """Run the GET pipeline for HEAD, then drop the body (async)"""
+
+        async def handle_head(request, response, **path_params):
+            await get_handler(request, response, **path_params)
+            response.media = None
+            response.text = None
+            response.data = None
+
+        return handle_head
 
     def _register_docs_endpoints(self) -> None:
         """Register documentation endpoints"""

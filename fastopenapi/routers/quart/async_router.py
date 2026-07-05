@@ -4,8 +4,8 @@ from typing import Any
 from quart import Response as QuartResponse
 from quart import jsonify, request
 
-from fastopenapi.core.types import Response
 from fastopenapi.openapi.ui import render_redoc_ui, render_swagger_ui
+from fastopenapi.response.serializer import WireResponse
 from fastopenapi.routers.base import BaseAdapter
 from fastopenapi.routers.common import RequestEnvelope
 from fastopenapi.routers.quart.extractors import QuartRequestDataExtractor
@@ -34,28 +34,24 @@ class QuartRouter(BaseAdapter):
                 quart_path, rule_endpoint, view_func, methods=[method.upper()]
             )
 
-    def build_framework_response(self, response: Response) -> Any:
-        """Build Quart response"""
-        if response.status_code in (204, 304):
-            return "", response.status_code, {}
+    def build_framework_response(self, response: WireResponse) -> QuartResponse:
+        """Wrap the finalized triple into a Quart response"""
+        quart_response = QuartResponse(
+            response.body if response.body is not None else b"",
+            status=response.status,
+        )
+        # Quart pre-sets a default text/html Content-Type; the wire
+        # headers are the single source of truth
+        if (
+            "Content-Type" not in response.headers
+            and "Content-Type" in quart_response.headers
+        ):
+            del quart_response.headers["Content-Type"]
+        for key, value in response.headers.items():
+            quart_response.headers[key] = value
+        return quart_response
 
-        content_type = response.headers.get("Content-Type")
-
-        # Binary content
-        if isinstance(response.content, bytes):
-            return response.content, response.status_code, response.headers
-
-        # String non-JSON content
-        if isinstance(response.content, str) and content_type not in [
-            "application/json",
-            "text/json",
-        ]:
-            return response.content, response.status_code, response.headers
-
-        # JSON content
-        return jsonify(response.content), response.status_code, response.headers
-
-    def is_framework_response(self, response: Response | QuartResponse) -> bool:
+    def is_framework_response(self, response: Any) -> bool:
         return isinstance(response, QuartResponse)
 
     def _register_docs_endpoints(self) -> None:

@@ -1,8 +1,10 @@
+import json
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 import tornado.web
 
+from fastopenapi.response.serializer import WireResponse
 from fastopenapi.routers.tornado.handler import TornadoDynamicHandler
 
 
@@ -46,97 +48,70 @@ class TestTornadoDynamicHandler:
         assert args == (404,)
 
     @pytest.mark.asyncio
-    async def test_binary_content_without_content_type(self, mock_handler):
-        """Test binary content without explicit content type"""
-        result_response = MagicMock()
-        result_response.status_code = 200
-        result_response.headers = {}  # No Content-Type
-        result_response.content = b"binary data"
-
-        mock_handler.router.handle_request_async = AsyncMock(
-            return_value=result_response
+    async def test_applies_wire_triple(self, mock_handler):
+        """The handler faithfully applies status, headers and body"""
+        wire = WireResponse(
+            body=b'{"key":"value"}',
+            status=201,
+            headers={"Content-Type": "application/json", "X-Custom": "yes"},
         )
+        mock_handler.request.method = "GET"
+        mock_handler.router.handle_request_async = AsyncMock(return_value=wire)
 
         await mock_handler.handle_request()
 
-        # Should set default binary content type
-        mock_handler.set_header.assert_any_call(
-            "Content-Type", "application/octet-stream"
-        )
-        mock_handler.finish.assert_called_once_with(b"binary data")
-
-    @pytest.mark.asyncio
-    async def test_string_content_without_content_type(self, mock_handler):
-        """Test string non-JSON content without explicit content type"""
-        result_response = MagicMock()
-        result_response.status_code = 200
-        result_response.headers = {"Content-Type": "text/html"}  # Non-JSON type
-        result_response.content = "<html>test</html>"
-
-        mock_handler.router.handle_request_async = AsyncMock(
-            return_value=result_response
-        )
-
-        await mock_handler.handle_request()
-
-        mock_handler.set_header.assert_any_call("Content-Type", "text/html")
-        mock_handler.finish.assert_called_once_with("<html>test</html>")
-
-    @pytest.mark.asyncio
-    async def test_string_plain_without_content_type(self, mock_handler):
-        """Test plain string without content type header"""
-        result_response = MagicMock()
-        result_response.status_code = 200
-        result_response.headers = {}  # No Content-Type
-        result_response.content = "plain text"
-
-        mock_handler.router.handle_request_async = AsyncMock(
-            return_value=result_response
-        )
-
-        await mock_handler.handle_request()
-
-        # Should set default text/plain
-        mock_handler.set_header.assert_any_call("Content-Type", "text/plain")
-        mock_handler.finish.assert_called_once_with("plain text")
-
-    @pytest.mark.asyncio
-    async def test_json_content_with_explicit_content_type(self, mock_handler):
-        """Test JSON content with explicit content type already set"""
-        result_response = MagicMock()
-        result_response.status_code = 200
-        result_response.headers = {"Content-Type": "application/json"}  # Already set
-        result_response.content = {"key": "value"}
-
-        mock_handler.router.handle_request_async = AsyncMock(
-            return_value=result_response
-        )
-
-        await mock_handler.handle_request()
-
-        # Should use existing content type, not set again
+        mock_handler.set_status.assert_called_once_with(201)
         mock_handler.set_header.assert_any_call("Content-Type", "application/json")
-        # Verify it was called exactly once for Content-Type (from headers)
-        content_type_calls = [
-            call
-            for call in mock_handler.set_header.call_args_list
-            if call[0][0] == "Content-Type"
-        ]
-        assert len(content_type_calls) == 1
+        mock_handler.set_header.assert_any_call("X-Custom", "yes")
+        mock_handler.write.assert_called_once_with(b'{"key":"value"}')
+        mock_handler.finish.assert_called_once_with()
 
     @pytest.mark.asyncio
-    async def test_json_content_without_content_type(self, mock_handler):
-        """Test JSON content without explicit content type"""
-        result_response = MagicMock()
-        result_response.status_code = 200
-        result_response.headers = {}  # No Content-Type
-        result_response.content = {"key": "value"}
-
-        mock_handler.router.handle_request_async = AsyncMock(
-            return_value=result_response
-        )
+    async def test_no_body_status_skips_write(self, mock_handler):
+        """204/304 write no body but keep custom headers"""
+        wire = WireResponse(body=None, status=304, headers={"ETag": '"e"'})
+        mock_handler.request.method = "GET"
+        mock_handler.router.handle_request_async = AsyncMock(return_value=wire)
 
         await mock_handler.handle_request()
 
-        # Should set default JSON content type
+        mock_handler.set_status.assert_called_once_with(304)
+        mock_handler.set_header.assert_any_call("ETag", '"e"')
+        mock_handler.write.assert_not_called()
+        mock_handler.finish.assert_called_once_with()
+
+    @pytest.mark.asyncio
+    async def test_head_request_skips_body(self, mock_handler):
+        """HEAD runs the GET pipeline but never writes a body"""
+        wire = WireResponse(
+            body=b'{"key":"value"}',
+            status=200,
+            headers={"Content-Type": "application/json"},
+        )
+        mock_handler.request.method = "HEAD"
+        mock_handler.endpoint = None
+        mock_handler.endpoints = {"GET": MagicMock()}
+        mock_handler.router.handle_request_async = AsyncMock(return_value=wire)
+
+        await mock_handler.handle_request()
+
+        mock_handler.set_status.assert_called_once_with(200)
+        mock_handler.write.assert_not_called()
+        mock_handler.finish.assert_called_once_with()
+
+    @pytest.mark.asyncio
+    async def test_method_not_allowed_is_json_with_allow_header(self, mock_handler):
+        """405 responses carry an Allow header and a JSON envelope"""
+        mock_handler.request.method = "DELETE"
+        mock_handler.endpoint = None
+        mock_handler.endpoints = {"GET": MagicMock(), "POST": MagicMock()}
+
+        await mock_handler.handle_request()
+
+        mock_handler.set_status.assert_called_once_with(405)
+        mock_handler.set_header.assert_any_call("Allow", "GET, HEAD, POST")
         mock_handler.set_header.assert_any_call("Content-Type", "application/json")
+        body = mock_handler.write.call_args[0][0]
+        error = json.loads(body)["error"]
+        assert error["status"] == 405
+        assert error["type"] == "method_not_allowed"

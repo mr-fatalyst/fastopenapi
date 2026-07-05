@@ -3,8 +3,8 @@ from typing import Any
 
 from tornado.web import Application, RequestHandler, url
 
-from fastopenapi.core.types import Response
 from fastopenapi.openapi.ui import render_redoc_ui, render_swagger_ui
+from fastopenapi.response.serializer import WireResponse
 from fastopenapi.routers.base import BaseAdapter
 from fastopenapi.routers.tornado.extractors import TornadoRequestDataExtractor
 from fastopenapi.routers.tornado.handler import TornadoDynamicHandler
@@ -51,12 +51,12 @@ class TornadoRouter(BaseAdapter):
                     rule.target_kwargs["endpoints"] = self._endpoint_map[tornado_path]
                     break
 
-    def build_framework_response(self, response: Response) -> Response:
-        """Build Tornado response - handled directly in handler"""
+    def build_framework_response(self, response: WireResponse) -> WireResponse:
+        """Tornado applies the triple inside its RequestHandler"""
         return response
 
-    def is_framework_response(self, response: Response) -> bool:
-        # I think we don't work with Tornado Response. It's always False.
+    def is_framework_response(self, response: Any) -> bool:
+        # Tornado has no response object endpoints could return
         return False
 
     def _register_docs_endpoints(self) -> None:

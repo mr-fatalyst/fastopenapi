@@ -3,8 +3,8 @@ from typing import Any
 
 import falcon
 
-from fastopenapi.core.types import Response
 from fastopenapi.openapi.ui import render_redoc_ui, render_swagger_ui
+from fastopenapi.response.serializer import WireResponse
 from fastopenapi.routers.base import BaseAdapter
 from fastopenapi.routers.common import RequestEnvelope
 from fastopenapi.routers.falcon.extractors import FalconRequestDataExtractor
@@ -50,6 +50,8 @@ class FalconRouter(BaseAdapter):
         method_name = self.METHODS_MAPPER.get(method, f"on_{method.lower()}")
         handler = self._build_response_handler(endpoint)
         setattr(resource, method_name, handler)
+        if method == "GET":
+            self._register_auto_head(resource, handler)
         return resource
 
     def _get_or_create_resource(self, path: str) -> Any:
@@ -58,6 +60,32 @@ class FalconRouter(BaseAdapter):
             self._resources[path] = type("DynamicResource", (), {})()
         return self._resources[path]
 
+    def _register_auto_head(self, resource: Any, get_handler: Callable) -> None:
+        """Answer HEAD on GET routes unless an explicit HEAD is registered.
+
+        An explicit ``on_head`` (registered before or after the GET route)
+        always wins over the auto-generated one.
+        """
+        existing = getattr(resource, "on_head", None)
+        if existing is not None and not getattr(
+            existing, "_fastopenapi_auto_head", False
+        ):
+            return
+        head_handler = self._build_head_handler(get_handler)
+        head_handler._fastopenapi_auto_head = True
+        resource.on_head = head_handler
+
+    def _build_head_handler(self, get_handler: Callable) -> Callable[..., None]:
+        """Run the GET pipeline for HEAD, then drop the body"""
+
+        def handle_head(request, response, **path_params):
+            get_handler(request, response, **path_params)
+            response.media = None
+            response.text = None
+            response.data = None
+
+        return handle_head
+
     def _build_response_handler(
         self, endpoint: Callable[..., Any]
     ) -> Callable[..., None]:
@@ -65,58 +93,46 @@ class FalconRouter(BaseAdapter):
 
         def handle(request, response, **path_params):
             env = RequestEnvelope(request=request, path_params=path_params)
-            result_response = self.handle_request(endpoint, env)
+            result = self.handle_request(endpoint, env)
 
-            if isinstance(result_response, Response):
-                self._apply_falcon_response(result_response, response)
-            elif isinstance(result_response, falcon.Response):  # pragma: no cover
-                self._copy_falcon_response(result_response, response)
+            if isinstance(result, WireResponse):
+                self._apply_wire_response(result, response)
+            elif isinstance(result, falcon.Response):  # pragma: no cover
+                self._copy_falcon_response(result, response)
 
         return handle
 
-    def _apply_falcon_response(self, result_response: Response, response: Any) -> None:
-        """Apply our Response to Falcon response object"""
-        response.status = result_response.status_code
-
-        # For 204 No Content, no body or content-type should be set
-        if result_response.status_code == 204:
-            return
-
-        content_type = result_response.headers.get("Content-Type")
-
-        # Binary content
-        if isinstance(result_response.content, bytes):
-            response.data = result_response.content
-            response.content_type = content_type or "application/octet-stream"
-        # String non-JSON content
-        elif isinstance(result_response.content, str) and content_type not in [
-            "application/json",
-            "text/json",
-        ]:
-            response.text = result_response.content
-            response.content_type = content_type or "text/plain"
-        # JSON content
-        else:
-            response.media = result_response.content
-            response.content_type = content_type or "application/json"
-
-        # Set custom headers (except Content-Type, already set)
-        for key, value in result_response.headers.items():
-            if key.lower() != "content-type":
+    @staticmethod
+    def _apply_wire_response(wire: WireResponse, response: Any) -> None:
+        """Apply the finalized triple to Falcon's response object"""
+        response.status = wire.status
+        for key, value in wire.headers.items():
+            if key.lower() == "content-type":
+                response.content_type = value
+            else:
                 response.set_header(key, value)
+        if wire.body is not None:
+            response.data = wire.body
 
     def _copy_falcon_response(self, source: falcon.Response, target: Any) -> None:
-        """Copy Falcon Response to response object"""
-        target.status = source.status_code
-        target.media = source.media
+        """Copy a user-returned Falcon Response onto the live response"""
+        target.status = source.status
+        if source.media is not None:
+            target.media = source.media
+        elif source.text is not None:
+            target.text = source.text
+        elif source.data is not None:
+            target.data = source.data
+        if source.content_type:
+            target.content_type = source.content_type
         for key, value in source.headers.items():
             target.set_header(key, value)
 
-    def build_framework_response(self, response: Response) -> Response:
-        """Build Falcon response"""
+    def build_framework_response(self, response: WireResponse) -> WireResponse:
+        """Falcon applies the triple to its response object in the handler"""
         return response
 
-    def is_framework_response(self, response: Response | falcon.Response) -> bool:
+    def is_framework_response(self, response: Any) -> bool:
         return isinstance(response, falcon.Response)
 
     def _register_docs_endpoints(self) -> None:

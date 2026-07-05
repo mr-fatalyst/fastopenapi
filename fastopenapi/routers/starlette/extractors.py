@@ -41,7 +41,7 @@ class StarletteRequestDataExtractor(BaseAsyncRequestDataExtractor):
     @classmethod
     async def _get_form_data(cls, request: Any) -> dict[str, Any]:
         """Extract form data"""
-        form_data = {}
+        form_data: dict[str, Any] = {}
         content_type = request.headers.get("content-type", "")
 
         if (
@@ -49,8 +49,17 @@ class StarletteRequestDataExtractor(BaseAsyncRequestDataExtractor):
             or "application/x-www-form-urlencoded" in content_type
         ):
             form = await request.form()
-            for key, value in form.items():
-                if not hasattr(value, "filename"):
+            # multi_items() keeps repeated keys that items() collapses
+            for key, value in form.multi_items():
+                if hasattr(value, "filename"):
+                    continue
+                if key in form_data:
+                    existing = form_data[key]
+                    if isinstance(existing, list):
+                        existing.append(value)
+                    else:
+                        form_data[key] = [existing, value]
+                else:
                     form_data[key] = value
 
         return form_data
@@ -63,7 +72,8 @@ class StarletteRequestDataExtractor(BaseAsyncRequestDataExtractor):
 
         if "multipart/form-data" in content_type:
             form = await request.form()
-            for key, value in form.items():
+            # multi_items() keeps same-name files that items() collapses
+            for key, value in form.multi_items():
                 if hasattr(value, "filename"):
                     file_upload = FileUpload(
                         filename=value.filename,

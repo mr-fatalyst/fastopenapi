@@ -16,26 +16,15 @@ class DjangoAsyncRouter(DjangoRouter):
     ASYNC_ENDPOINT_ERROR = None
     extractor_async_cls = DjangoAsyncRequestDataExtractor
 
-    def _create_or_update_view(
-        self, path: str, method: str, endpoint: Callable[..., Any]
-    ) -> Any:
-        """Create or update Django view for the path"""
-        view = self._views.get(path)
-        if not view:
-            view = type(
-                "DynamicView", (View,), {"dispatch": csrf_exempt(View.dispatch)}
-            )
-            self._views[path] = view
-
-        method_name = method.lower()
+    def _build_view_handler(self, endpoint: Callable[..., Any]) -> Callable[..., Any]:
+        """Build the per-endpoint async view method"""
         outer = self
 
         async def handle(self, req, **path_params):
             env = RequestEnvelope(request=req, path_params=path_params)
             return await outer.handle_request_async(endpoint, env)
 
-        setattr(view, method_name, handle)
-        return view
+        return handle
 
     def _register_docs_endpoints(self) -> None:
         """Register documentation endpoints"""

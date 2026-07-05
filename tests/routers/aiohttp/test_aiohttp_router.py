@@ -35,7 +35,8 @@ class TestAioHttpRouter:
             for route in app.router.routes()
             if route.resource.get_info().get("path") == "/test"
         ]
-        assert len(routes) == 1
+        # GET routes get an automatic HEAD twin
+        assert {route.method for route in routes} == {"GET", "HEAD"}
 
     def test_include_router(self):
         """Test including a sub-router"""
@@ -53,7 +54,8 @@ class TestAioHttpRouter:
             for route in app.router.routes()
             if route.resource.get_info().get("path") == "/api/sub"
         ]
-        assert len(routes) == 1
+        # GET routes get an automatic HEAD twin
+        assert {route.method for route in routes} == {"GET", "HEAD"}
 
     def test_add_route_app_none(self, dummy_endpoint):
         """

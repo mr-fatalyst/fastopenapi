@@ -1,5 +1,7 @@
 from typing import Any
 
+from asgiref.sync import sync_to_async
+
 from fastopenapi.core.types import FileUpload
 from fastopenapi.routers.extractors import (
     BaseAsyncRequestDataExtractor,
@@ -74,17 +76,20 @@ class DjangoAsyncRequestDataExtractor(
     DjangoRequestDataExtractor,
     BaseAsyncRequestDataExtractor,
 ):
+    """Async variant: Django's parsing is synchronous, so it runs in a
+    thread via sync_to_async instead of blocking the event loop."""
+
     @classmethod
     async def _get_body(cls, request: Any) -> bytes | str | dict:
         """Extract body"""
-        return super()._get_body(request)
+        return await sync_to_async(super()._get_body)(request)
 
     @classmethod
     async def _get_form_data(cls, request: Any) -> dict[str, Any]:
         """Extract form data"""
-        return super()._get_form_data(request)
+        return await sync_to_async(super()._get_form_data)(request)
 
     @classmethod
     async def _get_files(cls, request: Any) -> dict[str, FileUpload | list[FileUpload]]:
         """Extract files"""
-        return super()._get_files(request)
+        return await sync_to_async(super()._get_files)(request)
