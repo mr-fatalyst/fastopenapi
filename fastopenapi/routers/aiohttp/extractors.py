@@ -1,7 +1,5 @@
 from typing import Any
 
-from pydantic_core import from_json
-
 from fastopenapi.core.types import FileUpload
 from fastopenapi.routers.extractors import BaseAsyncRequestDataExtractor
 
@@ -40,17 +38,13 @@ class AioHttpRequestDataExtractor(BaseAsyncRequestDataExtractor):
         Non-JSON payloads are left untouched: reading them here would
         drain the stream that the multipart parser consumes later.
         """
-        content_type = str(request.content_type or "")
-        if content_type != "application/json" and not content_type.endswith("+json"):
+        if not cls._is_json_content(request.content_type):
             return {}
         try:
             body_bytes = await request.read()
-            if body_bytes:
-                return from_json(body_bytes)
-            else:
-                return {}
         except Exception:
             return {}
+        return cls._safe_json_parse(body_bytes, strict=True) or {}
 
     @classmethod
     async def _parse_multipart(

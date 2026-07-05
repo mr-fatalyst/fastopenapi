@@ -26,7 +26,7 @@ class TestFlaskRouter:
         app = Flask(__name__)
         router = FlaskRouter(app=app)
 
-        async def test_endpoint():
+        def test_endpoint():
             return {"message": "Test"}
 
         router.add_route("/test", "GET", test_endpoint)
@@ -45,7 +45,7 @@ class TestFlaskRouter:
         main_router = FlaskRouter(app=app)
         sub_router = FlaskRouter()
 
-        async def sub_endpoint():
+        def sub_endpoint():
             return {"message": "Sub"}
 
         sub_router.add_route("/sub", "GET", sub_endpoint)
@@ -73,7 +73,7 @@ class TestFlaskRouter:
             name: str
 
         @router.get("/test/{id}", response_model=TestModel)
-        async def get_test(id: int):
+        def get_test(id: int):
             """Test endpoint"""
             return TestModel(id=id, name="Test")
 

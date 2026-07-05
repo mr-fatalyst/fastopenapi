@@ -28,7 +28,7 @@ class TestAsyncDjangoIntegration:
 
         assert response.status_code == 500
         result = response.json()
-        assert result["error"]["message"] == "TEST ERROR"
+        assert result["error"]["message"] == "Internal server error"
 
     @pytest.mark.asyncio
     async def test_get_item(self, client):
@@ -92,7 +92,7 @@ class TestAsyncDjangoIntegration:
 
         assert response.status_code == 422
         result = response.json()
-        assert "Validation error for parameter" in result["error"]["message"]
+        assert "Invalid JSON in request body" in result["error"]["message"]
 
     @pytest.mark.asyncio
     async def test_update_item(self, client):

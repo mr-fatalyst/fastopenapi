@@ -41,7 +41,7 @@ class TestSanicIntegration:
 
         assert response.status_code == 500
         result = from_json(response.text)
-        assert result["error"]["message"] == "TEST ERROR"
+        assert result["error"]["message"] == "Internal server error"
 
     @pytest.mark.asyncio
     async def test_get_item(self, client):

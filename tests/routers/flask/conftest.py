@@ -67,11 +67,6 @@ def app(items_db):  # noqa: C901
     def get_items_invalid():
         return [Item(**item) for item in items_db]
 
-    @router.get("/items-async", response_model=list[ItemResponse], tags=["items"])
-    async def get_items_async():
-        """Get all items"""
-        return [ItemResponse(**item) for item in items_db]
-
     @router.get("/items-fail", response_model=list[ItemResponse], tags=["items"])
     def get_items_fail():
         """Get all items, but raise error"""

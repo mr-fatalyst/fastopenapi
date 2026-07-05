@@ -42,8 +42,11 @@ class BaseRouter:
         security_scheme: (
             SecuritySchemeType | dict[str, Any] | None
         ) = SecuritySchemeType.BEARER_JWT,
+        debug: bool = False,
     ):
         self.app = app
+        # With debug=True, 5xx responses include exception details in the body
+        self.debug = debug
         self.docs_url = docs_url
         self.redoc_url = redoc_url
         self.openapi_url = openapi_url

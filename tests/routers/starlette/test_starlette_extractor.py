@@ -3,6 +3,7 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 
 from fastopenapi.core.types import RequestData
+from fastopenapi.errors.exceptions import ValidationError
 from fastopenapi.routers.common import RequestEnvelope
 from fastopenapi.routers.starlette.extractors import StarletteRequestDataExtractor
 
@@ -88,8 +89,19 @@ class TestStarletteRequestDataExtractor:
 
     @pytest.mark.asyncio
     async def test_get_body_json_error(self):
-        """Test JSON parsing error"""
+        """Malformed JSON with a declared JSON Content-Type raises 422"""
         request = Mock()
+        request.headers = {"content-type": "application/json"}
+        request.body = AsyncMock(return_value=b'{"invalid": json}')
+
+        with pytest.raises(ValidationError):
+            await StarletteRequestDataExtractor._get_body(request)
+
+    @pytest.mark.asyncio
+    async def test_get_body_json_error_without_json_content_type(self):
+        """Malformed body without a JSON Content-Type is dropped"""
+        request = Mock()
+        request.headers = {}
         request.body = AsyncMock(return_value=b'{"invalid": json}')
 
         result = await StarletteRequestDataExtractor._get_body(request)

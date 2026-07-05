@@ -1,4 +1,3 @@
-import inspect
 import re
 from collections.abc import Callable
 from typing import Any
@@ -26,6 +25,9 @@ class DjangoRouter(BaseAdapter):
     """Django adapter for FastOpenAPI"""
 
     PATH_CONVERSIONS = (r"{(\w+)}", r"<\1>")
+    ASYNC_ENDPOINT_ERROR = (
+        "cannot be used with sync router. Use DjangoAsyncRouter for async support."
+    )
 
     EXCEPTION_MAPPER = {
         Http404: ResourceNotFoundError,
@@ -60,12 +62,6 @@ class DjangoRouter(BaseAdapter):
 
         def handle(self, req, **path_params):  # pragma: no cover
             env = RequestEnvelope(request=req, path_params=path_params)
-            if inspect.iscoroutinefunction(endpoint):
-                raise Exception(
-                    f"Async endpoint '{endpoint.__name__}' "
-                    f"cannot be used with sync router. "
-                    f"Use DjangoAsyncRouter for async support."
-                )
             return outer.handle_request(endpoint, env)
 
         setattr(view, method_name, handle)

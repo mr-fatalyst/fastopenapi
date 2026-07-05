@@ -1,7 +1,7 @@
 from enum import Enum
 
 SWAGGER_URL = "https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.20.0/"
-REDOC_URL = "https://cdn.jsdelivr.net/npm/redoc@next/bundles/redoc.standalone.js"
+REDOC_URL = "https://cdn.jsdelivr.net/npm/redoc@2.5.3/bundles/redoc.standalone.js"
 
 # HTTP methods
 SUPPORTED_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"]

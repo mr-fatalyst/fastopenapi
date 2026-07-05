@@ -1,4 +1,3 @@
-import inspect
 from collections.abc import Callable
 from typing import Any
 
@@ -16,6 +15,7 @@ class FlaskRouter(BaseAdapter):
     """Flask adapter for FastOpenAPI"""
 
     PATH_CONVERSIONS = (r"{(\w+)}", r"<\1>")
+    ASYNC_ENDPOINT_ERROR = "cannot be used with Flask. Use Quart for async support."
 
     extractor_cls = FlaskRequestDataExtractor
 
@@ -28,13 +28,6 @@ class FlaskRouter(BaseAdapter):
 
             def view_func(**path_params):
                 env = RequestEnvelope(request=request, path_params=path_params)
-
-                if inspect.iscoroutinefunction(endpoint):
-                    raise Exception(
-                        f"Async endpoint '{endpoint.__name__}' "
-                        f"cannot be used with Flask. Use Quart for async support."
-                    )
-
                 return self.handle_request(endpoint, env)
 
             rule_endpoint = f"{endpoint.__name__}:{method.upper()}:{flask_path}"

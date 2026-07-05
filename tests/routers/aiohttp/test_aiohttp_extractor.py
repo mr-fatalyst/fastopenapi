@@ -3,6 +3,7 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 
 from fastopenapi.core.types import RequestData
+from fastopenapi.errors.exceptions import ValidationError
 from fastopenapi.routers.aiohttp.extractors import AioHttpRequestDataExtractor
 from fastopenapi.routers.common import RequestEnvelope
 
@@ -130,15 +131,13 @@ class TestAioHttpRequestDataExtractor:
 
     @pytest.mark.asyncio
     async def test_get_body_json_error(self):
-        """Test body with JSON parsing error"""
+        """Malformed JSON with a declared JSON Content-Type raises 422"""
         request = Mock()
         request.content_type = "application/json"
         request.read = AsyncMock(return_value=b'{"invalid": json}')
-        request.json = AsyncMock(side_effect=Exception("Invalid JSON"))
 
-        result = await AioHttpRequestDataExtractor._get_body(request)
-
-        assert result == {}
+        with pytest.raises(ValidationError):
+            await AioHttpRequestDataExtractor._get_body(request)
 
     @pytest.mark.asyncio
     async def test_get_form_data_multipart(self):

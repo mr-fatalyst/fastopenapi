@@ -1,5 +1,7 @@
 import pytest
 
+from fastopenapi.routers import DjangoRouter
+
 
 class TestDjangoIntegration:
     def test_get_items(self, client):
@@ -19,15 +21,21 @@ class TestDjangoIntegration:
         data = resp.json()
         assert data["error"]["message"] == "Incorrect response type"
 
-    def test_get_items_async(self, client):
-        """Test fetching an item by ID"""
-        with pytest.raises(Exception) as excinfo:
-            client.get("/items-async")
-            err_msg = (
-                "Async endpoint 'get_items_async' cannot be used with sync router."
-                " Use DjangoAsyncRouter for async support."
-            )
-            assert err_msg in str(excinfo.value)
+    def test_get_items_async(self):
+        """Async endpoints are rejected at registration time"""
+        router = DjangoRouter()
+
+        with pytest.raises(TypeError) as excinfo:
+
+            @router.get("/items-async")
+            async def get_items_async():
+                return []
+
+        err_msg = (
+            "Async endpoint 'get_items_async' cannot be used with sync router. "
+            "Use DjangoAsyncRouter for async support."
+        )
+        assert err_msg in str(excinfo.value)
 
     def test_get_items_fail(self, client):
         """Test fetching all items with an error"""
@@ -35,7 +43,7 @@ class TestDjangoIntegration:
 
         assert response.status_code == 500
         result = response.json()
-        assert result["error"]["message"] == "TEST ERROR"
+        assert result["error"]["message"] == "Internal server error"
 
     def test_get_item(self, client):
         """Test fetching an item by ID"""
@@ -89,7 +97,7 @@ class TestDjangoIntegration:
 
         assert response.status_code == 422
         result = response.json()
-        assert "Validation error for parameter" in result["error"]["message"]
+        assert "Invalid JSON in request body" in result["error"]["message"]
 
     def test_update_item(self, client):
         """Test updating an item"""

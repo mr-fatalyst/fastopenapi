@@ -70,7 +70,7 @@ class TestFalconIntegration:
 
         assert response.status_code == 500
         result = from_json(response.text)
-        assert result["error"]["message"] == "TEST ERROR"
+        assert result["error"]["message"] == "Internal server error"
 
     @pytest.mark.asyncio
     async def test_get_item(self, async_client):
@@ -140,7 +140,7 @@ class TestFalconIntegration:
 
         assert response.status_code == 422
         result = from_json(response.text)
-        assert "Validation error for parameter" in result["error"]["message"]
+        assert "Invalid JSON in request body" in result["error"]["message"]
 
     @pytest.mark.asyncio
     async def test_update_item(self, async_client):

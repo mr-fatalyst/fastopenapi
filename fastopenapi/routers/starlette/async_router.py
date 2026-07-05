@@ -4,10 +4,7 @@ from typing import Any
 
 from pydantic_core import to_json
 from starlette.applications import Starlette
-from starlette.responses import (
-    HTMLResponse,
-    JSONResponse,
-)
+from starlette.responses import HTMLResponse, JSONResponse
 from starlette.responses import Response as StarletteResponse
 from starlette.routing import Route
 

@@ -1,18 +1,26 @@
 import pytest
 from pydantic_core import from_json, to_json
 
+from fastopenapi.routers import FalconRouter
+
 
 class TestFalconIntegration:
 
-    def test_get_items_sync(self, sync_client):
-        """Test fetching all items synchronously"""
-        with pytest.raises(Exception) as excinfo:
-            sync_client.simulate_get("/items-async")
-            err_msg = (
-                "Async endpoint 'get_items_async' cannot be used with sync router."
-                " Use FalconAsyncRouter for async support."
-            )
-            assert err_msg in str(excinfo.value)
+    def test_get_items_async_rejected(self):
+        """Async endpoints are rejected at registration time"""
+        router = FalconRouter()
+
+        with pytest.raises(TypeError) as excinfo:
+
+            @router.get("/items-async")
+            async def get_items_async():
+                return []
+
+        err_msg = (
+            "Async endpoint 'get_items_async' cannot be used with sync router. "
+            "Use FalconAsyncRouter for async support."
+        )
+        assert err_msg in str(excinfo.value)
 
     def test_get_items_invalid(self, sync_client):
         """Test retrieving all items with wrong model"""
@@ -65,7 +73,7 @@ class TestFalconIntegration:
 
         assert response.status_code == 500
         result = from_json(response.text)
-        assert result["error"]["message"] == "TEST ERROR"
+        assert result["error"]["message"] == "Internal server error"
 
     def test_get_item(self, sync_client):
         """Test fetching an item by ID"""
@@ -129,7 +137,7 @@ class TestFalconIntegration:
 
         assert response.status_code == 422
         result = from_json(response.text)
-        assert "Validation error for parameter" in result["error"]["message"]
+        assert "Invalid JSON in request body" in result["error"]["message"]
 
     def test_update_item(self, sync_client):
         """Test updating an item"""

@@ -5,6 +5,7 @@ from pydantic_core import from_json
 
 from fastopenapi.core.constants import NO_BODY_METHODS
 from fastopenapi.core.types import FileUpload, RequestData
+from fastopenapi.errors.exceptions import ValidationError
 from fastopenapi.routers.common import RequestEnvelope
 
 
@@ -52,8 +53,21 @@ class BaseRequestDataExtractor(ABC):
         return {k.lower(): v for k, v in headers.items()} if headers else {}
 
     @staticmethod
-    def _safe_json_parse(data: Any) -> dict[str, Any] | None:
-        """Safely parse JSON data"""
+    def _is_json_content(content_type: Any) -> bool:
+        """Check if the declared Content-Type is a JSON media type"""
+        mimetype = str(content_type or "").partition(";")[0].strip().lower()
+        return mimetype == "application/json" or mimetype.endswith("+json")
+
+    @staticmethod
+    def _safe_json_parse(
+        data: Any, strict: bool = False
+    ) -> dict[str, Any] | list[Any] | None:
+        """Parse JSON data.
+
+        With strict=True (the request declared a JSON Content-Type) a
+        malformed payload raises ValidationError instead of being dropped,
+        so the client gets a JSON parse error rather than 'Field required'.
+        """
         if not data:
             return None
         try:
@@ -62,7 +76,11 @@ class BaseRequestDataExtractor(ABC):
             if isinstance(data, str):
                 return from_json(data)
             return data
-        except Exception:
+        except Exception as e:
+            if strict:
+                raise ValidationError(
+                    "Invalid JSON in request body", details=str(e)
+                ) from e
             return None
 
     @classmethod

@@ -31,11 +31,9 @@ class FlaskRequestDataExtractor(BaseRequestDataExtractor):
 
     @classmethod
     def _get_body(cls, request: Any) -> dict | list | None:
-        ct = (request.mimetype or "").lower()
-        data = {}
-        if ct == "application/json":
-            data = request.get_json(silent=True)
-        return data if data is not None else {}
+        if not cls._is_json_content(request.mimetype):
+            return {}
+        return cls._safe_json_parse(request.get_data(), strict=True) or {}
 
     @classmethod
     def _get_form_data(cls, request: Any) -> dict[str, Any]:

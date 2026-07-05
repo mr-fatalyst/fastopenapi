@@ -1,6 +1,7 @@
 from typing import Any
 
 from fastopenapi.core.types import FileUpload
+from fastopenapi.errors.exceptions import ValidationError
 from fastopenapi.routers.extractors import BaseAsyncRequestDataExtractor
 
 
@@ -43,10 +44,13 @@ class SanicRequestDataExtractor(BaseAsyncRequestDataExtractor):
     async def _get_body(cls, request: Any) -> dict | list | None:
         """Extract body"""
         try:
-            data = request.json or {}
-        except Exception:
-            data = {}
-        return data
+            return request.json or {}
+        except Exception as e:
+            if cls._is_json_content(getattr(request, "content_type", "")):
+                raise ValidationError(
+                    "Invalid JSON in request body", details=str(e)
+                ) from e
+            return {}
 
     @classmethod
     async def _get_form_data(cls, request: Any) -> dict[str, Any]:

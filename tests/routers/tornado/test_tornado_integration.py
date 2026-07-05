@@ -297,7 +297,7 @@ class TestTornadoIntegration(AsyncHTTPTestCase):
         )
         self.assertEqual(response.code, 500)
         result = self.parse_json(response)
-        self.assertIn("TEST ERROR", result["error"]["message"])
+        self.assertEqual("Internal server error", result["error"]["message"])
 
     @gen_test
     async def test_get_item(self):

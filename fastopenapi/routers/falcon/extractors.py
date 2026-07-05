@@ -1,7 +1,5 @@
 from typing import Any
 
-from pydantic_core import from_json
-
 from fastopenapi.core.types import FileUpload
 from fastopenapi.routers.extractors import (
     BaseAsyncRequestDataExtractor,
@@ -61,14 +59,13 @@ class FalconRequestDataExtractor(BaseRequestDataExtractor):
 
     @classmethod
     def _get_body(cls, request: Any) -> dict | list | None:
-        if cls._mimetype(request) == "application/json":
-            try:
-                body_bytes = request.bounded_stream.read()
-                if body_bytes:
-                    return from_json(body_bytes.decode("utf-8"))
-            except Exception:
-                pass
-        return {}
+        if not cls._is_json_content(request.content_type):
+            return {}
+        try:
+            body_bytes = request.bounded_stream.read()
+        except Exception:
+            return {}
+        return cls._safe_json_parse(body_bytes, strict=True) or {}
 
     @classmethod
     def _parse_multipart(
@@ -136,14 +133,13 @@ class FalconAsyncRequestDataExtractor(
     @classmethod
     async def _get_body(cls, request: Any) -> bytes | str | dict:
         """Extract body"""
-        if cls._mimetype(request) == "application/json":
-            try:
-                body_bytes = await request.bounded_stream.read()
-                if body_bytes:
-                    return from_json(body_bytes.decode("utf-8"))
-            except Exception:
-                pass
-        return {}
+        if not cls._is_json_content(request.content_type):
+            return {}
+        try:
+            body_bytes = await request.bounded_stream.read()
+        except Exception:
+            return {}
+        return cls._safe_json_parse(body_bytes, strict=True) or {}
 
     @classmethod
     async def _parse_multipart(

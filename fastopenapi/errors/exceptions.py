@@ -50,8 +50,16 @@ class APIError(Exception):
         cls,
         exc: Exception,
         mapper: dict[type[Exception], type["APIError"]] | None = None,
+        *,
+        debug: bool = False,
     ) -> "APIError":
-        """Convert any exception to a standardized error response"""
+        """Convert any exception to a standardized error response.
+
+        Exception text reaches the client only for explicit APIError
+        instances and exceptions listed in the mapper. Unhandled 5xx
+        faults get a generic message (details are still logged by the
+        adapter); with debug=True the details are included in the body.
+        """
         if isinstance(exc, APIError):
             return exc
 
@@ -60,27 +68,48 @@ class APIError(Exception):
         if entry:
             return entry(str(exc))
 
-        status = HTTPStatus.INTERNAL_SERVER_ERROR
-        for attr in ("status_code", "code"):
-            if hasattr(exc, attr):
-                try:
-                    status = HTTPStatus(int(getattr(exc, attr)))
-                    break
-                except Exception:  # pragma: no cover
-                    pass
-
-        message = str(exc)
-        for attr in ("message", "title", "name", "reason", "detail"):
-            if hasattr(exc, attr):
-                message = str(getattr(exc, attr))
-                break
-
+        status = cls._extract_status(exc)
         err_type = STATUS_TO_ERROR_TYPE.get(status, ErrorType.INTERNAL_SERVER_ERROR)
 
-        api_error = APIError(message=message)
+        details = None
+        if status >= HTTPStatus.INTERNAL_SERVER_ERROR:
+            message = (
+                "Internal server error"
+                if status == HTTPStatus.INTERNAL_SERVER_ERROR
+                else status.phrase
+            )
+            if debug:
+                details = f"{type(exc).__name__}: {exc}"
+        else:
+            message = cls._extract_message(exc)
+
+        api_error = APIError(message=message, details=details)
         api_error.status_code = status
         api_error.error_type = err_type
         return api_error
+
+    @staticmethod
+    def _extract_status(exc: Exception) -> HTTPStatus:
+        """Pull an HTTP status off framework-style exceptions"""
+        for attr in ("status_code", "code"):
+            value = getattr(exc, attr, None)
+            # 'code' is not necessarily an HTTP status (errno, string codes),
+            # so only int values that map to a real status are trusted
+            if isinstance(value, int) and not isinstance(value, bool):
+                try:
+                    return HTTPStatus(value)
+                except ValueError:
+                    pass
+        return HTTPStatus.INTERNAL_SERVER_ERROR
+
+    @staticmethod
+    def _extract_message(exc: Exception) -> str:
+        """Extract a human-readable message from framework-style exceptions"""
+        for attr in ("message", "title", "name", "reason", "detail"):
+            value = getattr(exc, attr, None)
+            if isinstance(value, str) and value:
+                return value
+        return str(exc)
 
 
 class BadRequestError(APIError):

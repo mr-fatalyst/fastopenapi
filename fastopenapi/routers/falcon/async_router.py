@@ -11,6 +11,8 @@ from fastopenapi.routers.falcon.sync_router import FalconRouter
 
 
 class FalconAsyncRouter(FalconRouter):
+    # Async endpoints are the whole point here — lift the sync-router guard
+    ASYNC_ENDPOINT_ERROR = None
     extractor_async_cls = FalconAsyncRequestDataExtractor
 
     def _create_or_update_resource(

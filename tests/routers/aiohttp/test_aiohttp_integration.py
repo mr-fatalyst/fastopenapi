@@ -37,7 +37,7 @@ class TestAioHttpIntegration:
         resp = await client.get("/items-fail")
         assert resp.status == 500
         data = await resp.json()
-        assert data["error"]["message"] == "TEST ERROR"
+        assert data["error"]["message"] == "Internal server error"
 
     @pytest.mark.asyncio
     async def test_get_item(self, client):
@@ -106,7 +106,7 @@ class TestAioHttpIntegration:
         resp = await client.post("/items", data="incorrect json", headers=headers)
         assert resp.status == 422
         data = await resp.json()
-        assert "Validation error for parameter" in data["error"]["message"]
+        assert "Invalid JSON in request body" in data["error"]["message"]
 
     @pytest.mark.asyncio
     async def test_update_item(self, client):

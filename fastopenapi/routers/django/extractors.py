@@ -1,7 +1,5 @@
 from typing import Any
 
-from pydantic_core import from_json
-
 from fastopenapi.core.types import FileUpload
 from fastopenapi.routers.extractors import (
     BaseAsyncRequestDataExtractor,
@@ -36,12 +34,10 @@ class DjangoRequestDataExtractor(BaseRequestDataExtractor):
 
     @classmethod
     def _get_body(cls, request: Any) -> dict | list | None:
-        if hasattr(request, "body") and request.body:
-            try:
-                return from_json(request.body.decode("utf-8"))
-            except Exception:
-                pass
-        return {}
+        if not (hasattr(request, "body") and request.body):
+            return {}
+        strict = cls._is_json_content(getattr(request, "content_type", ""))
+        return cls._safe_json_parse(request.body, strict=strict) or {}
 
     @classmethod
     def _get_form_data(cls, request: Any) -> dict[str, Any]:

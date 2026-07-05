@@ -1,4 +1,3 @@
-import inspect
 from collections.abc import Callable
 from typing import Any
 
@@ -13,6 +12,10 @@ from fastopenapi.routers.falcon.extractors import FalconRequestDataExtractor
 
 class FalconRouter(BaseAdapter):
     """Falcon adapter for FastOpenAPI"""
+
+    ASYNC_ENDPOINT_ERROR = (
+        "cannot be used with sync router. Use FalconAsyncRouter for async support."
+    )
 
     extractor_cls = FalconRequestDataExtractor
 
@@ -61,13 +64,6 @@ class FalconRouter(BaseAdapter):
         """Build request handler function for endpoint"""
 
         def handle(request, response, **path_params):
-            if inspect.iscoroutinefunction(endpoint):
-                raise Exception(
-                    f"Async endpoint '{endpoint.__name__}' "
-                    f"cannot be used with sync router. "
-                    f"Use FalconAsyncRouter for async support."
-                )
-
             env = RequestEnvelope(request=request, path_params=path_params)
             result_response = self.handle_request(endpoint, env)
 

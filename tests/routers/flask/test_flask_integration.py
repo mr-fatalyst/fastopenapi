@@ -1,6 +1,8 @@
 import pytest
 from pydantic_core import from_json, to_json
 
+from fastopenapi.routers import FlaskRouter
+
 
 class TestFlaskIntegration:
 
@@ -35,10 +37,16 @@ class TestFlaskIntegration:
         assert headers["X-Custom"] == "test"
         assert result["received"] == "test-123"
 
-    def test_get_items_async(self, client):
-        """Test that an async endpoint on the sync router raises an error"""
-        with pytest.raises(Exception) as excinfo:
-            client.get("/items-async")
+    def test_get_items_async(self):
+        """Async endpoints are rejected at registration time"""
+        router = FlaskRouter()
+
+        with pytest.raises(TypeError) as excinfo:
+
+            @router.get("/items-async")
+            async def get_items_async():
+                return []
+
         err_msg = (
             "Async endpoint 'get_items_async'"
             " cannot be used with Flask. Use Quart for async support."
@@ -51,7 +59,7 @@ class TestFlaskIntegration:
 
         assert response.status_code == 500
         result = from_json(response.text)
-        assert result["error"]["message"] == "TEST ERROR"
+        assert result["error"]["message"] == "Internal server error"
 
     def test_get_item(self, client):
         """Test fetching an item by ID"""
@@ -115,7 +123,7 @@ class TestFlaskIntegration:
 
         assert response.status_code == 422
         result = from_json(response.text)
-        assert "Validation error for parameter" in result["error"]["message"]
+        assert "Invalid JSON in request body" in result["error"]["message"]
 
     def test_update_item(self, client):
         """Test updating an item"""

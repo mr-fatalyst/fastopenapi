@@ -4,6 +4,7 @@ from unittest.mock import Mock
 import pytest
 
 from fastopenapi.core.types import RequestData
+from fastopenapi.errors.exceptions import ValidationError
 from fastopenapi.routers.common import RequestEnvelope
 from fastopenapi.routers.extractors import (
     BaseAsyncRequestDataExtractor,
@@ -163,6 +164,28 @@ class TestBaseRequestDataExtractor:
         result = BaseRequestDataExtractor._safe_json_parse(data)
 
         assert result is None
+
+    def test_safe_json_parse_strict_invalid_json_raises(self):
+        """Strict mode turns malformed JSON into a 422 ValidationError"""
+        with pytest.raises(ValidationError):
+            BaseRequestDataExtractor._safe_json_parse('{"invalid": json}', strict=True)
+
+    def test_safe_json_parse_strict_empty_returns_none(self):
+        """Strict mode still treats an empty body as absent, not malformed"""
+        result = BaseRequestDataExtractor._safe_json_parse(b"", strict=True)
+
+        assert result is None
+
+    def test_is_json_content(self):
+        """JSON media types are detected with parameters and suffixes"""
+        assert BaseRequestDataExtractor._is_json_content("application/json")
+        assert BaseRequestDataExtractor._is_json_content(
+            "application/json; charset=utf-8"
+        )
+        assert BaseRequestDataExtractor._is_json_content("application/problem+json")
+        assert not BaseRequestDataExtractor._is_json_content("text/plain")
+        assert not BaseRequestDataExtractor._is_json_content(None)
+        assert not BaseRequestDataExtractor._is_json_content("")
 
     def test_extract_request_data_with_path_params(self):
         """Test extracting request data with provided path params"""

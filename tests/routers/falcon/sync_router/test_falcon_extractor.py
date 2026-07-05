@@ -1,8 +1,10 @@
 import json
 from unittest.mock import Mock
 
+import pytest
 from falcon import testing
 
+from fastopenapi.errors.exceptions import ValidationError
 from fastopenapi.routers.falcon.extractors import FalconRequestDataExtractor
 
 
@@ -89,14 +91,13 @@ class TestFalconRequestDataExtractor:
         assert result == {}
 
     def test_get_body_json_error(self):
-        """Test JSON parsing error"""
+        """Malformed JSON with a declared JSON Content-Type raises 422"""
         request = testing.create_req(
             headers={"Content-Type": "application/json"}, body='{"invalid": json}'
         )
 
-        result = FalconRequestDataExtractor._get_body(request)
-
-        assert result == {}
+        with pytest.raises(ValidationError):
+            FalconRequestDataExtractor._get_body(request)
 
     def test_get_body_empty(self):
         """Test empty JSON body"""

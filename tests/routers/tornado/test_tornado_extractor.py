@@ -4,6 +4,7 @@ from unittest.mock import Mock
 import pytest
 
 from fastopenapi.core.types import RequestData
+from fastopenapi.errors.exceptions import ValidationError
 from fastopenapi.routers.common import RequestEnvelope
 from fastopenapi.routers.tornado.extractors import TornadoRequestDataExtractor
 
@@ -125,9 +126,20 @@ class TestTornadoRequestDataExtractor:
 
     @pytest.mark.asyncio
     async def test_get_body_json_error(self):
-        """Test JSON parsing error"""
+        """Malformed JSON with a declared JSON Content-Type raises 422"""
         request = Mock()
         request.body = b'{"invalid": json}'
+        request.headers = {"Content-Type": "application/json"}
+
+        with pytest.raises(ValidationError):
+            await TornadoRequestDataExtractor._get_body(request)
+
+    @pytest.mark.asyncio
+    async def test_get_body_json_error_without_json_content_type(self):
+        """Malformed body without a JSON Content-Type is dropped"""
+        request = Mock()
+        request.body = b'{"invalid": json}'
+        request.headers = {}
 
         result = await TornadoRequestDataExtractor._get_body(request)
 

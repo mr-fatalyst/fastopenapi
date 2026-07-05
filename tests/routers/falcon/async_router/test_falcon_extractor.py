@@ -2,6 +2,7 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 
+from fastopenapi.errors.exceptions import ValidationError
 from fastopenapi.routers.falcon.extractors import FalconAsyncRequestDataExtractor
 
 
@@ -43,15 +44,14 @@ class TestFalconAsyncRequestDataExtractor:
 
     @pytest.mark.asyncio
     async def test_get_body_json_error(self):
-        """Test async JSON parsing error"""
+        """Malformed JSON with a declared JSON Content-Type raises 422"""
         request = Mock()
         request.content_type = "application/json"
         request.bounded_stream = Mock()
         request.bounded_stream.read = AsyncMock(return_value=b'{"invalid": json}')
 
-        result = await FalconAsyncRequestDataExtractor._get_body(request)
-
-        assert result == {}
+        with pytest.raises(ValidationError):
+            await FalconAsyncRequestDataExtractor._get_body(request)
 
     @pytest.mark.asyncio
     async def test_get_form_data_calls_sync(self):

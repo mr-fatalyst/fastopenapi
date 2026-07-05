@@ -28,6 +28,9 @@ class BaseAdapter(BaseRouter, ABC):
     # Path conversion pattern
     PATH_CONVERSIONS = (r"{(\w+)}", r"{\1}")
     EXCEPTION_MAPPER: dict[type, type] = {}
+    # Sync-only adapters set this to reject async endpoints at registration;
+    # async subclasses reset it to None to lift the restriction
+    ASYNC_ENDPOINT_ERROR: str | None = None
 
     extractor_cls = BaseRequestDataExtractor
     extractor_async_cls = BaseAsyncRequestDataExtractor
@@ -36,6 +39,14 @@ class BaseAdapter(BaseRouter, ABC):
 
     _type_adapter_cache: dict[type, TypeAdapter[Any]] = {}
     _cache_lock = threading.Lock()
+
+    def add_route(self, path: str, method: str, endpoint: Callable[..., Any]) -> None:
+        """Register a route, rejecting async endpoints on sync-only adapters"""
+        if self.ASYNC_ENDPOINT_ERROR and inspect.iscoroutinefunction(endpoint):
+            raise TypeError(
+                f"Async endpoint '{endpoint.__name__}' {self.ASYNC_ENDPOINT_ERROR}"
+            )
+        super().add_route(path, method, endpoint)
 
     @abstractmethod
     def build_framework_response(self, response: Response) -> Any:
@@ -126,7 +137,9 @@ class BaseAdapter(BaseRouter, ABC):
 
         Override to customize how errors are turned into responses.
         """
-        api_error = APIError.from_exception(exc, self.EXCEPTION_MAPPER)
+        api_error = APIError.from_exception(
+            exc, self.EXCEPTION_MAPPER, debug=self.debug
+        )
         self.log_exception(exc, api_error)
         return self.build_framework_response(
             Response(

@@ -1,6 +1,9 @@
 from unittest.mock import Mock
 
+import pytest
+
 from fastopenapi.core.types import RequestData
+from fastopenapi.errors.exceptions import ValidationError
 from fastopenapi.routers.common import RequestEnvelope
 from fastopenapi.routers.django.extractors import DjangoRequestDataExtractor
 
@@ -99,9 +102,19 @@ class TestDjangoRequestDataExtractor:
         assert result == {}
 
     def test_get_body_invalid_json(self):
-        """Test invalid JSON body"""
+        """Malformed JSON with a declared JSON Content-Type raises 422"""
         request = Mock()
         request.body = b'{"invalid": json}'
+        request.content_type = "application/json"
+
+        with pytest.raises(ValidationError):
+            DjangoRequestDataExtractor._get_body(request)
+
+    def test_get_body_invalid_json_without_json_content_type(self):
+        """Malformed body without a JSON Content-Type is dropped"""
+        request = Mock()
+        request.body = b'{"invalid": json}'
+        request.content_type = "text/plain"
 
         result = DjangoRequestDataExtractor._get_body(request)
 
