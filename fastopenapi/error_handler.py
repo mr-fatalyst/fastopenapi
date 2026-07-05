@@ -1,4 +1,4 @@
-# TODO Temporary file to maintain backward compatibility
+# Deprecation shim for the pre-1.0 import path; keep until 2.0
 import warnings
 
 warnings.warn(

@@ -747,8 +747,12 @@ class ParameterProcessor:
         return isinstance(annotation, type) and issubclass(annotation, BaseModel)
 
 
-class ResponseBuilder:
-    """Helper class for building OpenAPI responses"""
+class ResponseSectionBuilder:
+    """Build the OpenAPI responses section of an operation.
+
+    Not to be confused with fastopenapi.response.builder.ResponseBuilder,
+    which serializes runtime responses.
+    """
 
     def __init__(self, schema_builder: SchemaBuilder):
         self.schema_builder = schema_builder
@@ -885,7 +889,7 @@ class OpenAPIGenerator:
             self.definitions, self._cache_lock, router.openapi_version
         )
         self.parameter_processor = ParameterProcessor(self.schema_builder)
-        self.response_builder = ResponseBuilder(self.schema_builder)
+        self.response_builder = ResponseSectionBuilder(self.schema_builder)
 
     def generate(self) -> dict[str, Any]:
         """Generate complete OpenAPI schema"""

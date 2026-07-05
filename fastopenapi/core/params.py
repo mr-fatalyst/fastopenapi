@@ -84,58 +84,13 @@ class BaseParam(FieldInfo):
 
 
 class Param(BaseParam):
-    """Base parameter class for URL/header/cookie parameters"""
+    """Base parameter class for URL/header/cookie parameters.
+
+    Subclasses only pin their location (``in_``) and default; the full
+    keyword set is documented once on BaseParam and passed through.
+    """
 
     in_: ParameterSource
-
-    def __init__(
-        self,
-        default: Any = ...,
-        *,
-        alias: str | None = None,
-        title: str | None = None,
-        description: str | None = None,
-        gt: float | None = None,
-        ge: float | None = None,
-        lt: float | None = None,
-        le: float | None = None,
-        min_length: int | None = None,
-        max_length: int | None = None,
-        pattern: str | None = None,
-        strict: bool | None = None,
-        multiple_of: float | None = None,
-        allow_inf_nan: bool | None = None,
-        max_digits: int | None = None,
-        decimal_places: int | None = None,
-        examples: list[Any] | None = None,
-        deprecated: bool | None = None,
-        include_in_schema: bool = True,
-        json_schema_extra: dict[str, Any] | None = None,
-        **extra: Any,
-    ):
-        super().__init__(
-            default=default,
-            alias=alias,
-            title=title,
-            description=description,
-            gt=gt,
-            ge=ge,
-            lt=lt,
-            le=le,
-            min_length=min_length,
-            max_length=max_length,
-            pattern=pattern,
-            strict=strict,
-            multiple_of=multiple_of,
-            allow_inf_nan=allow_inf_nan,
-            max_digits=max_digits,
-            decimal_places=decimal_places,
-            examples=examples,
-            deprecated=deprecated,
-            include_in_schema=include_in_schema,
-            json_schema_extra=json_schema_extra,
-            **extra,
-        )
 
 
 class Query(Param):
@@ -143,54 +98,8 @@ class Query(Param):
 
     in_ = ParameterSource.QUERY
 
-    def __init__(
-        self,
-        default: Any = None,
-        *,
-        alias: str | None = None,
-        title: str | None = None,
-        description: str | None = None,
-        gt: float | None = None,
-        ge: float | None = None,
-        lt: float | None = None,
-        le: float | None = None,
-        min_length: int | None = None,
-        max_length: int | None = None,
-        pattern: str | None = None,
-        strict: bool | None = None,
-        multiple_of: float | None = None,
-        allow_inf_nan: bool | None = None,
-        max_digits: int | None = None,
-        decimal_places: int | None = None,
-        examples: list[Any] | None = None,
-        deprecated: bool | None = None,
-        include_in_schema: bool = True,
-        json_schema_extra: dict[str, Any] | None = None,
-        **extra: Any,
-    ):
-        super().__init__(
-            default=default,
-            alias=alias,
-            title=title,
-            description=description,
-            gt=gt,
-            ge=ge,
-            lt=lt,
-            le=le,
-            min_length=min_length,
-            max_length=max_length,
-            pattern=pattern,
-            strict=strict,
-            multiple_of=multiple_of,
-            allow_inf_nan=allow_inf_nan,
-            max_digits=max_digits,
-            decimal_places=decimal_places,
-            examples=examples,
-            deprecated=deprecated,
-            include_in_schema=include_in_schema,
-            json_schema_extra=json_schema_extra,
-            **extra,
-        )
+    def __init__(self, default: Any = None, **kwargs: Any):
+        super().__init__(default, **kwargs)
 
 
 class Path(Param):
@@ -198,58 +107,11 @@ class Path(Param):
 
     in_ = ParameterSource.PATH
 
-    def __init__(
-        self,
-        default: Any = ...,  # Path params must be required
-        *,
-        alias: str | None = None,
-        title: str | None = None,
-        description: str | None = None,
-        gt: float | None = None,
-        ge: float | None = None,
-        lt: float | None = None,
-        le: float | None = None,
-        min_length: int | None = None,
-        max_length: int | None = None,
-        pattern: str | None = None,
-        strict: bool | None = None,
-        multiple_of: float | None = None,
-        allow_inf_nan: bool | None = None,
-        max_digits: int | None = None,
-        decimal_places: int | None = None,
-        examples: list[Any] | None = None,
-        deprecated: bool | None = None,
-        include_in_schema: bool = True,
-        json_schema_extra: dict[str, Any] | None = None,
-        **extra: Any,
-    ):
+    def __init__(self, default: Any = ..., **kwargs: Any):
         # Path parameters cannot have defaults
         if default is not ...:
             raise ValueError("Path parameters cannot have a default value")
-
-        super().__init__(
-            default=default,
-            alias=alias,
-            title=title,
-            description=description,
-            gt=gt,
-            ge=ge,
-            lt=lt,
-            le=le,
-            min_length=min_length,
-            max_length=max_length,
-            pattern=pattern,
-            strict=strict,
-            multiple_of=multiple_of,
-            allow_inf_nan=allow_inf_nan,
-            max_digits=max_digits,
-            decimal_places=decimal_places,
-            examples=examples,
-            deprecated=deprecated,
-            include_in_schema=include_in_schema,
-            json_schema_extra=json_schema_extra,
-            **extra,
-        )
+        super().__init__(default, **kwargs)
 
 
 class Header(Param):
@@ -261,53 +123,11 @@ class Header(Param):
         self,
         default: Any = None,
         *,
-        alias: str | None = None,
         convert_underscores: bool = True,
-        title: str | None = None,
-        description: str | None = None,
-        gt: float | None = None,
-        ge: float | None = None,
-        lt: float | None = None,
-        le: float | None = None,
-        min_length: int | None = None,
-        max_length: int | None = None,
-        pattern: str | None = None,
-        strict: bool | None = None,
-        multiple_of: float | None = None,
-        allow_inf_nan: bool | None = None,
-        max_digits: int | None = None,
-        decimal_places: int | None = None,
-        examples: list[Any] | None = None,
-        deprecated: bool | None = None,
-        include_in_schema: bool = True,
-        json_schema_extra: dict[str, Any] | None = None,
-        **extra: Any,
+        **kwargs: Any,
     ):
         self.convert_underscores = convert_underscores
-
-        super().__init__(
-            default=default,
-            alias=alias,
-            title=title,
-            description=description,
-            gt=gt,
-            ge=ge,
-            lt=lt,
-            le=le,
-            min_length=min_length,
-            max_length=max_length,
-            pattern=pattern,
-            strict=strict,
-            multiple_of=multiple_of,
-            allow_inf_nan=allow_inf_nan,
-            max_digits=max_digits,
-            decimal_places=decimal_places,
-            examples=examples,
-            deprecated=deprecated,
-            include_in_schema=include_in_schema,
-            json_schema_extra=json_schema_extra,
-            **extra,
-        )
+        super().__init__(default, **kwargs)
 
 
 class Cookie(Param):
@@ -315,54 +135,8 @@ class Cookie(Param):
 
     in_ = ParameterSource.COOKIE
 
-    def __init__(
-        self,
-        default: Any = None,
-        *,
-        alias: str | None = None,
-        title: str | None = None,
-        description: str | None = None,
-        gt: float | None = None,
-        ge: float | None = None,
-        lt: float | None = None,
-        le: float | None = None,
-        min_length: int | None = None,
-        max_length: int | None = None,
-        pattern: str | None = None,
-        strict: bool | None = None,
-        multiple_of: float | None = None,
-        allow_inf_nan: bool | None = None,
-        max_digits: int | None = None,
-        decimal_places: int | None = None,
-        examples: list[Any] | None = None,
-        deprecated: bool | None = None,
-        include_in_schema: bool = True,
-        json_schema_extra: dict[str, Any] | None = None,
-        **extra: Any,
-    ):
-        super().__init__(
-            default=default,
-            alias=alias,
-            title=title,
-            description=description,
-            gt=gt,
-            ge=ge,
-            lt=lt,
-            le=le,
-            min_length=min_length,
-            max_length=max_length,
-            pattern=pattern,
-            strict=strict,
-            multiple_of=multiple_of,
-            allow_inf_nan=allow_inf_nan,
-            max_digits=max_digits,
-            decimal_places=decimal_places,
-            examples=examples,
-            deprecated=deprecated,
-            include_in_schema=include_in_schema,
-            json_schema_extra=json_schema_extra,
-            **extra,
-        )
+    def __init__(self, default: Any = None, **kwargs: Any):
+        super().__init__(default, **kwargs)
 
 
 class Body(BaseParam):
@@ -374,51 +148,9 @@ class Body(BaseParam):
         *,
         embed: bool | None = None,
         media_type: str = "application/json",
-        alias: str | None = None,
-        title: str | None = None,
-        description: str | None = None,
-        gt: float | None = None,
-        ge: float | None = None,
-        lt: float | None = None,
-        le: float | None = None,
-        min_length: int | None = None,
-        max_length: int | None = None,
-        pattern: str | None = None,
-        strict: bool | None = None,
-        multiple_of: float | None = None,
-        allow_inf_nan: bool | None = None,
-        max_digits: int | None = None,
-        decimal_places: int | None = None,
-        examples: list[Any] | None = None,
-        deprecated: bool | None = None,
-        include_in_schema: bool = True,
-        json_schema_extra: dict[str, Any] | None = None,
-        **extra: Any,
+        **kwargs: Any,
     ):
-        super().__init__(
-            default=default,
-            alias=alias,
-            title=title,
-            description=description,
-            gt=gt,
-            ge=ge,
-            lt=lt,
-            le=le,
-            min_length=min_length,
-            max_length=max_length,
-            pattern=pattern,
-            strict=strict,
-            multiple_of=multiple_of,
-            allow_inf_nan=allow_inf_nan,
-            max_digits=max_digits,
-            decimal_places=decimal_places,
-            examples=examples,
-            deprecated=deprecated,
-            include_in_schema=include_in_schema,
-            json_schema_extra=json_schema_extra,
-            **extra,
-        )
-
+        super().__init__(default, **kwargs)
         self.embed = embed
         self.media_type = media_type
 
@@ -431,51 +163,9 @@ class Form(Body):
         default: Any = None,
         *,
         media_type: str = "application/x-www-form-urlencoded",
-        alias: str | None = None,
-        title: str | None = None,
-        description: str | None = None,
-        gt: float | None = None,
-        ge: float | None = None,
-        lt: float | None = None,
-        le: float | None = None,
-        min_length: int | None = None,
-        max_length: int | None = None,
-        pattern: str | None = None,
-        strict: bool | None = None,
-        multiple_of: float | None = None,
-        allow_inf_nan: bool | None = None,
-        max_digits: int | None = None,
-        decimal_places: int | None = None,
-        examples: list[Any] | None = None,
-        deprecated: bool | None = None,
-        include_in_schema: bool = True,
-        json_schema_extra: dict[str, Any] | None = None,
-        **extra: Any,
+        **kwargs: Any,
     ):
-        super().__init__(
-            default=default,
-            media_type=media_type,
-            alias=alias,
-            title=title,
-            description=description,
-            gt=gt,
-            ge=ge,
-            lt=lt,
-            le=le,
-            min_length=min_length,
-            max_length=max_length,
-            pattern=pattern,
-            strict=strict,
-            multiple_of=multiple_of,
-            allow_inf_nan=allow_inf_nan,
-            max_digits=max_digits,
-            decimal_places=decimal_places,
-            examples=examples,
-            deprecated=deprecated,
-            include_in_schema=include_in_schema,
-            json_schema_extra=json_schema_extra,
-            **extra,
-        )
+        super().__init__(default, media_type=media_type, **kwargs)
 
 
 class File(Form):
@@ -486,51 +176,9 @@ class File(Form):
         default: Any = None,
         *,
         media_type: str = "multipart/form-data",
-        alias: str | None = None,
-        title: str | None = None,
-        description: str | None = None,
-        gt: float | None = None,
-        ge: float | None = None,
-        lt: float | None = None,
-        le: float | None = None,
-        min_length: int | None = None,
-        max_length: int | None = None,
-        pattern: str | None = None,
-        strict: bool | None = None,
-        multiple_of: float | None = None,
-        allow_inf_nan: bool | None = None,
-        max_digits: int | None = None,
-        decimal_places: int | None = None,
-        examples: list[Any] | None = None,
-        deprecated: bool | None = None,
-        include_in_schema: bool = True,
-        json_schema_extra: dict[str, Any] | None = None,
-        **extra: Any,
+        **kwargs: Any,
     ):
-        super().__init__(
-            default=default,
-            media_type=media_type,
-            alias=alias,
-            title=title,
-            description=description,
-            gt=gt,
-            ge=ge,
-            lt=lt,
-            le=le,
-            min_length=min_length,
-            max_length=max_length,
-            pattern=pattern,
-            strict=strict,
-            multiple_of=multiple_of,
-            allow_inf_nan=allow_inf_nan,
-            max_digits=max_digits,
-            decimal_places=decimal_places,
-            examples=examples,
-            deprecated=deprecated,
-            include_in_schema=include_in_schema,
-            json_schema_extra=json_schema_extra,
-            **extra,
-        )
+        super().__init__(default, media_type=media_type, **kwargs)
 
 
 class Depends:

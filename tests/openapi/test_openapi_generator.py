@@ -12,7 +12,7 @@ from fastopenapi.openapi.generator import (
     OpenAPIGenerator,
     ParameterInfo,
     ParameterProcessor,
-    ResponseBuilder,
+    ResponseSectionBuilder,
     SchemaBuilder,
 )
 
@@ -432,11 +432,11 @@ class TestOpenAPIGenerator:
         assert "ComplexModel" in builder.definitions
 
     def test_response_builder_error_responses(self):
-        """Test ResponseBuilder error response generation"""
+        """Test ResponseSectionBuilder error response generation"""
         route = Mock()
         route.meta = {"security": True}
 
-        builder = ResponseBuilder(self.generator.schema_builder)
+        builder = ResponseSectionBuilder(self.generator.schema_builder)
         responses = builder.build_responses(route, has_security=True)
 
         # Should add security error responses
@@ -1230,15 +1230,15 @@ class TestOpenAPIGenerator:
         assert processor._is_pydantic_model("not_a_class") is False
 
     def test_response_builder_init(self):
-        """Test ResponseBuilder initialization"""
+        """Test ResponseSectionBuilder initialization"""
         schema_builder = Mock()
-        builder = ResponseBuilder(schema_builder)
+        builder = ResponseSectionBuilder(schema_builder)
 
         assert builder.schema_builder is schema_builder
 
     def test_response_builder_build_responses_basic(self):
         """Test building basic responses"""
-        builder = ResponseBuilder(self.generator.schema_builder)
+        builder = ResponseSectionBuilder(self.generator.schema_builder)
 
         route = Mock()
         route.meta = {}
@@ -1250,7 +1250,7 @@ class TestOpenAPIGenerator:
 
     def test_response_builder_build_responses_custom_status(self):
         """Test building responses with custom status code"""
-        builder = ResponseBuilder(self.generator.schema_builder)
+        builder = ResponseSectionBuilder(self.generator.schema_builder)
 
         route = Mock()
         route.meta = {"status_code": 201}
@@ -1262,7 +1262,7 @@ class TestOpenAPIGenerator:
 
     def test_response_builder_add_response_model_pydantic(self):
         """Test adding Pydantic response model"""
-        builder = ResponseBuilder(self.generator.schema_builder)
+        builder = ResponseSectionBuilder(self.generator.schema_builder)
 
         responses = {"200": {"description": "OK"}}
 
@@ -1273,7 +1273,7 @@ class TestOpenAPIGenerator:
 
     def test_response_builder_add_response_model_list_pydantic(self):
         """Test adding list of Pydantic models as response"""
-        builder = ResponseBuilder(self.generator.schema_builder)
+        builder = ResponseSectionBuilder(self.generator.schema_builder)
 
         responses = {"200": {"description": "OK"}}
 
@@ -1286,7 +1286,7 @@ class TestOpenAPIGenerator:
 
     def test_response_builder_add_response_model_list_non_pydantic(self):
         """Test adding list of non-Pydantic types generates array schema"""
-        builder = ResponseBuilder(self.generator.schema_builder)
+        builder = ResponseSectionBuilder(self.generator.schema_builder)
 
         responses = {"200": {"description": "OK"}}
 
@@ -1297,7 +1297,7 @@ class TestOpenAPIGenerator:
 
     def test_response_builder_add_response_model_non_pydantic(self):
         """Test adding non-Pydantic response model generates schema"""
-        builder = ResponseBuilder(self.generator.schema_builder)
+        builder = ResponseSectionBuilder(self.generator.schema_builder)
 
         responses = {"200": {"description": "OK"}}
 
@@ -1308,7 +1308,7 @@ class TestOpenAPIGenerator:
 
     def test_response_builder_add_custom_error_responses(self):
         """Test adding custom error responses"""
-        builder = ResponseBuilder(self.generator.schema_builder)
+        builder = ResponseSectionBuilder(self.generator.schema_builder)
 
         route = Mock()
         route.meta = {"response_errors": [400, 404, 500]}
@@ -1322,7 +1322,7 @@ class TestOpenAPIGenerator:
 
     def test_response_builder_add_custom_error_responses_none(self):
         """Test not adding custom errors when none specified"""
-        builder = ResponseBuilder(self.generator.schema_builder)
+        builder = ResponseSectionBuilder(self.generator.schema_builder)
 
         route = Mock()
         route.meta = {}
