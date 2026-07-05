@@ -41,6 +41,10 @@ class TestTornadoDynamicHandler:
     async def test_handle_http_exception(self, mock_handler):
         http_error = tornado.web.HTTPError(404, "Not found")
 
+        # tornado's exception path calls finish() synchronously and
+        # discards the result, so an AsyncMock would leak a coroutine
+        mock_handler.finish = MagicMock()
+
         mock_handler._handle_request_exception(http_error)
 
         mock_handler.set_status.assert_called_once_with(404, reason=None)
@@ -115,3 +119,40 @@ class TestTornadoDynamicHandler:
         error = json.loads(body)["error"]
         assert error["status"] == 405
         assert error["type"] == "method_not_allowed"
+
+    @pytest.mark.asyncio
+    async def test_none_body_on_regular_status_skips_write(self, mock_handler):
+        wire = WireResponse(body=None, status=200, headers={})
+        mock_handler.request.method = "GET"
+        mock_handler.router.handle_request_async = AsyncMock(return_value=wire)
+
+        await mock_handler.handle_request()
+
+        mock_handler.set_status.assert_called_once_with(200)
+        mock_handler.write.assert_not_called()
+        mock_handler.finish.assert_called_once_with()
+
+
+class TestTornado405WithoutGet:
+    @pytest.fixture
+    def handler(self):
+        h = TornadoDynamicHandler(MagicMock(), MagicMock())
+        h.router = MagicMock()
+        h.path_kwargs = {}
+        h.set_status = MagicMock()
+        h.set_header = MagicMock()
+        h.write = MagicMock()
+        h.finish = AsyncMock()
+        return h
+
+    @pytest.mark.asyncio
+    async def test_allow_header_without_head_when_no_get(self, handler):
+        """Allow lists only real methods when the route has no GET"""
+        handler.request.method = "DELETE"
+        handler.endpoint = None
+        handler.endpoints = {"POST": MagicMock()}
+
+        await handler.handle_request()
+
+        handler.set_status.assert_called_once_with(405)
+        handler.set_header.assert_any_call("Allow", "POST")

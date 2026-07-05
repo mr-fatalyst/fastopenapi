@@ -371,24 +371,37 @@ class TestDependencyResolver:
         assert isinstance(key1, tuple)
         assert len(key1) == 2
 
-    def test_thread_safety_basic(self):
-        """Test basic thread safety of cache operations"""
+    def test_thread_safety_across_requests(self):
+        """Concurrent requests in separate threads resolve independently.
+
+        The design contract is one thread per request, so every worker
+        gets its own RequestData — the real threaded-WSGI model. No
+        false circular-dependency errors, no cross-request cache hits.
+        """
         call_count = 0
+        count_lock = threading.Lock()
 
         def slow_dep():
             nonlocal call_count
-            time.sleep(0.01)  # Small delay to increase chance of race condition
-            call_count += 1
-            return f"result_{call_count}"
+            time.sleep(0.01)  # widen the race window
+            with count_lock:
+                call_count += 1
+            return "resolved"
 
         def endpoint(dep: str = Depends(slow_dep)):
             return dep
 
         results = []
+        errors = []
 
         def worker():
-            result = self.resolver.resolve_dependencies(endpoint, self.request_data)
-            results.append(result)
+            try:
+                request_data = RequestData()
+                results.append(
+                    self.resolver.resolve_dependencies(endpoint, request_data)
+                )
+            except Exception as exc:
+                errors.append(exc)
 
         threads = [threading.Thread(target=worker) for _ in range(5)]
 
@@ -398,9 +411,10 @@ class TestDependencyResolver:
         for t in threads:
             t.join()
 
-        # All threads should get the same cached result
-        unique_results = {str(r) for r in results}
-        assert len(unique_results) == 1
+        assert errors == []
+        assert results == [{"dep": "resolved"}] * 5
+        # the cache is request-scoped: one execution per request
+        assert call_count == 5
 
     def test_multiple_dependencies_same_endpoint(self):
         """Test endpoint with multiple dependencies"""
@@ -1696,3 +1710,34 @@ class TestDependencyResolver:
         assert result == {"s": "sync", "a": "async"}
         assert "sync_cleanup" in cleanup_log
         assert "async_cleanup" in cleanup_log
+
+
+class TestMultipleGeneratorCleanup:
+    def test_two_generator_dependencies_both_closed(self):
+        """The cleanup loop closes every generator, not just the first"""
+        closed = []
+
+        def gen_a():
+            try:
+                yield "a"
+            finally:
+                closed.append("a")
+
+        def gen_b():
+            try:
+                yield "b"
+            finally:
+                closed.append("b")
+
+        def endpoint(a: str = Depends(gen_a), b: str = Depends(gen_b)):
+            return a, b
+
+        from fastopenapi.core.dependency_resolver import DependencyResolver
+
+        resolver = DependencyResolver()
+        request_data = RequestData()
+
+        result = resolver.resolve_dependencies(endpoint, request_data)
+
+        assert result == {"a": "a", "b": "b"}
+        assert sorted(closed) == ["a", "b"]

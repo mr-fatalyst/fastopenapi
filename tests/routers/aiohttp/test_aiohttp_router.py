@@ -1,5 +1,3 @@
-from collections.abc import Awaitable
-
 from aiohttp import web
 from pydantic import BaseModel
 
@@ -57,10 +55,10 @@ class TestAioHttpRouter:
         # GET routes get an automatic HEAD twin
         assert {route.method for route in routes} == {"GET", "HEAD"}
 
-    def test_add_route_app_none(self, dummy_endpoint):
+    def test_add_route_app_none(self):
         """
         Verify that if the application is not passed (app=None),
-        then calling add_route stores the route in the internal _routes_aiohttp list.
+        then calling add_route stores the route in the internal routes list.
         """
         router = AioHttpRouter(
             app=None,
@@ -70,15 +68,17 @@ class TestAioHttpRouter:
             title="Test API",
             version="1.0.0",
         )
+
+        async def dummy_endpoint():
+            return {"message": "dummy"}
+
         router.add_route("/test", "GET", dummy_endpoint)
-        # Verify that the route is not registered in app.router
-        # but is saved in the internal list
+        # The route is not registered in app.router but saved internally
         assert len(router._routes) == 1
         route_info = router._routes[0]
         assert route_info.path == "/test"
         assert route_info.method.upper() == "GET"
-        # Verify that endpoint is awaitable
-        assert isinstance(route_info.endpoint, Awaitable)
+        assert route_info.endpoint is dummy_endpoint
 
     def test_register_docs_endpoints_app_none(self):
         """
@@ -125,3 +125,42 @@ class TestAioHttpRouter:
         assert "get" in schema["paths"]["/test/{id}"]
         assert schema["paths"]["/test/{id}"]["get"]["summary"] == "Get Test"
         assert "TestModel" in schema["components"]["schemas"]
+
+
+class TestAioHttpAutoHead:
+    def test_explicit_head_before_get_wins(self):
+        app = web.Application()
+        router = AioHttpRouter(app=app)
+
+        def head_endpoint():
+            return None
+
+        def get_endpoint():
+            return {}
+
+        router.add_route("/h", "HEAD", head_endpoint)
+        router.add_route("/h", "GET", get_endpoint)
+
+        methods = {
+            route.method
+            for route in app.router.routes()
+            if route.resource.get_info().get("path") == "/h"
+        }
+        assert methods == {"GET", "HEAD"}
+
+    def test_explicit_head_after_auto_head_raises(self):
+        import pytest
+
+        app = web.Application()
+        router = AioHttpRouter(app=app)
+
+        def get_endpoint():
+            return {}
+
+        def head_endpoint():
+            return None
+
+        router.add_route("/h", "GET", get_endpoint)
+
+        with pytest.raises(TypeError, match="before its GET route"):
+            router.add_route("/h", "HEAD", head_endpoint)

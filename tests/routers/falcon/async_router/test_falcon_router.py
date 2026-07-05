@@ -86,3 +86,31 @@ class TestFalconAsyncRouter:
         assert "get" in schema["paths"]["/test/{id}"]
         assert schema["paths"]["/test/{id}"]["get"]["summary"] == "Get Test"
         assert "TestModel" in schema["components"]["schemas"]
+
+
+class TestNativeFalconResponseAsync:
+    def test_endpoint_returning_falcon_response(self):
+        """A user-returned falcon.Response passes through untouched"""
+        import falcon
+        import falcon.asgi
+        import falcon.testing
+
+        from fastopenapi import Header
+
+        app = falcon.asgi.App()
+        router = FalconAsyncRouter(app=app)
+
+        @router.get("/native")
+        async def native(x_request_id: str = Header(None)):
+            resp = falcon.Response()
+            resp.media = {"received": x_request_id or "none"}
+            resp.status = 200
+            resp.set_header("X-Echo-Id", x_request_id or "none")
+            return resp
+
+        client = falcon.testing.TestClient(app)
+        result = client.simulate_get("/native", headers={"X-Request-Id": "trace-9"})
+
+        assert result.status_code == 200
+        assert result.json == {"received": "trace-9"}
+        assert result.headers.get("X-Echo-Id") == "trace-9"

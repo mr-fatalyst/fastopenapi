@@ -1,10 +1,12 @@
 from abc import ABC
+from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
 
 from fastopenapi.core.types import RequestData
 from fastopenapi.errors.exceptions import ValidationError
+from fastopenapi.resolution.profile import ExtractionProfile
 from fastopenapi.routers.common import RequestEnvelope
 from fastopenapi.routers.extractors import (
     BaseAsyncRequestDataExtractor,
@@ -187,6 +189,106 @@ class TestBaseRequestDataExtractor:
         assert not BaseRequestDataExtractor._is_json_content(None)
         assert not BaseRequestDataExtractor._is_json_content("")
 
+
+class TestAsyncExtractorGuard:
+    """__init_subclass__ must refuse async extractors with sync payload readers"""
+
+    def test_sync_get_body_rejected(self):
+        with pytest.raises(TypeError, match="_get_body"):
+
+            class BadBody(ConcreteAsyncRequestDataExtractor):
+                @classmethod
+                def _get_body(cls, request):
+                    return {}
+
+    def test_sync_form_reader_rejected(self):
+        with pytest.raises(TypeError, match="_get_form_data"):
+
+            class BadForm(ConcreteAsyncRequestDataExtractor):
+                @classmethod
+                def _get_form_data(cls, request):
+                    return {}
+
+    def test_sync_files_reader_rejected(self):
+        with pytest.raises(TypeError, match="_get_files"):
+
+            class BadFiles(ConcreteAsyncRequestDataExtractor):
+                @classmethod
+                def _get_files(cls, request):
+                    return {}
+
+    def test_inherited_sync_readers_rejected(self):
+        """The Falcon-ASGI trap: async extractor inheriting sync readers"""
+        with pytest.raises(TypeError, match="must be 'async def'"):
+
+            class Trap(ConcreteRequestDataExtractor, BaseAsyncRequestDataExtractor):
+                pass
+
+    def test_proper_async_subclass_accepted(self):
+        class Fine(ConcreteAsyncRequestDataExtractor):
+            @classmethod
+            async def _get_body(cls, request):
+                return {"ok": True}
+
+        assert Fine is not None
+
+
+class TestExtractionProfileGating:
+    """Payload readers run only when the profile references them"""
+
+    @staticmethod
+    def _probe(calls):
+        class Probe(ConcreteRequestDataExtractor):
+            @classmethod
+            def _get_body(cls, request):
+                calls.append("body")
+                return {}
+
+            @classmethod
+            def _get_form_data(cls, request):
+                calls.append("form")
+                return {}
+
+            @classmethod
+            def _get_files(cls, request):
+                calls.append("files")
+                return {}
+
+        return Probe
+
+    def test_profile_gates_payload_extraction(self):
+        calls = []
+        probe = self._probe(calls)
+        request = SimpleNamespace(method="POST")
+        env = RequestEnvelope(request=request, path_params={})
+        profile = ExtractionProfile(
+            needs_body=False, needs_form=True, needs_files=False
+        )
+
+        probe.extract_request_data(env, profile)
+
+        assert calls == ["form"]
+
+    def test_no_profile_extracts_everything(self):
+        calls = []
+        probe = self._probe(calls)
+        request = SimpleNamespace(method="POST")
+        env = RequestEnvelope(request=request, path_params={})
+
+        probe.extract_request_data(env)
+
+        assert calls == ["body", "form", "files"]
+
+    def test_no_body_methods_skip_payloads_regardless_of_profile(self):
+        calls = []
+        probe = self._probe(calls)
+        request = SimpleNamespace(method="GET")
+        env = RequestEnvelope(request=request, path_params={})
+
+        probe.extract_request_data(env, ExtractionProfile(True, True, True))
+
+        assert calls == []
+
     def test_extract_request_data_with_path_params(self):
         """Test extracting request data with provided path params"""
         request = Mock()
@@ -307,3 +409,17 @@ class TestAbstractMethods:
         """Test that async abstract methods are not implemented"""
         with pytest.raises(TypeError):
             BaseAsyncRequestDataExtractor()
+
+
+class TestAsyncExtractorGuardEdges:
+    def test_abstract_async_override_accepted(self):
+        """Re-declared abstract readers are skipped by the guard"""
+        from abc import abstractmethod
+
+        class StillAbstract(BaseAsyncRequestDataExtractor):
+            @classmethod
+            @abstractmethod
+            async def _get_body(cls, request):
+                """Still abstract"""
+
+        assert StillAbstract is not None

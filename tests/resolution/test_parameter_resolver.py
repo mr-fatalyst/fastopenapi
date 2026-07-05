@@ -1327,3 +1327,114 @@ class TestMultiBody:
 
         assert result["item"].title == "Widget"
         assert result["q"] == "search"
+
+
+class TestCoerceScalarToList:
+    """Scalar query/form values are wrapped for list-typed params"""
+
+    def test_scalar_wrapped_for_list_annotation(self):
+        assert ParameterResolver._coerce_scalar_to_list("x", list[str]) == ["x"]
+
+    def test_scalar_wrapped_for_optional_list(self):
+        assert ParameterResolver._coerce_scalar_to_list("x", list[str] | None) == ["x"]
+
+    def test_scalar_wrapped_for_annotated_list(self):
+        from typing import Annotated
+
+        annotation = Annotated[list[str], Query()]
+        assert ParameterResolver._coerce_scalar_to_list("x", annotation) == ["x"]
+
+    def test_list_value_passes_through(self):
+        assert ParameterResolver._coerce_scalar_to_list(["a"], list[str]) == ["a"]
+
+    def test_non_list_annotation_untouched(self):
+        assert ParameterResolver._coerce_scalar_to_list("x", int) == "x"
+
+    def test_multi_member_union_untouched(self):
+        assert ParameterResolver._coerce_scalar_to_list("x", int | str) == "x"
+
+
+class TestModelResolutionEdges:
+    def test_model_container_on_get_falls_through_to_query(self):
+        """list[Model] on a no-body method is not readable from query -> 422"""
+
+        class Thing(BaseModel):
+            name: str
+
+        def endpoint(items: list[Thing]):
+            return items
+
+        endpoint.__route_meta__ = {"method": "GET"}
+
+        with pytest.raises(ValidationError, match="Missing required parameter"):
+            ParameterResolver.resolve(endpoint, RequestData())
+
+    def test_embedded_model_param_read_from_body_key(self):
+        """A naked model param embedded next to Body params reads body[name]"""
+
+        class Thing(BaseModel):
+            name: str
+
+        def endpoint(thing: Thing, extra: int = Body(...)):
+            return thing
+
+        endpoint.__route_meta__ = {"method": "POST"}
+        request_data = RequestData(
+            body={"thing": {"name": "ok"}, "extra": 5},
+        )
+
+        result = ParameterResolver.resolve(endpoint, request_data)
+
+        assert result["thing"].name == "ok"
+        assert result["extra"] == 5
+
+
+class TestBodyMarkerModelResolution:
+    def test_single_model_with_body_marker(self):
+        class Thing(BaseModel):
+            name: str
+
+        def endpoint(item: Thing = Body(...)):
+            return item
+
+        endpoint.__route_meta__ = {"method": "POST"}
+        request_data = RequestData(body={"name": "solo"})
+
+        result = ParameterResolver.resolve(endpoint, request_data)
+
+        assert result["item"].name == "solo"
+
+    def test_model_with_body_marker_embedded(self):
+        class Thing(BaseModel):
+            name: str
+
+        def endpoint(item: Thing = Body(...), extra: int = Body(...)):
+            return item
+
+        endpoint.__route_meta__ = {"method": "POST"}
+        request_data = RequestData(body={"item": {"name": "boxed"}, "extra": 1})
+
+        result = ParameterResolver.resolve(endpoint, request_data)
+
+        assert result["item"].name == "boxed"
+        assert result["extra"] == 1
+
+
+class TestModelWithQueryMarker:
+    def test_model_with_query_marker_resolved_from_query(self):
+        """A model annotated with an explicit Query() marker reads query params"""
+
+        class Filters(BaseModel):
+            term: str
+            limit: int = 10
+
+        def endpoint(filters: Filters = Query(...)):
+            return filters
+
+        endpoint.__route_meta__ = {"method": "GET"}
+        request_data = RequestData(query_params={"term": "abc", "limit": "5"})
+
+        result = ParameterResolver.resolve(endpoint, request_data)
+
+        assert result["filters"].term == "abc"
+        assert result["filters"].limit == 5

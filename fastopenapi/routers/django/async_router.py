@@ -14,6 +14,7 @@ from fastopenapi.routers.django.sync_router import DjangoRouter
 class DjangoAsyncRouter(DjangoRouter):
     # Async endpoints are the whole point here — lift the sync-router guard
     ASYNC_ENDPOINT_ERROR = None
+    VIEW_IS_ASYNC = True
     extractor_async_cls = DjangoAsyncRequestDataExtractor
 
     def _build_view_handler(self, endpoint: Callable[..., Any]) -> Callable[..., Any]:

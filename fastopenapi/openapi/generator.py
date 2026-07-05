@@ -484,7 +484,9 @@ class ParameterProcessor:
             return {"type": "array", "items": self._model_container_schema(args[0])}
         if origin is typing.Union or origin is types.UnionType:
             non_none = [arg for arg in args if arg is not type(None)]
-            if non_none:
+            # typing normalizes away all-None unions, and the body-model
+            # guard guarantees at least one model member
+            if non_none:  # pragma: no branch
                 if len(non_none) == 1:
                     schema = self._model_container_schema(non_none[0])
                 else:

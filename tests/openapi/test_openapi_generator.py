@@ -561,12 +561,12 @@ class TestOpenAPIGenerator:
         assert builder.build_parameter_schema(CustomType) == {"type": "string"}
 
     def test_schema_builder_build_array_schema_without_args(self):
-        """Test building array schema without type arguments"""
+        """Array schema without item type defaults to string items"""
         builder = SchemaBuilder({}, threading.Lock())
 
-        with patch("typing.get_args", return_value=[]):
-            schema = builder._build_array_schema(list)
-            assert schema == {"type": "array", "items": {"type": "string"}}
+        # bare `list` carries no type args, no patching required
+        schema = builder._build_array_schema(list)
+        assert schema == {"type": "array", "items": {"type": "string"}}
 
     def test_schema_builder_build_union_schema_non_optional(self):
         """Non-Optional unions become anyOf instead of degrading to string"""
@@ -2002,3 +2002,109 @@ class TestSchemaCorrectness:
 
         with pytest.raises(ValueError, match="explicit configuration"):
             BaseRouter(security_scheme=SecuritySchemeType.OAUTH2)
+
+
+class TestSchemaCorrectnessEdges:
+    """Remaining schema branches: Annotated primitives, 3.1 refs, unions"""
+
+    def setup_method(self):
+        self.router = BaseRouter(title="T", version="1")
+        self.generator = OpenAPIGenerator(self.router)
+
+    def test_annotated_primitive_unwrapped(self):
+        from typing import Annotated
+
+        builder = SchemaBuilder({}, threading.Lock())
+        schema = builder.build_parameter_schema(Annotated[int, "metadata"])
+
+        assert schema == {"type": "integer"}
+
+    def test_make_nullable_ref_openapi_31(self):
+        builder = SchemaBuilder({}, threading.Lock(), openapi_version="3.1.0")
+        schema = builder.make_nullable({"$ref": "#/components/schemas/X"})
+
+        assert schema == {
+            "anyOf": [{"$ref": "#/components/schemas/X"}, {"type": "null"}]
+        }
+
+    def test_union_of_models_body_becomes_anyof(self):
+        class Cat(BaseModel):
+            meow: str
+
+        class Dog(BaseModel):
+            bark: str
+
+        @self.router.post("/pet")
+        def pet(animal: Cat | Dog | None = None):
+            pass
+
+        schema = self.generator.generate()
+        body_schema = schema["paths"]["/pet"]["post"]["requestBody"]["content"][
+            "application/json"
+        ]["schema"]
+
+        assert body_schema == {
+            "anyOf": [
+                {"$ref": "#/components/schemas/Cat"},
+                {"$ref": "#/components/schemas/Dog"},
+            ],
+            "nullable": True,
+        }
+
+    def test_union_of_model_and_primitive_body(self):
+        class Cat(BaseModel):
+            meow: str
+
+        @self.router.post("/mixed")
+        def mixed(value: Cat | int = Body(...)):
+            pass
+
+        schema = self.generator.generate()
+        body_schema = schema["paths"]["/mixed"]["post"]["requestBody"]["content"][
+            "application/json"
+        ]["schema"]
+
+        assert body_schema == {
+            "anyOf": [
+                {"$ref": "#/components/schemas/Cat"},
+                {"type": "integer"},
+            ]
+        }
+
+    def test_file_annotation_without_default_is_required(self):
+        @self.router.post("/upload-ann")
+        def upload(attachment: File):
+            pass
+
+        schema = self.generator.generate()
+        body = schema["paths"]["/upload-ann"]["post"]["requestBody"]
+        form_schema = body["content"]["multipart/form-data"]["schema"]
+
+        assert "attachment" in form_schema["properties"]
+        assert form_schema["required"] == ["attachment"]
+
+
+class TestModelContainerUnions:
+    def setup_method(self):
+        self.router = BaseRouter(title="T", version="1")
+        self.generator = OpenAPIGenerator(self.router)
+
+    def test_markerless_union_of_model_and_primitive(self):
+        class Cat(BaseModel):
+            meow: str
+
+        @self.router.post("/hybrid")
+        def hybrid(value: Cat | int):
+            pass
+
+        schema = self.generator.generate()
+        body_schema = schema["paths"]["/hybrid"]["post"]["requestBody"]["content"][
+            "application/json"
+        ]["schema"]
+
+        assert body_schema == {
+            "anyOf": [
+                {"$ref": "#/components/schemas/Cat"},
+                {"type": "integer"},
+            ]
+        }

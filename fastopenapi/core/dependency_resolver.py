@@ -85,8 +85,7 @@ class DependencyResolver:
                         pass
                 # Clean up request cache
                 with self._request_cache_lock:
-                    if request_data in self._request_cache:
-                        del self._request_cache[request_data]
+                    self._request_cache.pop(request_data, None)
 
     def _resolve_endpoint_dependencies(
         self, endpoint: Callable[..., Any], request_data: RequestData
@@ -393,8 +392,7 @@ class DependencyResolver:
                         pass
                 # Clean up request cache
                 with self._request_cache_lock:
-                    if request_data in self._request_cache:
-                        del self._request_cache[request_data]
+                    self._request_cache.pop(request_data, None)
 
     async def _resolve_endpoint_dependencies_async(
         self, endpoint: Callable[..., Any], request_data: RequestData

@@ -1,3 +1,6 @@
+import inspect
+from typing import Annotated
+
 import pytest
 from pydantic.fields import FieldInfo
 from pydantic_core import PydanticUndefined
@@ -14,6 +17,7 @@ from fastopenapi.core.params import (
     Path,
     Query,
     Security,
+    unwrap_annotated_parameter,
 )
 
 
@@ -485,3 +489,48 @@ class TestFieldInfoIntegration:
         assert body.embed is True
         assert body.media_type == "application/xml"
         assert body.examples == [{"test": "data"}]
+
+
+class TestUnwrapAnnotatedParameter:
+    """Annotated[T, marker] parameters are normalized to default-style"""
+
+    @staticmethod
+    def _param(annotation, default=inspect.Parameter.empty):
+        return inspect.Parameter(
+            "p",
+            inspect.Parameter.POSITIONAL_OR_KEYWORD,
+            annotation=annotation,
+            default=default,
+        )
+
+    def test_plain_annotation_untouched(self):
+        param = self._param(int)
+        assert unwrap_annotated_parameter(param) is param
+
+    def test_annotated_without_marker_untouched(self):
+        param = self._param(Annotated[int, "just metadata"])
+        assert unwrap_annotated_parameter(param) is param
+
+    def test_annotated_query_marker(self):
+        param = self._param(Annotated[int, Query(ge=1)])
+        unwrapped = unwrap_annotated_parameter(param)
+
+        assert unwrapped.annotation is int
+        assert isinstance(unwrapped.default, Query)
+
+    def test_annotated_query_marker_with_default(self):
+        param = self._param(Annotated[int, Query(ge=1)], default=5)
+        unwrapped = unwrap_annotated_parameter(param)
+
+        assert unwrapped.default.default == 5
+
+    def test_annotated_depends_marker(self):
+        def factory():
+            return 1
+
+        param = self._param(Annotated[int, Depends(factory)])
+        unwrapped = unwrap_annotated_parameter(param)
+
+        assert unwrapped.annotation is int
+        assert isinstance(unwrapped.default, Depends)
+        assert unwrapped.default.dependency is factory

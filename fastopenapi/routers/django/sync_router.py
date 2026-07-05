@@ -53,15 +53,21 @@ class DjangoRouter(BaseAdapter):
         super().add_route(path, method, endpoint)
         self._create_or_update_view(path, method, endpoint)
 
+    # Flipped by DjangoAsyncRouter: Django's view_is_async ignores the
+    # options handler, so an async view whose only method is OPTIONS would
+    # otherwise be dispatched synchronously
+    VIEW_IS_ASYNC = False
+
     def _create_or_update_view(
         self, path: str, method: str, endpoint: Callable[..., Any]
     ) -> Any:
         """Create or update Django view for the path"""
         view = self._views.get(path)
         if not view:
-            view = type(
-                "DynamicView", (View,), {"dispatch": csrf_exempt(View.dispatch)}
-            )
+            attrs: dict[str, Any] = {"dispatch": csrf_exempt(View.dispatch)}
+            if self.VIEW_IS_ASYNC:
+                attrs["view_is_async"] = True
+            view = type("DynamicView", (View,), attrs)
             self._views[path] = view
 
         setattr(view, method.lower(), self._build_view_handler(endpoint))

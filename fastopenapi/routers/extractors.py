@@ -130,9 +130,8 @@ class BaseAsyncRequestDataExtractor(BaseRequestDataExtractor, ABC):
         """
         super().__init_subclass__(**kwargs)
         for name in cls._REQUIRED_ASYNC:
-            attr = inspect.getattr_static(cls, name, None)
-            if attr is None:
-                continue
+            # the base class always defines these, so no absence check
+            attr = inspect.getattr_static(cls, name)
             func = (
                 attr.__func__ if isinstance(attr, (classmethod, staticmethod)) else attr
             )

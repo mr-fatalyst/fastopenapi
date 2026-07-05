@@ -100,3 +100,41 @@ class TestSanicRouter:
         assert "get" in schema["paths"]["/test/{id}"]
         assert schema["paths"]["/test/{id}"]["get"]["summary"] == "Get Test"
         assert "TestModel" in schema["components"]["schemas"]
+
+
+class TestSanicAutoHead:
+    def test_explicit_head_before_get_wins(self):
+        app = Sanic("SanicAutoHeadApp1")
+        router = SanicRouter(app=app)
+
+        def head_endpoint():
+            return None
+
+        def get_endpoint():
+            return {}
+
+        router.add_route("/h", "HEAD", head_endpoint)
+        router.add_route("/h", "GET", get_endpoint)
+
+        methods = set()
+        for route in app.router.routes:
+            if route.path in ("h", "/h"):
+                methods |= set(route.methods)
+        assert "GET" in methods and "HEAD" in methods
+
+    def test_explicit_head_after_auto_head_raises(self):
+        import pytest
+
+        app = Sanic("SanicAutoHeadApp2")
+        router = SanicRouter(app=app)
+
+        def get_endpoint():
+            return {}
+
+        def head_endpoint():
+            return None
+
+        router.add_route("/h", "GET", get_endpoint)
+
+        with pytest.raises(TypeError, match="before its GET route"):
+            router.add_route("/h", "HEAD", head_endpoint)

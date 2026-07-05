@@ -93,3 +93,23 @@ class TestDjangoRouter:
         assert router.openapi_url in router._views
         assert router.docs_url in router._views
         assert router.redoc_url in router._views
+
+
+class TestDjangoAsyncGuard:
+    def test_async_endpoint_rejected_at_registration(self):
+        """Async endpoints are rejected at registration time"""
+        import pytest
+
+        router = DjangoRouter()
+
+        with pytest.raises(TypeError) as excinfo:
+
+            @router.get("/items-async")
+            async def get_items_async():
+                return []
+
+        err_msg = (
+            "Async endpoint 'get_items_async' cannot be used with sync router. "
+            "Use DjangoAsyncRouter for async support."
+        )
+        assert err_msg in str(excinfo.value)

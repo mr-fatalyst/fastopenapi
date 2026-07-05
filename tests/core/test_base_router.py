@@ -323,3 +323,31 @@ class TestBaseRouter:
 
         with pytest.raises(NotImplementedError):
             router._register_docs_endpoints()
+
+
+class TestAddRouteWithoutWritableAttributes:
+    def test_partial_endpoint_is_registered(self):
+        """functools.partial endpoints (writable __dict__) get route meta"""
+        import functools
+
+        router = BaseRouter()
+
+        endpoint = functools.partial(lambda: {"ok": True})
+        router.add_route("/partial", "GET", endpoint)
+
+        routes = router.get_routes()
+        assert len(routes) == 1
+        assert routes[0].method == "GET"
+        assert routes[0].meta == {"method": "GET"}
+
+    def test_builtin_endpoint_is_registered(self):
+        """Endpoints that reject attribute writes (builtins) still register"""
+        router = BaseRouter()
+
+        router.add_route("/builtin", "GET", min)
+
+        routes = router.get_routes()
+        assert len(routes) == 1
+        assert routes[0].endpoint is min
+        # meta falls back because __route_meta__ could not be attached
+        assert routes[0].meta == {"method": "GET"}
