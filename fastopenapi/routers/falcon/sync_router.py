@@ -13,7 +13,7 @@ from fastopenapi.routers.falcon.extractors import FalconRequestDataExtractor
 class FalconRouter(BaseAdapter):
     """Falcon adapter for FastOpenAPI"""
 
-    ASYNC_ENDPOINT_ERROR = (
+    ASYNC_ENDPOINT_ERROR: str | None = (
         "cannot be used with sync router. Use FalconAsyncRouter for async support."
     )
 
@@ -30,7 +30,7 @@ class FalconRouter(BaseAdapter):
         "OPTIONS": "on_options",
     }
 
-    def __init__(self, app: falcon.App = None, **kwargs):
+    def __init__(self, app: "falcon.App[Any, Any] | None" = None, **kwargs: Any):
         self._resources: dict[str, Any] = {}
         super().__init__(app, **kwargs)
 
@@ -60,7 +60,9 @@ class FalconRouter(BaseAdapter):
             self._resources[path] = type("DynamicResource", (), {})()
         return self._resources[path]
 
-    def _register_auto_head(self, resource: Any, get_handler: Callable) -> None:
+    def _register_auto_head(
+        self, resource: Any, get_handler: Callable[..., Any]
+    ) -> None:
         """Answer HEAD on GET routes unless an explicit HEAD is registered.
 
         An explicit ``on_head`` (registered before or after the GET route)
@@ -72,13 +74,15 @@ class FalconRouter(BaseAdapter):
         ):
             return
         head_handler = self._build_head_handler(get_handler)
-        head_handler._fastopenapi_auto_head = True
+        setattr(head_handler, "_fastopenapi_auto_head", True)
         resource.on_head = head_handler
 
-    def _build_head_handler(self, get_handler: Callable) -> Callable[..., None]:
+    def _build_head_handler(
+        self, get_handler: Callable[..., Any]
+    ) -> Callable[..., None]:
         """Run the GET pipeline for HEAD, then drop the body"""
 
-        def handle_head(request, response, **path_params):
+        def handle_head(request: Any, response: Any, **path_params: Any) -> None:
             get_handler(request, response, **path_params)
             response.media = None
             response.text = None
@@ -91,7 +95,7 @@ class FalconRouter(BaseAdapter):
     ) -> Callable[..., None]:
         """Build request handler function for endpoint"""
 
-        def handle(request, response, **path_params):
+        def handle(request: Any, response: Any, **path_params: Any) -> None:
             env = RequestEnvelope(request=request, path_params=path_params)
             result = self.handle_request(endpoint, env)
 
@@ -137,25 +141,30 @@ class FalconRouter(BaseAdapter):
 
     def _register_docs_endpoints(self) -> None:
         """Register documentation endpoints"""
+        openapi_url = self.openapi_url
+        if openapi_url is None:
+            return
+        # narrowing does not survive into nested class bodies
+        schema_url: str = openapi_url
         outer = self
 
         class OpenAPISchemaResource:
-            def on_get(self, req, resp):
+            def on_get(self, req: Any, resp: Any) -> None:
                 resp.media = outer.openapi
 
         class SwaggerUIResource:
-            def on_get(self, req, resp):
-                html = render_swagger_ui(outer.openapi_url)
+            def on_get(self, req: Any, resp: Any) -> None:
+                html = render_swagger_ui(schema_url)
                 resp.content_type = "text/html"
                 resp.text = html
 
         class RedocUIResource:
-            def on_get(self, req, resp):
-                html = render_redoc_ui(outer.openapi_url)
+            def on_get(self, req: Any, resp: Any) -> None:
+                html = render_redoc_ui(schema_url)
                 resp.content_type = "text/html"
                 resp.text = html
 
-        self.app.add_route(self.openapi_url, OpenAPISchemaResource())
+        self.app.add_route(openapi_url, OpenAPISchemaResource())
         if self.docs_url:
             self.app.add_route(self.docs_url, SwaggerUIResource())
         if self.redoc_url:

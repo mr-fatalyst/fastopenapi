@@ -19,7 +19,7 @@ class StarletteRouter(BaseAdapter):
 
     extractor_async_cls = StarletteRequestDataExtractor
 
-    def __init__(self, app: Starlette = None, **kwargs):
+    def __init__(self, app: Starlette | None = None, **kwargs: Any):
         super().__init__(app, **kwargs)
 
     def add_route(self, path: str, method: str, endpoint: Callable[..., Any]) -> None:
@@ -33,7 +33,7 @@ class StarletteRouter(BaseAdapter):
             self.app.router.routes.append(Route(path, view, methods=[method.upper()]))
 
     @staticmethod
-    async def _starlette_view(request, router, endpoint):
+    async def _starlette_view(request: Any, router: Any, endpoint: Any) -> Any:
         """Handle Starlette request"""
         env = RequestEnvelope(request=request, path_params=None)
         try:
@@ -55,21 +55,22 @@ class StarletteRouter(BaseAdapter):
 
     def _register_docs_endpoints(self) -> None:
         """Register documentation endpoints"""
+        openapi_url = self.openapi_url
+        if openapi_url is None:
+            return
 
-        async def openapi_view(request):
+        async def openapi_view(request: Any) -> JSONResponse:
             return JSONResponse(self.openapi)
 
-        async def docs_view(request):
-            html = render_swagger_ui(self.openapi_url)
+        async def docs_view(request: Any) -> HTMLResponse:
+            html = render_swagger_ui(openapi_url)
             return HTMLResponse(html)
 
-        async def redoc_view(request):
-            html = render_redoc_ui(self.openapi_url)
+        async def redoc_view(request: Any) -> HTMLResponse:
+            html = render_redoc_ui(openapi_url)
             return HTMLResponse(html)
 
-        self.app.router.routes.append(
-            Route(self.openapi_url, openapi_view, methods=["GET"])
-        )
+        self.app.router.routes.append(Route(openapi_url, openapi_view, methods=["GET"]))
         if self.docs_url:
             self.app.router.routes.append(
                 Route(self.docs_url, docs_view, methods=["GET"])

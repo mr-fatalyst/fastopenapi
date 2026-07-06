@@ -173,7 +173,7 @@ class ParameterResolver:
     @classmethod
     def _should_embed_body(
         cls,
-        params: MappingProxyType[str, inspect.Parameter],
+        params: Mapping[str, inspect.Parameter],
         path_params: dict[str, Any],
         method: str | None = None,
     ) -> bool:
@@ -373,7 +373,7 @@ class ParameterResolver:
         """Extract value from request data based on source"""
         param_name = ParameterResolver._get_param_name(name, param)
 
-        extraction_map = {
+        extraction_map: dict[ParameterSource, Callable[[], Any]] = {
             ParameterSource.PATH: lambda: request_data.path_params.get(param_name),
             ParameterSource.QUERY: lambda: request_data.query_params.get(param_name),
             ParameterSource.HEADER: lambda: ParameterResolver._extract_header_value(
@@ -452,7 +452,7 @@ class ParameterResolver:
         if isinstance(param.default, BaseParam):
             return True
         # Validate if it has a specific type annotation
-        return param.annotation != inspect.Parameter.empty
+        return bool(param.annotation != inspect.Parameter.empty)
 
     @staticmethod
     def _build_field_info(param: inspect.Parameter) -> tuple[Any, ...]:

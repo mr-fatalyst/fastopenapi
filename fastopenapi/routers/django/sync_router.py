@@ -23,7 +23,7 @@ class DjangoRouter(BaseAdapter):
     """Django adapter for FastOpenAPI"""
 
     PATH_CONVERSIONS = (r"{(\w+)}", r"<\1>")
-    ASYNC_ENDPOINT_ERROR = (
+    ASYNC_ENDPOINT_ERROR: str | None = (
         "cannot be used with sync router. Use DjangoAsyncRouter for async support."
     )
 
@@ -77,7 +77,7 @@ class DjangoRouter(BaseAdapter):
         """Build the per-endpoint view method (async router overrides)"""
         outer = self
 
-        def handle(self, req, **path_params):  # pragma: no cover
+        def handle(self: Any, req: Any, **path_params: Any) -> Any:  # pragma: no cover
             env = RequestEnvelope(request=req, path_params=path_params)
             return outer.handle_request(endpoint, env)
 
@@ -104,35 +104,40 @@ class DjangoRouter(BaseAdapter):
 
     def _register_docs_endpoints(self) -> None:  # pragma: no cover
         """Register documentation endpoints"""
+        openapi_url = self.openapi_url
+        if openapi_url is None:
+            return
+        # narrowing does not survive into nested class bodies
+        schema_url: str = openapi_url
         outer = self
 
         class OpenAPISchemaView(View):
-            @csrf_exempt
-            def get(self, req):
+            # GET is CSRF-safe, no exemption needed
+            def get(self, req: Any) -> HttpResponse:
                 return JsonResponse(outer.openapi)
 
         class SwaggerUIView(View):
-            def get(self, req):
+            def get(self, req: Any) -> HttpResponse:
                 return HttpResponse(
-                    render_swagger_ui(outer.openapi_url).encode(),
+                    render_swagger_ui(schema_url).encode(),
                     content_type="text/html",
                 )
 
         class RedocUIView(View):
-            def get(self, req):
+            def get(self, req: Any) -> HttpResponse:
                 return HttpResponse(
-                    render_redoc_ui(outer.openapi_url).encode(),
+                    render_redoc_ui(schema_url).encode(),
                     content_type="text/html",
                 )
 
-        self._views[self.openapi_url] = OpenAPISchemaView
+        self._views[openapi_url] = OpenAPISchemaView
         if self.docs_url:
             self._views[self.docs_url] = SwaggerUIView
         if self.redoc_url:
             self._views[self.redoc_url] = RedocUIView
 
     @property
-    def urls(self):
+    def urls(self) -> tuple[Any, str, str]:
         """Get Django URL patterns"""
         return (
             tuple(

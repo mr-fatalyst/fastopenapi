@@ -3,7 +3,6 @@ from typing import Any
 
 from django.http import HttpResponse, JsonResponse
 from django.views import View
-from django.views.decorators.csrf import csrf_exempt
 
 from fastopenapi.openapi.ui import render_redoc_ui, render_swagger_ui
 from fastopenapi.routers.common import RequestEnvelope
@@ -21,7 +20,7 @@ class DjangoAsyncRouter(DjangoRouter):
         """Build the per-endpoint async view method"""
         outer = self
 
-        async def handle(self, req, **path_params):
+        async def handle(self: Any, req: Any, **path_params: Any) -> Any:
             env = RequestEnvelope(request=req, path_params=path_params)
             return await outer.handle_request_async(endpoint, env)
 
@@ -29,28 +28,33 @@ class DjangoAsyncRouter(DjangoRouter):
 
     def _register_docs_endpoints(self) -> None:
         """Register documentation endpoints"""
+        openapi_url = self.openapi_url
+        if openapi_url is None:
+            return
+        # narrowing does not survive into nested class bodies
+        schema_url: str = openapi_url
         outer = self
 
         class OpenAPISchemaView(View):
-            @csrf_exempt
-            async def get(self, req):
+            # GET is CSRF-safe, no exemption needed
+            async def get(self, req: Any) -> HttpResponse:
                 return JsonResponse(outer.openapi)
 
         class SwaggerUIView(View):
-            async def get(self, req):
+            async def get(self, req: Any) -> HttpResponse:
                 return HttpResponse(
-                    render_swagger_ui(outer.openapi_url).encode(),
+                    render_swagger_ui(schema_url).encode(),
                     content_type="text/html",
                 )
 
         class RedocUIView(View):
-            async def get(self, req):
+            async def get(self, req: Any) -> HttpResponse:
                 return HttpResponse(
-                    render_redoc_ui(outer.openapi_url).encode(),
+                    render_redoc_ui(schema_url).encode(),
                     content_type="text/html",
                 )
 
-        self._views[self.openapi_url] = OpenAPISchemaView
+        self._views[openapi_url] = OpenAPISchemaView
         if self.docs_url:
             self._views[self.docs_url] = SwaggerUIView
         if self.redoc_url:

@@ -30,7 +30,7 @@ class QuartRequestDataExtractor(BaseAsyncRequestDataExtractor):
         return dict(request.cookies)
 
     @classmethod
-    async def _get_body(cls, request: Any) -> dict | list | None:
+    async def _get_body(cls, request: Any) -> dict[str, Any] | list[Any] | None:
         if not cls._is_json_content(request.mimetype):
             return {}
         return cls._safe_json_parse(await request.get_data(), strict=True) or {}

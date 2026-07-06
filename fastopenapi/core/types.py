@@ -77,13 +77,13 @@ class RequestData:
 
     def __init__(
         self,
-        path_params: dict[str, Any] = None,
-        query_params: dict[str, Any] = None,
-        headers: dict[str, str] = None,
-        cookies: dict[str, str] = None,
+        path_params: dict[str, Any] | None = None,
+        query_params: dict[str, Any] | None = None,
+        headers: dict[str, str] | None = None,
+        cookies: dict[str, str] | None = None,
         body: Any = None,
-        form_data: dict[str, Any] = None,
-        files: dict[str, FileUpload | list[FileUpload]] = None,
+        form_data: dict[str, Any] | None = None,
+        files: dict[str, FileUpload | list[FileUpload]] | None = None,
     ):
         self.path_params = path_params or {}
         self.query_params = query_params or {}

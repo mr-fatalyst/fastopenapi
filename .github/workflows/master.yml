@@ -33,6 +33,9 @@ jobs:
       - name: Run linters
         run: poetry run pre-commit run --all-files
 
+      - name: Run mypy
+        run: poetry run mypy fastopenapi/
+
   test:
     needs: lint
     runs-on: ubuntu-latest

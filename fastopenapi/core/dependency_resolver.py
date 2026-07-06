@@ -1,6 +1,6 @@
 import inspect
 import threading
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from types import MappingProxyType
 from typing import Any
@@ -114,8 +114,8 @@ class DependencyResolver:
         self,
         dependency: Depends | Security,
         request_data: RequestData,
-        param_name: str = None,
-        param_annotation: type = None,
+        param_name: str | None = None,
+        param_annotation: type | None = None,
     ) -> Any:
         """
         Resolve a single dependency with caching and recursion
@@ -150,7 +150,7 @@ class DependencyResolver:
         security: Security,
         dependency_func: Callable[..., Any],
         request_data: RequestData,
-        param_name: str,
+        param_name: str | None,
     ) -> Any:
         """Resolve Security dependency, injecting SecurityScopes if requested"""
         return self._execute_dependency_function(
@@ -164,7 +164,7 @@ class DependencyResolver:
         self,
         dependency_func: Callable[..., Any],
         request_data: RequestData,
-        param_name: str,
+        param_name: str | None,
     ) -> Any:
         """Resolve regular Depends dependency"""
         return self._execute_dependency_function(
@@ -175,7 +175,7 @@ class DependencyResolver:
         self,
         dependency_func: Callable[..., Any],
         request_data: RequestData,
-        param_name: str,
+        param_name: str | None,
         security_scopes: SecurityScopes | None = None,
     ) -> Any:
         """
@@ -421,8 +421,8 @@ class DependencyResolver:
         self,
         dependency: Depends | Security,
         request_data: RequestData,
-        param_name: str = None,
-        param_annotation: type = None,
+        param_name: str | None = None,
+        param_annotation: type | None = None,
     ) -> Any:
         """Resolve a single dependency with caching and recursion (async)"""
         # Get the dependency function
@@ -446,7 +446,7 @@ class DependencyResolver:
         security: Security,
         dependency_func: Callable[..., Any],
         request_data: RequestData,
-        param_name: str,
+        param_name: str | None,
     ) -> Any:
         """Resolve Security dependency, injecting SecurityScopes if requested"""
         return await self._execute_dependency_function_async(
@@ -461,7 +461,7 @@ class DependencyResolver:
         depends: Depends,
         dependency_func: Callable[..., Any],
         request_data: RequestData,
-        param_name: str,
+        param_name: str | None,
     ) -> Any:
         """Resolve regular Depends dependency (async)"""
         return await self._execute_dependency_function_async(
@@ -472,7 +472,7 @@ class DependencyResolver:
         self,
         dependency_func: Callable[..., Any],
         request_data: RequestData,
-        param_name: str,
+        param_name: str | None,
         security_scopes: SecurityScopes | None = None,
     ) -> Any:
         """
@@ -557,8 +557,8 @@ class DependencyResolver:
     def _get_dependency_func(
         self,
         dependency: Depends | Security,
-        param_name: str,
-        param_annotation: type,
+        param_name: str | None,
+        param_annotation: type | None,
     ) -> Callable[..., Any]:
         """Extract dependency function from Depends/Security instance"""
         dependency_func = dependency.dependency
@@ -604,8 +604,8 @@ class DependencyResolver:
         self,
         request_cache: dict[str, Any],
         dependency_func: Callable[..., Any],
-        param_name: str,
-    ):
+        param_name: str | None,
+    ) -> Iterator[None]:
         """Guard against circular dependencies"""
         resolving = request_cache["resolving"]
         if dependency_func in resolving:

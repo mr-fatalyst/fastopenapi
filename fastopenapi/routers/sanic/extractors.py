@@ -41,7 +41,7 @@ class SanicRequestDataExtractor(BaseAsyncRequestDataExtractor):
         return cookies
 
     @classmethod
-    async def _get_body(cls, request: Any) -> dict | list | None:
+    async def _get_body(cls, request: Any) -> dict[str, Any] | list[Any] | None:
         """Extract body"""
         try:
             return request.json or {}

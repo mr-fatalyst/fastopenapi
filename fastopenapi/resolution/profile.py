@@ -55,7 +55,9 @@ class ExtractionProfileBuilder:
         return profile
 
     @classmethod
-    def _collect(cls, func: Callable[..., Any], seen: set) -> dict[str, bool]:
+    def _collect(
+        cls, func: Callable[..., Any], seen: set[Callable[..., Any]]
+    ) -> dict[str, bool]:
         flags = {"needs_body": False, "needs_form": False, "needs_files": False}
         params = ParameterResolver._get_signature(func)
 

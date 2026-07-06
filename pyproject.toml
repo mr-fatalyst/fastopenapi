@@ -71,6 +71,15 @@ module = [
 ]
 disable_error_code = ["override"]
 
+# Django is untyped: docs/dynamic views subclass Any (django-stubs would
+# need the mypy plugin plus configured settings, too heavy for six classes)
+[[tool.mypy.overrides]]
+module = [
+    "fastopenapi.routers.django.sync_router",
+    "fastopenapi.routers.django.async_router",
+]
+disallow_subclassing_any = false
+
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
 build-backend = "poetry.core.masonry.api"

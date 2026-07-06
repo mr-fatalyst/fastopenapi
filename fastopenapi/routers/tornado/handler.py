@@ -10,17 +10,21 @@ from fastopenapi.routers.tornado.utils import json_encode
 class TornadoDynamicHandler(RequestHandler):
     """Dynamic request handler for Tornado"""
 
+    endpoints: dict[str, Any]
+    router: Any
+    endpoint: Any
+
     def initialize(self, **kwargs: Any) -> None:
         self.endpoints = kwargs.get("endpoints", {})
         self.router = kwargs.get("router")
 
     async def prepare(self) -> None:
         """Prepare request data"""
-        self.endpoint = self.endpoints.get(self.request.method.upper())
+        self.endpoint = self.endpoints.get((self.request.method or "").upper())
 
     async def handle_request(self) -> None:
         """Common request handling"""
-        method = self.request.method.upper()
+        method = (self.request.method or "").upper()
         endpoint = getattr(self, "endpoint", None)
         if endpoint is None and method == "HEAD":
             # Auto-HEAD: serve HEAD from the GET pipeline

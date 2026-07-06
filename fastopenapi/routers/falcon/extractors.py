@@ -58,7 +58,7 @@ class FalconRequestDataExtractor(BaseRequestDataExtractor):
             files[field_name] = [existing, file_upload]
 
     @classmethod
-    def _get_body(cls, request: Any) -> dict | list | None:
+    def _get_body(cls, request: Any) -> dict[str, Any] | list[Any] | None:
         if not cls._is_json_content(request.content_type):
             return {}
         try:
@@ -131,7 +131,7 @@ class FalconAsyncRequestDataExtractor(
     BaseAsyncRequestDataExtractor,
 ):
     @classmethod
-    async def _get_body(cls, request: Any) -> bytes | str | dict:
+    async def _get_body(cls, request: Any) -> dict[str, Any] | list[Any] | None:
         """Extract body"""
         if not cls._is_json_content(request.content_type):
             return {}

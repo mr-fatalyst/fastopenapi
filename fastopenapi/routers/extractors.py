@@ -36,7 +36,7 @@ class BaseRequestDataExtractor(ABC):
 
     @classmethod
     @abstractmethod
-    def _get_body(cls, request: Any) -> bytes | str | dict:
+    def _get_body(cls, request: Any) -> dict[str, Any] | list[Any] | None:
         """Extract body"""
 
     @classmethod
@@ -73,11 +73,14 @@ class BaseRequestDataExtractor(ABC):
         if not data:
             return None
         try:
-            if isinstance(data, (bytes, bytearray)):
-                data = data.decode("utf-8")
-            if isinstance(data, str):
-                return from_json(data)
-            return data
+            raw = data
+            if isinstance(raw, (bytes, bytearray)):
+                raw = raw.decode("utf-8")
+            if isinstance(raw, str):
+                parsed: dict[str, Any] | list[Any] = from_json(raw)
+                return parsed
+            passthrough: dict[str, Any] | list[Any] = raw
+            return passthrough
         except Exception as e:
             if strict:
                 raise ValidationError(
@@ -145,7 +148,7 @@ class BaseAsyncRequestDataExtractor(BaseRequestDataExtractor, ABC):
 
     @classmethod
     @abstractmethod
-    async def _get_body(cls, request: Any) -> bytes | str | dict:
+    async def _get_body(cls, request: Any) -> dict[str, Any] | list[Any] | None:
         """Extract body"""
 
     @classmethod

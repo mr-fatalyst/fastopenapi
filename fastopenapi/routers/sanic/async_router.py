@@ -16,7 +16,7 @@ class SanicRouter(BaseAdapter):
     PATH_CONVERSIONS = (r"{(\w+)}", r"<\1>")
     extractor_async_cls = SanicRequestDataExtractor
 
-    def __init__(self, app: Any = None, **kwargs):
+    def __init__(self, app: Any = None, **kwargs: Any):
         self._explicit_head_paths: set[str] = set()
         self._auto_head_paths: set[str] = set()
         super().__init__(app, **kwargs)
@@ -31,7 +31,7 @@ class SanicRouter(BaseAdapter):
         method = method.upper()
         sanic_path = self._convert_path_for_framework(path)
 
-        async def view_func(request, **path_params):
+        async def view_func(request: Any, **path_params: Any) -> Any:
             env = RequestEnvelope(request=request, path_params=path_params)
             return await self.handle_request_async(endpoint, env)
 
@@ -57,8 +57,8 @@ class SanicRouter(BaseAdapter):
         content_type = None
         for key in [k for k in headers if k.lower() == "content-type"]:
             content_type = headers.pop(key)
-        return response.raw(
-            response_obj.body if response_obj.body is not None else b"",
+        return response.HTTPResponse(
+            body=response_obj.body if response_obj.body is not None else b"",
             status=response_obj.status,
             headers=headers,
             content_type=content_type,
@@ -69,21 +69,33 @@ class SanicRouter(BaseAdapter):
 
     def _register_docs_endpoints(self) -> None:
         """Register documentation endpoints"""
+        openapi_url = self.openapi_url
+        if openapi_url is None:
+            return
 
-        @self.app.route(self.openapi_url, methods=["GET"])
-        async def openapi_view(request):
+        async def openapi_view(request: Any) -> Any:
             return response.json(self.openapi)
+
+        self.app.add_route(
+            openapi_view, openapi_url, methods=["GET"], name="openapi_view"
+        )
 
         if self.docs_url:
 
-            @self.app.route(self.docs_url, methods=["GET"])
-            async def docs_view(request):
-                html = render_swagger_ui(self.openapi_url)
+            async def docs_view(request: Any) -> Any:
+                html = render_swagger_ui(openapi_url)
                 return response.html(html)
+
+            self.app.add_route(
+                docs_view, self.docs_url, methods=["GET"], name="docs_view"
+            )
 
         if self.redoc_url:
 
-            @self.app.route(self.redoc_url, methods=["GET"])
-            async def redoc_view(request):
-                html = render_redoc_ui(self.openapi_url)
+            async def redoc_view(request: Any) -> Any:
+                html = render_redoc_ui(openapi_url)
                 return response.html(html)
+
+            self.app.add_route(
+                redoc_view, self.redoc_url, methods=["GET"], name="redoc_view"
+            )

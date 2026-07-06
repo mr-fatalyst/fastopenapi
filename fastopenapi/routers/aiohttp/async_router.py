@@ -16,7 +16,7 @@ class AioHttpRouter(BaseAdapter):
 
     extractor_async_cls = AioHttpRequestDataExtractor
 
-    def __init__(self, app: web.Application = None, **kwargs):
+    def __init__(self, app: web.Application | None = None, **kwargs: Any):
         self._explicit_head_paths: set[str] = set()
         self._auto_head_paths: set[str] = set()
         super().__init__(app, **kwargs)
@@ -63,20 +63,23 @@ class AioHttpRouter(BaseAdapter):
 
     def _register_docs_endpoints(self) -> None:
         """Register documentation endpoints"""
+        openapi_url = self.openapi_url
+        if openapi_url is None:
+            return
 
-        async def openapi_view(request):
+        async def openapi_view(request: web.Request) -> web.Response:
             return web.json_response(self.openapi)
 
-        async def docs_view(request):
-            html = render_swagger_ui(self.openapi_url)
+        async def docs_view(request: web.Request) -> web.Response:
+            html = render_swagger_ui(openapi_url)
             return web.Response(text=html, content_type="text/html")
 
-        async def redoc_view(request):
-            html = render_redoc_ui(self.openapi_url)
+        async def redoc_view(request: web.Request) -> web.Response:
+            html = render_redoc_ui(openapi_url)
             return web.Response(text=html, content_type="text/html")
 
         if self.app is not None:
-            self.app.router.add_route("GET", self.openapi_url, openapi_view)
+            self.app.router.add_route("GET", openapi_url, openapi_view)
             if self.docs_url:
                 self.app.router.add_route("GET", self.docs_url, docs_view)
             if self.redoc_url:

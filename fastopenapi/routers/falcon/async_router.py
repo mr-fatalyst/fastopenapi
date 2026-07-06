@@ -20,7 +20,7 @@ class FalconAsyncRouter(FalconRouter):
     ) -> Callable[..., Any]:
         """Build async request handler function for endpoint"""
 
-        async def handle(request, response, **path_params):
+        async def handle(request: Any, response: Any, **path_params: Any) -> None:
             env = RequestEnvelope(request=request, path_params=path_params)
             result = await self.handle_request_async(endpoint, env)
 
@@ -31,10 +31,12 @@ class FalconAsyncRouter(FalconRouter):
 
         return handle
 
-    def _build_head_handler(self, get_handler: Callable) -> Callable[..., Any]:
+    def _build_head_handler(
+        self, get_handler: Callable[..., Any]
+    ) -> Callable[..., Any]:
         """Run the GET pipeline for HEAD, then drop the body (async)"""
 
-        async def handle_head(request, response, **path_params):
+        async def handle_head(request: Any, response: Any, **path_params: Any) -> None:
             await get_handler(request, response, **path_params)
             response.media = None
             response.text = None
@@ -44,25 +46,30 @@ class FalconAsyncRouter(FalconRouter):
 
     def _register_docs_endpoints(self) -> None:
         """Register documentation endpoints"""
+        openapi_url = self.openapi_url
+        if openapi_url is None:
+            return
+        # narrowing does not survive into nested class bodies
+        schema_url: str = openapi_url
         outer = self
 
         class OpenAPISchemaResource:
-            async def on_get(self, req, resp):
+            async def on_get(self, req: Any, resp: Any) -> None:
                 resp.media = outer.openapi
 
         class SwaggerUIResource:
-            async def on_get(self, req, resp):
-                html = render_swagger_ui(outer.openapi_url)
+            async def on_get(self, req: Any, resp: Any) -> None:
+                html = render_swagger_ui(schema_url)
                 resp.content_type = "text/html"
                 resp.text = html
 
         class RedocUIResource:
-            async def on_get(self, req, resp):
-                html = render_redoc_ui(outer.openapi_url)
+            async def on_get(self, req: Any, resp: Any) -> None:
+                html = render_redoc_ui(schema_url)
                 resp.content_type = "text/html"
                 resp.text = html
 
-        self.app.add_route(self.openapi_url, OpenAPISchemaResource())
+        self.app.add_route(openapi_url, OpenAPISchemaResource())
         if self.docs_url:
             self.app.add_route(self.docs_url, SwaggerUIResource())
         if self.redoc_url:

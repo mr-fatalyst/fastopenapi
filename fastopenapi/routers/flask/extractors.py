@@ -30,7 +30,7 @@ class FlaskRequestDataExtractor(BaseRequestDataExtractor):
         return dict(request.cookies)
 
     @classmethod
-    def _get_body(cls, request: Any) -> dict | list | None:
+    def _get_body(cls, request: Any) -> dict[str, Any] | list[Any] | None:
         if not cls._is_json_content(request.mimetype):
             return {}
         return cls._safe_json_parse(request.get_data(), strict=True) or {}

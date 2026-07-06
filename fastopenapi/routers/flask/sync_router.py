@@ -15,7 +15,9 @@ class FlaskRouter(BaseAdapter):
     """Flask adapter for FastOpenAPI"""
 
     PATH_CONVERSIONS = (r"{(\w+)}", r"<\1>")
-    ASYNC_ENDPOINT_ERROR = "cannot be used with Flask. Use Quart for async support."
+    ASYNC_ENDPOINT_ERROR: str | None = (
+        "cannot be used with Flask. Use Quart for async support."
+    )
 
     extractor_cls = FlaskRequestDataExtractor
 
@@ -26,7 +28,7 @@ class FlaskRouter(BaseAdapter):
         if self.app is not None:
             flask_path = self._convert_path_for_framework(path)
 
-            def view_func(**path_params):
+            def view_func(**path_params: Any) -> Any:
                 env = RequestEnvelope(request=request, path_params=path_params)
                 return self.handle_request(endpoint, env)
 
@@ -54,21 +56,33 @@ class FlaskRouter(BaseAdapter):
 
     def _register_docs_endpoints(self) -> None:
         """Register documentation endpoints"""
+        openapi_url = self.openapi_url
+        if openapi_url is None:
+            return
 
-        @self.app.route(self.openapi_url, methods=["GET"])
-        def openapi_view():
+        def openapi_view() -> FlaskResponse:
             return jsonify(self.openapi)
+
+        self.app.add_url_rule(
+            openapi_url, "openapi_view", openapi_view, methods=["GET"]
+        )
 
         if self.docs_url:
 
-            @self.app.route(self.docs_url, methods=["GET"])
-            def docs_view():
-                html = render_swagger_ui(self.openapi_url)
+            def docs_view() -> FlaskResponse:
+                html = render_swagger_ui(openapi_url)
                 return FlaskResponse(html, mimetype="text/html")
+
+            self.app.add_url_rule(
+                self.docs_url, "docs_view", docs_view, methods=["GET"]
+            )
 
         if self.redoc_url:
 
-            @self.app.route(self.redoc_url, methods=["GET"])
-            def redoc_view():
-                html = render_redoc_ui(self.openapi_url)
+            def redoc_view() -> FlaskResponse:
+                html = render_redoc_ui(openapi_url)
                 return FlaskResponse(html, mimetype="text/html")
+
+            self.app.add_url_rule(
+                self.redoc_url, "redoc_view", redoc_view, methods=["GET"]
+            )

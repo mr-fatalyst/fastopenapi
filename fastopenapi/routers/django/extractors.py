@@ -35,7 +35,7 @@ class DjangoRequestDataExtractor(BaseRequestDataExtractor):
         return dict(request.COOKIES)
 
     @classmethod
-    def _get_body(cls, request: Any) -> dict | list | None:
+    def _get_body(cls, request: Any) -> dict[str, Any] | list[Any] | None:
         if not (hasattr(request, "body") and request.body):
             return {}
         strict = cls._is_json_content(getattr(request, "content_type", ""))
@@ -80,7 +80,7 @@ class DjangoAsyncRequestDataExtractor(
     thread via sync_to_async instead of blocking the event loop."""
 
     @classmethod
-    async def _get_body(cls, request: Any) -> bytes | str | dict:
+    async def _get_body(cls, request: Any) -> dict[str, Any] | list[Any] | None:
         """Extract body"""
         return await sync_to_async(super()._get_body)(request)
 

@@ -11,11 +11,12 @@ class ResponseBuilder:
     @classmethod
     def build(cls, result: Any, meta: dict[str, Any]) -> Response:
         """Build response from endpoint result"""
+        headers: dict[str, str]
         # Handle tuple response (body, status, headers)
         if isinstance(result, tuple):
             if len(result) == 2:
                 content, status = result
-                headers: dict[str, str] = {}
+                headers = {}
             elif len(result) == 3:
                 content, status, headers = result
             else:
@@ -29,7 +30,7 @@ class ResponseBuilder:
         else:
             content = result
             status = meta.get("status_code", 200)
-            headers: dict[str, str] = {}
+            headers = {}
 
         # Serialize content
         content = cls._serialize(content)

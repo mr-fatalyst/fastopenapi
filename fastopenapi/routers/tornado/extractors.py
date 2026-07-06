@@ -30,7 +30,7 @@ class TornadoRequestDataExtractor(BaseAsyncRequestDataExtractor):
         return {key: morsel.value for key, morsel in request.cookies.items()}
 
     @classmethod
-    async def _get_body(cls, request: Any) -> dict | list | None:
+    async def _get_body(cls, request: Any) -> dict[str, Any] | list[Any] | None:
         """Extract body"""
         if not request.body:
             return {}

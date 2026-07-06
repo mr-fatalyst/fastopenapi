@@ -32,7 +32,7 @@ class AioHttpRequestDataExtractor(BaseAsyncRequestDataExtractor):
         return dict(request.cookies)
 
     @classmethod
-    async def _get_body(cls, request: Any) -> dict | list | None:
+    async def _get_body(cls, request: Any) -> dict[str, Any] | list[Any] | None:
         """Extract JSON body.
 
         Non-JSON payloads are left untouched: reading them here would

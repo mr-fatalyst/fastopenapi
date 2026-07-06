@@ -129,7 +129,7 @@ class BaseAdapter(BaseRouter, ABC):
         """Validate and convert an endpoint result into a framework response"""
         if self.is_framework_response(result):
             return result
-        route_meta = endpoint.__route_meta__
+        route_meta = getattr(endpoint, "__route_meta__")
         response_model = route_meta.get("response_model")
         # Explicit Response objects and (body, status, ...) tuples opt out
         # of response-model validation

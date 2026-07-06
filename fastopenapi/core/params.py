@@ -16,7 +16,7 @@ from pydantic.fields import FieldInfo
 from fastopenapi.core.constants import ParameterSource
 
 
-class BaseParam(FieldInfo):
+class BaseParam(FieldInfo):  # type: ignore[misc]  # ty: ignore[subclass-of-final-class]  # noqa: E501
     """Base parameter class extending Pydantic FieldInfo"""
 
     def __init__(
@@ -83,7 +83,7 @@ class BaseParam(FieldInfo):
         return f"{self.__class__.__name__}({self.default})"
 
 
-class Param(BaseParam):
+class Param(BaseParam):  # type: ignore[misc]
     """Base parameter class for URL/header/cookie parameters.
 
     Subclasses only pin their location (``in_``) and default; the full
@@ -93,7 +93,7 @@ class Param(BaseParam):
     in_: ParameterSource
 
 
-class Query(Param):
+class Query(Param):  # type: ignore[misc]
     """Query parameter from URL query string"""
 
     in_ = ParameterSource.QUERY
@@ -102,7 +102,7 @@ class Query(Param):
         super().__init__(default, **kwargs)
 
 
-class Path(Param):
+class Path(Param):  # type: ignore[misc]
     """Path parameter from URL path"""
 
     in_ = ParameterSource.PATH
@@ -114,7 +114,7 @@ class Path(Param):
         super().__init__(default, **kwargs)
 
 
-class Header(Param):
+class Header(Param):  # type: ignore[misc]
     """Header parameter from HTTP headers"""
 
     in_ = ParameterSource.HEADER
@@ -130,7 +130,7 @@ class Header(Param):
         super().__init__(default, **kwargs)
 
 
-class Cookie(Param):
+class Cookie(Param):  # type: ignore[misc]
     """Cookie parameter from HTTP cookies"""
 
     in_ = ParameterSource.COOKIE
@@ -139,7 +139,7 @@ class Cookie(Param):
         super().__init__(default, **kwargs)
 
 
-class Body(BaseParam):
+class Body(BaseParam):  # type: ignore[misc]
     """Body parameter for JSON request bodies"""
 
     def __init__(
@@ -155,7 +155,7 @@ class Body(BaseParam):
         self.media_type = media_type
 
 
-class Form(Body):
+class Form(Body):  # type: ignore[misc]
     """Form data parameter"""
 
     def __init__(
@@ -168,7 +168,7 @@ class Form(Body):
         super().__init__(default, media_type=media_type, **kwargs)
 
 
-class File(Form):
+class File(Form):  # type: ignore[misc]
     """File upload parameter"""
 
     def __init__(

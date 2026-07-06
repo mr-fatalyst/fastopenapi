@@ -25,7 +25,7 @@ class QuartRouter(BaseAdapter):
         if self.app is not None:
             quart_path = self._convert_path_for_framework(path)
 
-            async def view_func(**path_params):
+            async def view_func(**path_params: Any) -> Any:
                 env = RequestEnvelope(request=request, path_params=path_params)
                 return await self.handle_request_async(endpoint, env)
 
@@ -56,21 +56,33 @@ class QuartRouter(BaseAdapter):
 
     def _register_docs_endpoints(self) -> None:
         """Register documentation endpoints"""
+        openapi_url = self.openapi_url
+        if openapi_url is None:
+            return
 
-        @self.app.route(self.openapi_url, methods=["GET"])
-        async def openapi_view():
+        async def openapi_view() -> QuartResponse:
             return jsonify(self.openapi)
+
+        self.app.add_url_rule(
+            openapi_url, "openapi_view", openapi_view, methods=["GET"]
+        )
 
         if self.docs_url:
 
-            @self.app.route(self.docs_url, methods=["GET"])
-            async def docs_view():
-                html = render_swagger_ui(self.openapi_url)
+            async def docs_view() -> QuartResponse:
+                html = render_swagger_ui(openapi_url)
                 return QuartResponse(html, mimetype="text/html")
+
+            self.app.add_url_rule(
+                self.docs_url, "docs_view", docs_view, methods=["GET"]
+            )
 
         if self.redoc_url:
 
-            @self.app.route(self.redoc_url, methods=["GET"])
-            async def redoc_view():
-                html = render_redoc_ui(self.openapi_url)
+            async def redoc_view() -> QuartResponse:
+                html = render_redoc_ui(openapi_url)
                 return QuartResponse(html, mimetype="text/html")
+
+            self.app.add_url_rule(
+                self.redoc_url, "redoc_view", redoc_view, methods=["GET"]
+            )

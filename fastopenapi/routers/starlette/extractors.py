@@ -30,7 +30,7 @@ class StarletteRequestDataExtractor(BaseAsyncRequestDataExtractor):
         return dict(request.cookies)
 
     @classmethod
-    async def _get_body(cls, request: Any) -> dict | list | None:
+    async def _get_body(cls, request: Any) -> dict[str, Any] | list[Any] | None:
         try:
             body_bytes = await request.body()
         except Exception:
@@ -82,12 +82,12 @@ class StarletteRequestDataExtractor(BaseAsyncRequestDataExtractor):
                         file=value,
                     )
 
-                    if key in files:
-                        if isinstance(files[key], list):
-                            files[key].append(file_upload)
-                        else:
-                            files[key] = [files[key], file_upload]
-                    else:
+                    existing = files.get(key)
+                    if existing is None:
                         files[key] = file_upload
+                    elif isinstance(existing, list):
+                        existing.append(file_upload)
+                    else:
+                        files[key] = [existing, file_upload]
 
         return files

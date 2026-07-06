@@ -18,7 +18,7 @@ class TornadoRouter(BaseAdapter):
 
     extractor_async_cls = TornadoRequestDataExtractor
 
-    def __init__(self, app: Application = None, **kwargs):
+    def __init__(self, app: Application | None = None, **kwargs: Any):
         self.routes: list[Any] = []
         self._endpoint_map: dict[str, dict[str, Callable[..., Any]]] = {}
         self._registered_paths: set[str] = set()
@@ -61,29 +61,34 @@ class TornadoRouter(BaseAdapter):
 
     def _register_docs_endpoints(self) -> None:
         """Register documentation endpoints"""
+        openapi_url = self.openapi_url
+        if openapi_url is None:
+            return
+        # narrowing does not survive into nested class bodies
+        schema_url: str = openapi_url
         router = self
 
         class OpenAPIHandler(RequestHandler):
-            async def get(self):
+            async def get(self) -> None:
                 self.set_header("Content-Type", "application/json")
                 self.write(json_encode(router.openapi))
                 await self.finish()
 
         class SwaggerUIHandler(RequestHandler):
-            async def get(self):
-                html = render_swagger_ui(router.openapi_url)
+            async def get(self) -> None:
+                html = render_swagger_ui(schema_url)
                 self.set_header("Content-Type", "text/html")
                 self.write(html)
                 await self.finish()
 
         class RedocUIHandler(RequestHandler):
-            async def get(self):
-                html = render_redoc_ui(router.openapi_url)
+            async def get(self) -> None:
+                html = render_redoc_ui(schema_url)
                 self.set_header("Content-Type", "text/html")
                 self.write(html)
                 await self.finish()
 
-        spec_openapi = url(self.openapi_url, OpenAPIHandler, name="openapi-schema")
+        spec_openapi = url(openapi_url, OpenAPIHandler, name="openapi-schema")
         specs = [spec_openapi]
 
         if self.docs_url:

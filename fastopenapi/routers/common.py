@@ -6,5 +6,5 @@ from typing import Any
 class RequestEnvelope:
     """Unified wrapper for requests."""
 
-    path_params: dict[str, str]
-    request: Any | None
+    path_params: dict[str, Any] | None
+    request: Any
