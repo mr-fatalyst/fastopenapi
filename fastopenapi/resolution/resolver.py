@@ -91,7 +91,7 @@ class ParameterResolver:
         kwargs = {}
 
         # Resolve dependencies first
-        kwargs.update(cls._resolve_dependencies(endpoint, request_data))
+        kwargs.update(cls._resolve_dependencies(endpoint, request_data, method))
 
         # Process regular parameters
         regular_kwargs, model_fields, model_values = cls._process_parameters(
@@ -117,7 +117,9 @@ class ParameterResolver:
         kwargs = {}
 
         # Async dependencies
-        kwargs.update(await cls._resolve_dependencies_async(endpoint, request_data))
+        kwargs.update(
+            await cls._resolve_dependencies_async(endpoint, request_data, method)
+        )
 
         # Sync parameters
         regular_kwargs, model_fields, model_values = cls._process_parameters(
@@ -156,18 +158,22 @@ class ParameterResolver:
 
     @staticmethod
     def _resolve_dependencies(
-        endpoint: Callable[..., Any], request_data: RequestData
+        endpoint: Callable[..., Any],
+        request_data: RequestData,
+        method: str | None = None,
     ) -> dict[str, Any]:
         """Resolve endpoint dependencies"""
-        return dependency_resolver.resolve_dependencies(endpoint, request_data)
+        return dependency_resolver.resolve_dependencies(endpoint, request_data, method)
 
     @staticmethod
     async def _resolve_dependencies_async(
-        endpoint: Callable[..., Any], request_data: RequestData
+        endpoint: Callable[..., Any],
+        request_data: RequestData,
+        method: str | None = None,
     ) -> dict[str, Any]:
         """Resolve endpoint dependencies"""
         return await dependency_resolver.resolve_dependencies_async(
-            endpoint, request_data
+            endpoint, request_data, method
         )
 
     @classmethod

@@ -47,45 +47,71 @@ class DependencyResolver:
         self,
         endpoint: Callable[..., Any],
         request_data: RequestData,
+        method: str | None = None,
     ) -> dict[str, Any]:
         """
         Resolve all dependencies for an endpoint
 
+        Generator dependencies stay open so the endpoint can use the
+        yielded value; the adapter must call ``close(request_data)``
+        after the endpoint returns to run their cleanup code.
+
         Args:
             endpoint: The endpoint function
             request_data: Request data container
+            method: HTTP method of the current request
 
         Returns:
             Dict mapping parameter names to resolved dependency values
         """
-        # Initialize request-scoped tracking
-        is_top_level = False
+        self._open_request_scope(request_data, method)
+        return self._resolve_endpoint_dependencies(endpoint, request_data)
+
+    def _open_request_scope(
+        self, request_data: RequestData, method: str | None
+    ) -> None:
+        """Create the request-scoped cache entry if it does not exist yet"""
         with self._request_cache_lock:
             if request_data not in self._request_cache:
-                is_top_level = True
                 self._request_cache[request_data] = {
                     "resolved": {},
                     "resolving": set(),
                     "generators": [],
+                    "method": method,
                 }
 
-        try:
-            return self._resolve_endpoint_dependencies(endpoint, request_data)
-        finally:
-            if is_top_level:
-                # Get generators before deleting cache
-                with self._request_cache_lock:
-                    cache = self._request_cache.get(request_data, {})
-                    generators = list(cache.get("generators", []))
-                # Close generators (triggers finally blocks)
-                for gen in generators:
-                    try:
-                        gen.close()
-                    except Exception:
-                        pass
-                # Clean up request cache
-                with self._request_cache_lock:
-                    self._request_cache.pop(request_data, None)
+    def close(self, request_data: RequestData) -> None:
+        """
+        Close generator dependencies opened for a request
+
+        Runs code after ``yield`` (via ``gen.close()``) in reverse creation
+        order and drops the request cache entry. No-op when the request has
+        no cache entry.
+        """
+        with self._request_cache_lock:
+            cache = self._request_cache.pop(request_data, None)
+        if cache is None:
+            return
+        for gen in reversed(cache["generators"]):
+            try:
+                gen.close()
+            except Exception:
+                pass
+
+    async def aclose(self, request_data: RequestData) -> None:
+        """Async variant of ``close`` (also handles async generators)"""
+        with self._request_cache_lock:
+            cache = self._request_cache.pop(request_data, None)
+        if cache is None:
+            return
+        for gen in reversed(cache["generators"]):
+            try:
+                if inspect.isasyncgen(gen):
+                    await gen.aclose()
+                else:
+                    gen.close()
+            except Exception:
+                pass
 
     def _resolve_endpoint_dependencies(
         self, endpoint: Callable[..., Any], request_data: RequestData
@@ -181,7 +207,7 @@ class DependencyResolver:
         """
         Execute dependency function with caching and circular dependency detection
         """
-        cache_key = self._make_cache_key(dependency_func, request_data)
+        cache_key = self._make_cache_key(dependency_func, request_data, security_scopes)
         request_cache = self._get_request_cache(request_data)
 
         # The cache is request-scoped and a request is handled by a single
@@ -306,8 +332,8 @@ class DependencyResolver:
 
         return sub_dependencies
 
-    @staticmethod
     def _resolve_regular_params(
+        self,
         dependency_func: Callable[..., Any],
         regular_params: dict[str, inspect.Parameter],
         request_data: RequestData,
@@ -315,10 +341,16 @@ class DependencyResolver:
         """Resolve non-dependency parameters of a dependency function"""
         from fastopenapi.resolution.resolver import ParameterResolver
 
+        # Dependency params follow the same method-specific rules as
+        # endpoint params (e.g. bare models map to query on GET)
+        cache = self._request_cache.get(request_data)
+        method = cache.get("method") if cache else None
+
         try:
             return ParameterResolver.resolve_params(
                 regular_params,
                 request_data,
+                method=method,
                 owner=(
                     getattr(dependency_func, "__module__", "fastopenapi"),
                     getattr(dependency_func, "__qualname__", repr(dependency_func)),
@@ -349,50 +381,25 @@ class DependencyResolver:
         self,
         endpoint: Callable[..., Any],
         request_data: RequestData,
+        method: str | None = None,
     ) -> dict[str, Any]:
         """
         Resolve all dependencies for an endpoint (async version)
 
+        Generator dependencies stay open so the endpoint can use the
+        yielded value; the adapter must call ``aclose(request_data)``
+        after the endpoint returns to run their cleanup code.
+
         Args:
             endpoint: The endpoint function
             request_data: Request data container
+            method: HTTP method of the current request
 
         Returns:
             Dict mapping parameter names to resolved dependency values
         """
-        # Initialize request-scoped tracking
-        is_top_level = False
-        with self._request_cache_lock:
-            if request_data not in self._request_cache:
-                is_top_level = True
-                self._request_cache[request_data] = {
-                    "resolved": {},
-                    "resolving": set(),
-                    "generators": [],
-                }
-
-        try:
-            return await self._resolve_endpoint_dependencies_async(
-                endpoint, request_data
-            )
-        finally:
-            if is_top_level:
-                # Get generators before deleting cache
-                with self._request_cache_lock:
-                    cache = self._request_cache.get(request_data, {})
-                    generators = list(cache.get("generators", []))
-                # Close generators (triggers finally blocks)
-                for gen in generators:
-                    try:
-                        if inspect.isasyncgen(gen):
-                            await gen.aclose()
-                        else:
-                            gen.close()
-                    except Exception:
-                        pass
-                # Clean up request cache
-                with self._request_cache_lock:
-                    self._request_cache.pop(request_data, None)
+        self._open_request_scope(request_data, method)
+        return await self._resolve_endpoint_dependencies_async(endpoint, request_data)
 
     async def _resolve_endpoint_dependencies_async(
         self, endpoint: Callable[..., Any], request_data: RequestData
@@ -478,7 +485,7 @@ class DependencyResolver:
         """
         Execute dependency function with caching and circular dependency detection
         """
-        cache_key = self._make_cache_key(dependency_func, request_data)
+        cache_key = self._make_cache_key(dependency_func, request_data, security_scopes)
         request_cache = self._get_request_cache(request_data)
 
         hit, value = self._try_get_cached(cache_key, request_cache)
@@ -573,17 +580,25 @@ class DependencyResolver:
         return dependency_func
 
     def _make_cache_key(
-        self, dependency_func: Callable[..., Any], request_data: RequestData
-    ) -> tuple[int, int]:
-        """Create cache key for request-scoped cache"""
-        return (id(dependency_func), id(request_data))
+        self,
+        dependency_func: Callable[..., Any],
+        request_data: RequestData,
+        security_scopes: SecurityScopes | None = None,
+    ) -> tuple[int, int, tuple[str, ...]]:
+        """Create cache key for request-scoped cache
+
+        Scopes are part of the key: the same Security dependency requested
+        with different scopes must be executed once per scope set.
+        """
+        scopes = tuple(sorted(security_scopes.scopes)) if security_scopes else ()
+        return (id(dependency_func), id(request_data), scopes)
 
     def _get_request_cache(self, request_data: RequestData) -> dict[str, Any]:
         """Get cache dictionary for current request"""
         return self._request_cache[request_data]
 
     def _try_get_cached(
-        self, cache_key: tuple[int, int], request_cache: dict[str, Any]
+        self, cache_key: tuple[int, int, tuple[str, ...]], request_cache: dict[str, Any]
     ) -> tuple[bool, Any]:
         """Try to get cached value from request-scoped cache"""
         with self._request_cache_lock:
@@ -593,7 +608,10 @@ class DependencyResolver:
         return False, None
 
     def _cache_result(
-        self, cache_key: tuple[int, int], result: Any, request_cache: dict[str, Any]
+        self,
+        cache_key: tuple[int, int, tuple[str, ...]],
+        result: Any,
+        request_cache: dict[str, Any],
     ) -> None:
         """Store result in request-scoped cache"""
         with self._request_cache_lock:
@@ -647,17 +665,23 @@ dependency_resolver = DependencyResolver()
 
 # Convenience functions
 def resolve_dependencies(
-    endpoint: Callable[..., Any], request_data: RequestData
+    endpoint: Callable[..., Any],
+    request_data: RequestData,
+    method: str | None = None,
 ) -> dict[str, Any]:
     """Convenience function to resolve dependencies (sync)"""
-    return dependency_resolver.resolve_dependencies(endpoint, request_data)
+    return dependency_resolver.resolve_dependencies(endpoint, request_data, method)
 
 
 async def resolve_dependencies_async(
-    endpoint: Callable[..., Any], request_data: RequestData
+    endpoint: Callable[..., Any],
+    request_data: RequestData,
+    method: str | None = None,
 ) -> dict[str, Any]:
     """Convenience function to resolve dependencies (async)"""
-    return await dependency_resolver.resolve_dependencies_async(endpoint, request_data)
+    return await dependency_resolver.resolve_dependencies_async(
+        endpoint, request_data, method
+    )
 
 
 def get_dependency_stats() -> dict[str, int]:

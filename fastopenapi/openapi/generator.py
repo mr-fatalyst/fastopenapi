@@ -3,6 +3,7 @@ import re
 import threading
 import types
 import typing
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from functools import lru_cache
 from typing import Any
@@ -24,6 +25,7 @@ from fastopenapi.core.params import (
     Header,
     Param,
     Security,
+    SecurityScopes,
     is_body_model_annotation,
     is_pydantic_model,
     unwrap_annotated_parameter,
@@ -301,8 +303,7 @@ class ParameterProcessor:
         form_required: list[str] = []
         has_explicit_embed = False
 
-        for param_name, param in sig.parameters.items():
-            param = unwrap_annotated_parameter(param)
+        for param_name, param in self._flatten_route_parameters(sig):
             if self._should_skip_parameter(param):
                 continue
 
@@ -333,7 +334,24 @@ class ParameterProcessor:
             has_explicit_embed,
             form_required,
         )
-        return parameters, request_body
+        return self._dedupe_parameters(parameters), request_body
+
+    @staticmethod
+    def _dedupe_parameters(parameters: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Drop duplicate wire parameters (same name and location)
+
+        Python names may repeat across dependency scopes while mapping to
+        distinct wire params (different alias/location), so dedup happens
+        on the final ("name", "in") identity; the first occurrence wins.
+        """
+        seen: set[tuple[str, str]] = set()
+        deduped = []
+        for param in parameters:
+            key = (param["name"], param["in"])
+            if key not in seen:
+                seen.add(key)
+                deduped.append(param)
+        return deduped
 
     def _classify_parameter_result(
         self,
@@ -388,11 +406,46 @@ class ParameterProcessor:
         openapi_path = PATH_PARAM_PATTERN.sub(r"{\1}", path)
         return set(OPENAPI_PATH_PATTERN.findall(openapi_path))
 
+    def _flatten_route_parameters(
+        self, sig: inspect.Signature
+    ) -> Iterator[tuple[str, inspect.Parameter]]:
+        """Yield endpoint parameters with Depends/Security expanded
+
+        Dependency functions require their own Query/Header/... parameters
+        at runtime, so they belong to the operation. Repeated dependencies
+        are walked once; SecurityScopes injections are runtime-internal and
+        skipped. Python names may repeat across dependency scopes — wire-level
+        dedup happens later, in ``_dedupe_parameters``, once alias and
+        location are known.
+        """
+        seen_deps: set[Any] = set()
+
+        def walk(
+            params: Iterable[tuple[str, inspect.Parameter]],
+        ) -> Iterator[tuple[str, inspect.Parameter]]:
+            for param_name, param in params:
+                param = unwrap_annotated_parameter(param)
+                if isinstance(param.default, (Depends, Security)):
+                    func = param.default.dependency
+                    if func is None and param.annotation is not inspect.Parameter.empty:
+                        func = param.annotation
+                    if func is None or func in seen_deps:
+                        continue
+                    seen_deps.add(func)
+                    try:
+                        sub_sig = inspect.signature(func)
+                    except (TypeError, ValueError):
+                        continue
+                    yield from walk(sub_sig.parameters.items())
+                elif param.annotation is SecurityScopes:
+                    continue
+                else:
+                    yield param_name, param
+
+        yield from walk(sig.parameters.items())
+
     def _should_skip_parameter(self, param: inspect.Parameter) -> bool:
         """Determine if parameter should be skipped"""
-        if isinstance(param.default, (Depends, Security)):
-            return True
-
         # Skip authorization headers handled by security
         if isinstance(param.default, Header) and param.default.alias == "Authorization":
             return True

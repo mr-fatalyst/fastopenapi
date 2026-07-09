@@ -4,6 +4,7 @@ from unittest.mock import patch
 from weakref import WeakKeyDictionary
 
 import pytest
+from pydantic import BaseModel
 
 from fastopenapi.core.dependency_resolver import (
     DependencyResolver,
@@ -63,7 +64,7 @@ class TestDependencyResolver:
         assert result == {}
 
     def test_resolve_dependencies_without_caching(self):
-        """Test dependency without caching"""
+        """The cache is request-scoped: a new request re-executes dependencies"""
         call_count = 0
 
         def uncached_dep():
@@ -74,15 +75,17 @@ class TestDependencyResolver:
         def endpoint(dep: str = Depends(uncached_dep)):
             return dep
 
-        # First call
+        # First request
         result1 = self.resolver.resolve_dependencies(endpoint, self.request_data)
         assert result1 == {"dep": "result_1"}
         assert call_count == 1
+        self.resolver.close(self.request_data)
 
-        # Second call - should not use cache
+        # Second request - the previous request's cache is gone
         result2 = self.resolver.resolve_dependencies(endpoint, self.request_data)
         assert result2 == {"dep": "result_2"}
         assert call_count == 2
+        self.resolver.close(self.request_data)
 
     def test_security_scopes_injected_into_function(self):
         """Test SecurityScopes is injected into dependency function"""
@@ -354,9 +357,10 @@ class TestDependencyResolver:
 
         self.resolver.resolve_dependencies(endpoint, self.request_data)
 
-        # Request cache should be cleaned up
-        final_cache_count = len(self.resolver._request_cache)
-        assert final_cache_count == initial_cache_count
+        # The request scope stays open for the endpoint; close() drops it
+        assert len(self.resolver._request_cache) == initial_cache_count + 1
+        self.resolver.close(self.request_data)
+        assert len(self.resolver._request_cache) == initial_cache_count
 
     def test_cache_key_generation(self):
         """Test cache key generation"""
@@ -369,7 +373,30 @@ class TestDependencyResolver:
 
         assert key1 == key2
         assert isinstance(key1, tuple)
-        assert len(key1) == 2
+        # (func id, request id, security scopes)
+        assert len(key1) == 3
+        assert key1[2] == ()
+
+    def test_cache_key_includes_scopes(self):
+        """Same function with different scopes produces different keys"""
+
+        def test_func():
+            return "test"
+
+        no_scopes = self.resolver._make_cache_key(test_func, self.request_data)
+        read = self.resolver._make_cache_key(
+            test_func, self.request_data, SecurityScopes(["read"])
+        )
+        admin = self.resolver._make_cache_key(
+            test_func, self.request_data, SecurityScopes(["admin"])
+        )
+        read_again = self.resolver._make_cache_key(
+            test_func, self.request_data, SecurityScopes(["read"])
+        )
+
+        assert read != admin
+        assert read != no_scopes
+        assert read == read_again
 
     def test_thread_safety_across_requests(self):
         """Concurrent requests in separate threads resolve independently.
@@ -663,9 +690,10 @@ class TestDependencyResolver:
         # Resolve dependencies
         self.resolver.resolve_dependencies(endpoint, self.request_data)
 
-        # After resolution, request cache should be cleaned up
-        stats = self.resolver.get_cache_stats()
-        assert stats["active_requests"] == 0
+        # The request scope is active until close()
+        assert self.resolver.get_cache_stats()["active_requests"] == 1
+        self.resolver.close(self.request_data)
+        assert self.resolver.get_cache_stats()["active_requests"] == 0
 
     def test_global_get_dependency_stats(self):
         """Test global get_dependency_stats function"""
@@ -841,19 +869,21 @@ class TestDependencyResolver:
         def endpoint(dep: str = Depends(uncached_dep)):
             return dep
 
-        # First call
+        # First request
         result1 = await self.resolver.resolve_dependencies_async(
             endpoint, self.request_data
         )
         assert result1 == {"dep": "result_1"}
         assert call_count == 1
+        await self.resolver.aclose(self.request_data)
 
-        # Second call - should not use cache
+        # Second request - the previous request's cache is gone
         result2 = await self.resolver.resolve_dependencies_async(
             endpoint, self.request_data
         )
         assert result2 == {"dep": "result_2"}
         assert call_count == 2
+        await self.resolver.aclose(self.request_data)
 
     @pytest.mark.asyncio
     async def test_security_scopes_injected_async(self):
@@ -1136,8 +1166,9 @@ class TestDependencyResolver:
 
         initial_cache_count = len(self.resolver._request_cache)
         await self.resolver.resolve_dependencies_async(endpoint, self.request_data)
-        final_cache_count = len(self.resolver._request_cache)
-        assert final_cache_count == initial_cache_count
+        assert len(self.resolver._request_cache) == initial_cache_count + 1
+        await self.resolver.aclose(self.request_data)
+        assert len(self.resolver._request_cache) == initial_cache_count
 
     @pytest.mark.asyncio
     async def test_multiple_dependencies_same_endpoint_async(self):
@@ -1409,7 +1440,7 @@ class TestDependencyResolver:
 
     @pytest.mark.asyncio
     async def test_async_cleanup_when_cache_already_deleted(self):
-        """Test finally cleanup when request_data already removed from cache"""
+        """aclose is a no-op when the request scope is already gone"""
 
         async def test_dep():
             return "result"
@@ -1417,33 +1448,16 @@ class TestDependencyResolver:
         def endpoint(dep: str = Depends(test_dep)):
             return dep
 
-        # Mock _resolve_endpoint_dependencies_async to delete cache during execution
-        original_resolve = self.resolver._resolve_endpoint_dependencies_async
+        result = await self.resolver.resolve_dependencies_async(
+            endpoint, self.request_data
+        )
+        assert result == {"dep": "result"}
 
-        async def mock_resolve(endpoint, request_data):
-            result = await original_resolve(endpoint, request_data)
+        await self.resolver.aclose(self.request_data)
+        assert self.request_data not in self.resolver._request_cache
 
-            # Delete cache BEFORE finally block runs
-            with self.resolver._request_cache_lock:
-                if request_data in self.resolver._request_cache:
-                    del self.resolver._request_cache[request_data]
-
-            return result
-
-        with patch.object(
-            self.resolver,
-            "_resolve_endpoint_dependencies_async",
-            side_effect=mock_resolve,
-        ):
-            result = await self.resolver.resolve_dependencies_async(
-                endpoint, self.request_data
-            )
-
-            # Should complete successfully even though cache was already deleted
-            assert result == {"dep": "result"}
-
-            # Verify cache is not present
-            assert self.request_data not in self.resolver._request_cache
+        # A second close must not raise
+        await self.resolver.aclose(self.request_data)
 
     # ==========================================
     # GENERATOR (YIELD) DEPENDENCY TESTS
@@ -1466,33 +1480,34 @@ class TestDependencyResolver:
 
         result = self.resolver.resolve_dependencies(endpoint, self.request_data)
         assert result == {"db": {"connected": True}}
+        # The session must stay open for the endpoint; cleanup runs on close()
+        assert not cleanup_called
+        self.resolver.close(self.request_data)
         assert cleanup_called
 
     def test_sync_generator_cleanup_on_error(self):
-        """Test sync generator cleanup runs even when endpoint raises"""
-        cleanup_called = False
-
-        def db_session():
-            nonlocal cleanup_called
-            yield "session"
-            cleanup_called = True  # after yield, before finally — won't reach
-            # But finally WILL run via gen.close()
-
-        # Use a version with finally to properly test cleanup
+        """Generators opened before a failing dependency still get closed"""
         cleanup_log = []
 
-        def db_session_with_finally():
+        def db_session():
             cleanup_log.append("setup")
             try:
                 yield "session"
             finally:
                 cleanup_log.append("cleanup")
 
-        def endpoint(db=Depends(db_session_with_finally)):
+        def failing_dep():
+            raise RuntimeError("boom")
+
+        def endpoint(db=Depends(db_session), bad=Depends(failing_dep)):
             return db
 
-        result = self.resolver.resolve_dependencies(endpoint, self.request_data)
-        assert result == {"db": "session"}
+        with pytest.raises(DependencyError):
+            self.resolver.resolve_dependencies(endpoint, self.request_data)
+
+        # The adapter calls close() on the error path too
+        assert cleanup_log == ["setup"]
+        self.resolver.close(self.request_data)
         assert cleanup_log == ["setup", "cleanup"]
 
     def test_sync_generator_empty_raises(self):
@@ -1527,6 +1542,8 @@ class TestDependencyResolver:
 
         result = self.resolver.resolve_dependencies(endpoint, self.request_data)
         assert result == {"db": {"url": "sqlite://"}}
+        assert cleanup_log == ["setup"]
+        self.resolver.close(self.request_data)
         assert cleanup_log == ["setup", "cleanup"]
 
     def test_multiple_sync_generators_cleanup_order(self):
@@ -1550,8 +1567,10 @@ class TestDependencyResolver:
 
         result = self.resolver.resolve_dependencies(endpoint, self.request_data)
         assert result == {"a": "a", "b": "b"}
-        assert "a_cleanup" in cleanup_log
-        assert "b_cleanup" in cleanup_log
+        assert cleanup_log == []
+        self.resolver.close(self.request_data)
+        # Reverse creation order, like contextlib.ExitStack
+        assert cleanup_log == ["b_cleanup", "a_cleanup"]
 
     @pytest.mark.asyncio
     async def test_async_generator_dependency(self):
@@ -1573,6 +1592,8 @@ class TestDependencyResolver:
             endpoint, self.request_data
         )
         assert result == {"db": {"connected": True}}
+        assert not cleanup_called
+        await self.resolver.aclose(self.request_data)
         assert cleanup_called
 
     @pytest.mark.asyncio
@@ -1594,6 +1615,8 @@ class TestDependencyResolver:
             endpoint, self.request_data
         )
         assert result == {"db": "session"}
+        assert cleanup_log == ["setup"]
+        await self.resolver.aclose(self.request_data)
         assert cleanup_log == ["setup", "cleanup"]
 
     @pytest.mark.asyncio
@@ -1629,6 +1652,8 @@ class TestDependencyResolver:
             endpoint, self.request_data
         )
         assert result == {"dep": "sync_value"}
+        assert not cleanup_called
+        await self.resolver.aclose(self.request_data)
         assert cleanup_called
 
     def test_sync_generator_cleanup_exception_swallowed(self):
@@ -1653,6 +1678,7 @@ class TestDependencyResolver:
 
         result = self.resolver.resolve_dependencies(endpoint, self.request_data)
         assert result == {"a": "value", "b": "healthy"}
+        self.resolver.close(self.request_data)
         assert "cleanup_attempted" in cleanup_log
         assert "healthy_cleanup" in cleanup_log
 
@@ -1681,6 +1707,7 @@ class TestDependencyResolver:
             endpoint, self.request_data
         )
         assert result == {"a": "value", "b": "healthy"}
+        await self.resolver.aclose(self.request_data)
         assert "cleanup_attempted" in cleanup_log
         assert "healthy_cleanup" in cleanup_log
 
@@ -1708,6 +1735,8 @@ class TestDependencyResolver:
             endpoint, self.request_data
         )
         assert result == {"s": "sync", "a": "async"}
+        assert cleanup_log == []
+        await self.resolver.aclose(self.request_data)
         assert "sync_cleanup" in cleanup_log
         assert "async_cleanup" in cleanup_log
 
@@ -1740,4 +1769,133 @@ class TestMultipleGeneratorCleanup:
         result = resolver.resolve_dependencies(endpoint, request_data)
 
         assert result == {"a": "a", "b": "b"}
-        assert sorted(closed) == ["a", "b"]
+        assert closed == []
+        resolver.close(request_data)
+        assert closed == ["b", "a"]
+
+
+class TestSecurityScopesCacheKey:
+    """Scopes are part of the cache key: the same dependency requested with
+    different scopes must be executed once per scope set."""
+
+    def setup_method(self):
+        self.resolver = DependencyResolver()
+        self.request_data = RequestData()
+
+    def test_different_scopes_not_shared(self):
+        calls = []
+
+        def scoped(security_scopes: SecurityScopes):
+            calls.append(tuple(security_scopes.scopes))
+            return list(security_scopes.scopes)
+
+        def endpoint(
+            read=Security(scoped, scopes=["read"]),
+            admin=Security(scoped, scopes=["admin"]),
+        ):
+            return read, admin
+
+        result = self.resolver.resolve_dependencies(endpoint, self.request_data)
+        self.resolver.close(self.request_data)
+
+        assert result == {"read": ["read"], "admin": ["admin"]}
+        assert sorted(calls) == [("admin",), ("read",)]
+
+    def test_same_scopes_cached(self):
+        calls = []
+
+        def scoped(security_scopes: SecurityScopes):
+            calls.append(tuple(security_scopes.scopes))
+            return list(security_scopes.scopes)
+
+        def endpoint(
+            first=Security(scoped, scopes=["read"]),
+            second=Security(scoped, scopes=["read"]),
+        ):
+            return first, second
+
+        result = self.resolver.resolve_dependencies(endpoint, self.request_data)
+        self.resolver.close(self.request_data)
+
+        assert result == {"first": ["read"], "second": ["read"]}
+        assert calls == [("read",)]
+
+    @pytest.mark.asyncio
+    async def test_different_scopes_not_shared_async(self):
+        calls = []
+
+        async def scoped(security_scopes: SecurityScopes):
+            calls.append(tuple(security_scopes.scopes))
+            return list(security_scopes.scopes)
+
+        def endpoint(
+            read=Security(scoped, scopes=["read"]),
+            admin=Security(scoped, scopes=["admin"]),
+        ):
+            return read, admin
+
+        result = await self.resolver.resolve_dependencies_async(
+            endpoint, self.request_data
+        )
+        await self.resolver.aclose(self.request_data)
+
+        assert result == {"read": ["read"], "admin": ["admin"]}
+        assert sorted(calls) == [("admin",), ("read",)]
+
+
+class TestDependencyMethodContext:
+    """Dependency params follow the same method-specific rules as endpoint
+    params (bare models map to query on no-body methods)."""
+
+    class Filters(BaseModel):
+        limit: int
+        offset: int = 0
+
+    def _make_endpoint(self):
+        def get_filters(filters: TestDependencyMethodContext.Filters):
+            return filters
+
+        def endpoint(f=Depends(get_filters)):
+            return f
+
+        return endpoint
+
+    def test_bare_model_in_dependency_uses_query_on_get(self):
+        resolver = DependencyResolver()
+        request_data = RequestData(query_params={"limit": "5"})
+
+        result = resolver.resolve_dependencies(
+            self._make_endpoint(), request_data, method="GET"
+        )
+        resolver.close(request_data)
+
+        assert result["f"].limit == 5
+        assert result["f"].offset == 0
+
+    @pytest.mark.asyncio
+    async def test_bare_model_in_dependency_uses_query_on_get_async(self):
+        resolver = DependencyResolver()
+        request_data = RequestData(query_params={"limit": "7"})
+
+        result = await resolver.resolve_dependencies_async(
+            self._make_endpoint(), request_data, method="GET"
+        )
+        await resolver.aclose(request_data)
+
+        assert result["f"].limit == 7
+
+    def test_bare_model_in_dependency_uses_body_on_post(self):
+        resolver = DependencyResolver()
+        request_data = RequestData(body={"limit": 3, "offset": 1})
+
+        result = resolver.resolve_dependencies(
+            self._make_endpoint(), request_data, method="POST"
+        )
+        resolver.close(request_data)
+
+        assert result["f"].limit == 3
+        assert result["f"].offset == 1
+
+    def test_close_unknown_request_is_noop(self):
+        resolver = DependencyResolver()
+        resolver.close(RequestData())  # must not raise

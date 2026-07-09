@@ -8,8 +8,9 @@ from typing import Any
 
 from pydantic import BaseModel, TypeAdapter, ValidationError
 
+from fastopenapi.core.dependency_resolver import dependency_resolver
 from fastopenapi.core.router import BaseRouter
-from fastopenapi.core.types import Response
+from fastopenapi.core.types import RequestData, Response
 from fastopenapi.errors.exceptions import APIError, InternalServerError
 from fastopenapi.resolution.profile import ExtractionProfileBuilder
 from fastopenapi.resolution.resolver import ParameterResolver
@@ -96,6 +97,7 @@ class BaseAdapter(BaseRouter, ABC):
 
     def handle_request(self, endpoint: Callable[..., Any], env: RequestEnvelope) -> Any:
         """Handle synchronous request"""
+        request_data: RequestData | None = None
         try:
             profile = ExtractionProfileBuilder.get(endpoint)
             request_data = self.extractor_cls.extract_request_data(env, profile)
@@ -104,11 +106,17 @@ class BaseAdapter(BaseRouter, ABC):
             return self._finalize_result(endpoint, result)
         except Exception as e:
             return self.handle_exception(e)
+        finally:
+            # Run generator-dependency cleanup after the endpoint (and its
+            # response) are done, mirroring FastAPI's yield semantics
+            if request_data is not None:
+                dependency_resolver.close(request_data)
 
     async def handle_request_async(
         self, endpoint: Callable[..., Any], env: RequestEnvelope
     ) -> Any:
         """Handle asynchronous request"""
+        request_data: RequestData | None = None
         try:
             profile = ExtractionProfileBuilder.get(endpoint)
             request_data = await self.extractor_async_cls.extract_request_data(
@@ -124,6 +132,9 @@ class BaseAdapter(BaseRouter, ABC):
             return self._finalize_result(endpoint, result)
         except Exception as e:
             return self.handle_exception(e)
+        finally:
+            if request_data is not None:
+                await dependency_resolver.aclose(request_data)
 
     def _finalize_result(self, endpoint: Callable[..., Any], result: Any) -> Any:
         """Validate and convert an endpoint result into a framework response"""

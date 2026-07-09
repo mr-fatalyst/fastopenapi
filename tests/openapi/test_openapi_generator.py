@@ -6,7 +6,16 @@ from unittest.mock import Mock, patch
 from pydantic import BaseModel, Field
 
 from fastopenapi.core.constants import SecuritySchemeType
-from fastopenapi.core.params import Body, Depends, File, Form, Header, Query, Security
+from fastopenapi.core.params import (
+    Body,
+    Depends,
+    File,
+    Form,
+    Header,
+    Query,
+    Security,
+    SecurityScopes,
+)
 from fastopenapi.core.router import BaseRouter
 from fastopenapi.openapi.generator import (
     OpenAPIGenerator,
@@ -206,7 +215,7 @@ class TestOpenAPIGenerator:
         assert len(operation["security"]) == 1
 
     def test_depends_parameter(self):
-        """Test Depends parameter (should be skipped)"""
+        """A dependency without own params adds nothing to the operation"""
 
         def get_db():
             return "db"
@@ -218,9 +227,97 @@ class TestOpenAPIGenerator:
         schema = self.generator.generate()
         params = schema["paths"]["/items"]["get"]["parameters"]
 
-        # Only limit should be present, db should be skipped
+        # Only limit should be present; get_db has no parameters of its own
         assert len(params) == 1
         assert params[0]["name"] == "limit"
+
+    def test_depends_parameters_documented(self):
+        """Query/Header params of (nested) dependencies appear in the schema"""
+
+        def pagination(page: int = Query(1), size: int = Query(10)):
+            return {"page": page, "size": size}
+
+        def get_actor(x_actor: str = Header(...)):
+            return x_actor
+
+        def current_user(actor: str = Depends(get_actor)):
+            return actor
+
+        @self.router.get("/expanded")
+        def expanded(
+            q: str = Query(None),
+            paging: dict = Depends(pagination),
+            user: str = Depends(current_user),
+        ):
+            pass
+
+        schema = self.generator.generate()
+        params = {
+            (p["name"], p["in"])
+            for p in schema["paths"]["/expanded"]["get"]["parameters"]
+        }
+        assert params == {
+            ("q", "query"),
+            ("page", "query"),
+            ("size", "query"),
+            ("x-actor", "header"),
+        }
+
+    def test_same_python_name_different_locations_both_documented(self):
+        """The same Python param name in two dependencies maps to distinct
+        wire params when alias/location differ"""
+
+        def header_token(token: str = Header(None, alias="X-Token")):
+            return token
+
+        def query_token(token: str = Query(None)):
+            return token
+
+        @self.router.get("/two-tokens")
+        def two_tokens(h: str = Depends(header_token), q: str = Depends(query_token)):
+            pass
+
+        schema = self.generator.generate()
+        params = {
+            (p["name"], p["in"])
+            for p in schema["paths"]["/two-tokens"]["get"]["parameters"]
+        }
+        assert params == {("X-Token", "header"), ("token", "query")}
+
+    def test_same_wire_param_from_two_dependencies_documented_once(self):
+        """Two dependencies reading the same query param produce one entry"""
+
+        def dep_a(page: int = Query(1)):
+            return page
+
+        def dep_b(page: int = Query(1)):
+            return page
+
+        @self.router.get("/paged")
+        def paged(a: int = Depends(dep_a), b: int = Depends(dep_b)):
+            pass
+
+        schema = self.generator.generate()
+        params = [
+            (p["name"], p["in"]) for p in schema["paths"]["/paged"]["get"]["parameters"]
+        ]
+        assert params == [("page", "query")]
+
+    def test_class_dependency_via_annotation_documented(self):
+        """Depends() with a class annotation documents the __init__ params"""
+
+        class CommonParams:
+            def __init__(self, q: str = Query(None), limit: int = Query(10)):
+                self.q = q
+                self.limit = limit
+
+        @self.router.get("/classy")
+        def classy(commons: CommonParams = Depends()):
+            pass
+
+        schema = self.generator.generate()
+        params = {p["name"] for p in schema["paths"]["/classy"]["get"]["parameters"]}
+        assert params == {"q", "limit"}
 
     def test_list_response_model(self):
         """Test List response model handling"""
@@ -819,23 +916,63 @@ class TestOpenAPIGenerator:
         assert "user_id" in path_params
         assert "post_id" in path_params
 
-    def test_parameter_processor_should_skip_parameter_depends(self):
-        """Test skipping Depends parameters"""
+    def test_flatten_expands_depends_parameters(self):
+        """Depends params are replaced by the dependency's own params"""
         processor = ParameterProcessor(self.generator.schema_builder)
 
-        param = Mock()
-        param.default = Depends(lambda: "test")
+        def pagination(page: int = Query(1), size: int = Query(10)):
+            return {"page": page, "size": size}
 
-        assert processor._should_skip_parameter(param) is True
+        def endpoint(q: str = Query(None), p=Depends(pagination)):
+            return q
 
-    def test_parameter_processor_should_skip_parameter_security(self):
-        """Test skipping Security parameters"""
+        flattened = dict(
+            processor._flatten_route_parameters(inspect.signature(endpoint))
+        )
+        assert set(flattened) == {"q", "page", "size"}
+
+    def test_flatten_skips_security_scopes_and_dedupes(self):
+        """SecurityScopes injections are skipped; a repeated dependency
+        is walked once"""
         processor = ParameterProcessor(self.generator.schema_builder)
 
-        param = Mock()
-        param.default = Security(lambda: "test")
+        def checker(security_scopes: SecurityScopes, token: str = Header(None)):
+            return token
 
-        assert processor._should_skip_parameter(param) is True
+        def endpoint(
+            read=Security(checker, scopes=["read"]),
+            admin=Security(checker, scopes=["admin"]),
+        ):
+            return read, admin
+
+        flattened = list(
+            processor._flatten_route_parameters(inspect.signature(endpoint))
+        )
+        assert [name for name, _ in flattened] == ["token"]
+
+    def test_flatten_skips_uninspectable_dependency(self):
+        """Dependencies without a retrievable signature are skipped"""
+        processor = ParameterProcessor(self.generator.schema_builder)
+
+        def endpoint(dep=Depends(min)):  # builtin without a signature
+            return dep
+
+        flattened = list(
+            processor._flatten_route_parameters(inspect.signature(endpoint))
+        )
+        assert flattened == []
+
+    def test_flatten_skips_bare_depends_without_annotation(self):
+        """Depends() with no function and no annotation yields nothing"""
+        processor = ParameterProcessor(self.generator.schema_builder)
+
+        def endpoint(dep=Depends()):
+            return dep
+
+        flattened = list(
+            processor._flatten_route_parameters(inspect.signature(endpoint))
+        )
+        assert flattened == []
 
     def test_parameter_processor_should_skip_parameter_normal(self):
         """Test not skipping normal parameters"""

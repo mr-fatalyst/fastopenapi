@@ -33,6 +33,10 @@ FastOpenAPI follows the [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ### Fixed
 
+- **Generator (`yield`) dependencies stay open while the endpoint runs** — previously the cleanup code after `yield` executed before the endpoint was called, so a yielded resource (e.g. a DB session) was already closed when used. Cleanup now runs after the response is built, in reverse creation order, on both sync and async adapters, including error paths
+- **`Security` scopes are part of the dependency cache key** — two `Security(dep, scopes=...)` declarations with different scopes on one endpoint no longer share a cached result (the second check silently received the first one's scopes)
+- **OpenAPI schema documents parameters declared inside `Depends`/`Security` dependencies** — `Query`/`Header`/`Cookie`/form/body parameters of (nested) dependency functions and class dependencies now appear in the operation, matching what the runtime actually requires; `SecurityScopes` injections and `Header(alias="Authorization")` stay hidden
+- **Parameters inside dependencies follow HTTP method semantics** — a bare Pydantic model in a dependency on GET/HEAD/DELETE resolves from query parameters, as it does on the endpoint itself (previously it always tried the request body)
 - **aiohttp multipart uploads** no longer fail with 500 — the JSON body reader drained the stream before the multipart parser could run
 - **Falcon ASGI urlencoded forms and multipart** no longer fail with 500 — async extractors got real async implementations instead of inheriting WSGI-only code
 - **Falcon multipart with text fields** no longer rejected as malformed (`secure_filename` probing on non-file parts)
