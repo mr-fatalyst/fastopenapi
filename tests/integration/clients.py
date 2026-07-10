@@ -21,6 +21,7 @@ from typing import Any
 from urllib.parse import urlencode
 
 from tests.integration.apps import register_routes
+from tests.integration.utils import ensure_policy_event_loop
 
 _MISSING = object()
 
@@ -280,6 +281,9 @@ class FalconAsyncClient(BaseClient):
 
     def send(self, method, path, headers, body):
         path, _, qs = path.partition("?")
+        # WORKAROUND: falcon's async_to_sync on py<3.11 needs a policy loop;
+        # see ensure_policy_event_loop in tests/integration/utils.py.
+        ensure_policy_event_loop()
         result = self._client.simulate_request(
             method=method, path=path, query_string=qs, headers=headers, body=body
         )

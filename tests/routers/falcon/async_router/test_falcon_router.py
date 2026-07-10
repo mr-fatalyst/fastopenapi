@@ -1,7 +1,18 @@
 import falcon.asgi
+import pytest
 from pydantic import BaseModel
 
 from fastopenapi.routers import FalconAsyncRouter
+from tests.integration.utils import ensure_policy_event_loop
+
+
+# WORKAROUND: falcon.testing's sync simulate_*() on py<3.11 needs a loop in the
+# asyncio policy, which earlier asyncio.run() calls leave empty; see
+# ensure_policy_event_loop in tests/integration/utils.py.  Delete together
+# with the helper when Python 3.10 support is dropped.
+@pytest.fixture(autouse=True)
+def _repair_event_loop():
+    ensure_policy_event_loop()
 
 
 class TestFalconAsyncRouter:
