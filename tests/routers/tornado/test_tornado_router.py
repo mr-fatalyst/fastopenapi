@@ -90,7 +90,7 @@ class TestTornadoRouter:
 
         # Check _endpoint_map has the new path with GET method
         assert expected_pattern in router._endpoint_map
-        assert router._endpoint_map[expected_pattern]["GET"] == dummy_endpoint
+        assert router._endpoint_map[expected_pattern]["GET"][0] == dummy_endpoint
         # Check routes count increased by 1
         assert len(router.routes) == initial_routes + 1
         # Check the regex pattern matches expected
@@ -108,7 +108,7 @@ class TestTornadoRouter:
         router.add_route(path, "GET", dummy_endpoint)
         initial_routes = len(router.routes)
         expected_pattern = re.sub(r"{(\w+)}", r"(?P<\1>[^/]+)", path)
-        assert router._endpoint_map[expected_pattern]["GET"] == dummy_endpoint
+        assert router._endpoint_map[expected_pattern]["GET"][0] == dummy_endpoint
 
         # Register another handler for the same path
         def another_dummy(**kwargs):
@@ -120,7 +120,7 @@ class TestTornadoRouter:
         expected_pattern = re.sub(r"{(\w+)}", r"(?P<\1>[^/]+)", path)
         expected_full_pattern = expected_pattern + "$"
         # Check GET method handler was updated to another_dummy
-        assert router._endpoint_map[expected_pattern]["GET"] == another_dummy
+        assert router._endpoint_map[expected_pattern]["GET"][0] == another_dummy
         # Check regex pattern remains unchanged
         actual_pattern = router.routes[-1].matcher.regex.pattern
         assert actual_pattern == expected_full_pattern
@@ -142,7 +142,8 @@ class TestTornadoRouter:
         expected_pattern = re.sub(r"{(\w+)}", r"(?P<\1>[^/]+)", path)
         assert expected_pattern in router_without_app._endpoint_map
         assert (
-            router_without_app._endpoint_map[expected_pattern]["GET"] == dummy_endpoint
+            router_without_app._endpoint_map[expected_pattern]["GET"][0]
+            == dummy_endpoint
         )
 
         # For line coverage of 120-121:
@@ -152,7 +153,9 @@ class TestTornadoRouter:
         assert rule.matcher.regex.pattern == expected_pattern + "$"
         assert "endpoints" in rule.target_kwargs
         assert "router" in rule.target_kwargs
-        assert rule.target_kwargs["endpoints"] == {"GET": dummy_endpoint}
+        assert rule.target_kwargs["endpoints"] == {
+            "GET": (dummy_endpoint, {"method": "GET"})
+        }
 
     def test_add_route_with_app_registered_path(self, router_without_app):
         """Test adding another method to an already registered path when app is None."""
@@ -175,10 +178,12 @@ class TestTornadoRouter:
         assert "GET" in router_without_app._endpoint_map[expected_pattern]
         assert "POST" in router_without_app._endpoint_map[expected_pattern]
         assert (
-            router_without_app._endpoint_map[expected_pattern]["GET"] == dummy_endpoint
+            router_without_app._endpoint_map[expected_pattern]["GET"][0]
+            == dummy_endpoint
         )
         assert (
-            router_without_app._endpoint_map[expected_pattern]["POST"] == post_endpoint
+            router_without_app._endpoint_map[expected_pattern]["POST"][0]
+            == post_endpoint
         )
 
     def test_register_docs_endpoints(self, router):
