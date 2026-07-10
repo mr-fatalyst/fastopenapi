@@ -278,17 +278,39 @@ class TestBaseRouter:
         assert delete_ep.__route_meta__["method"] == "DELETE"
         assert head_ep.__route_meta__["method"] == "HEAD"
 
-    def test_add_route_sets_route_meta(self):
-        """Test that add_route sets __route_meta__ on bare functions"""
+    def test_add_route_builds_meta_for_bare_functions(self):
+        """add_route builds route meta without mutating the endpoint"""
 
         def bare_func():
             pass
 
         assert not hasattr(bare_func, "__route_meta__")
-        self.router.add_route("/bare", "GET", bare_func)
+        route = self.router.add_route("/bare", "GET", bare_func)
 
-        assert hasattr(bare_func, "__route_meta__")
-        assert bare_func.__route_meta__["method"] == "GET"
+        assert not hasattr(bare_func, "__route_meta__")
+        assert route.meta == {"method": "GET"}
+
+    def test_include_router_preserves_per_route_meta(self):
+        """One endpoint decorated with several methods keeps each route's
+        own meta after include_router (the endpoint attribute holds only
+        the last registration)"""
+        child = BaseRouter()
+
+        @child.post("/thing", status_code=201, tags=["write"])
+        @child.get("/thing", status_code=200, tags=["read"])
+        def thing():
+            pass
+
+        parent = BaseRouter()
+        parent.include_router(child, prefix="/api")
+
+        by_method = {r.method: r.meta for r in parent.get_routes()}
+        assert by_method["GET"]["method"] == "GET"
+        assert by_method["GET"]["status_code"] == 200
+        assert by_method["GET"]["tags"] == ["read"]
+        assert by_method["POST"]["method"] == "POST"
+        assert by_method["POST"]["status_code"] == 201
+        assert by_method["POST"]["tags"] == ["write"]
 
     def test_add_route_preserves_existing_route_meta(self):
         """Test that add_route doesn't overwrite existing method in __route_meta__"""

@@ -7,6 +7,7 @@ from django.urls import path as django_path
 from django.views import View
 from django.views.decorators.csrf import csrf_exempt
 
+from fastopenapi.core.router import RouteInfo
 from fastopenapi.errors.exceptions import (
     AuthorizationError,
     BadRequestError,
@@ -48,10 +49,17 @@ class DjangoRouter(BaseAdapter):
             app = True if register_docs else None
         super().__init__(app, **kwargs)
 
-    def add_route(self, path: str, method: str, endpoint: Callable[..., Any]) -> None:
+    def add_route(
+        self,
+        path: str,
+        method: str,
+        endpoint: Callable[..., Any],
+        meta: dict[str, Any] | None = None,
+    ) -> RouteInfo:
         """Add route to Django URL patterns"""
-        super().add_route(path, method, endpoint)
-        self._create_or_update_view(path, method, endpoint)
+        route = super().add_route(path, method, endpoint, meta)
+        self._create_or_update_view(path, method, endpoint, route.meta)
+        return route
 
     # Flipped by DjangoAsyncRouter: Django's view_is_async ignores the
     # options handler, so an async view whose only method is OPTIONS would
@@ -59,7 +67,11 @@ class DjangoRouter(BaseAdapter):
     VIEW_IS_ASYNC = False
 
     def _create_or_update_view(
-        self, path: str, method: str, endpoint: Callable[..., Any]
+        self,
+        path: str,
+        method: str,
+        endpoint: Callable[..., Any],
+        meta: dict[str, Any],
     ) -> Any:
         """Create or update Django view for the path"""
         view = self._views.get(path)
@@ -70,16 +82,18 @@ class DjangoRouter(BaseAdapter):
             view = type("DynamicView", (View,), attrs)
             self._views[path] = view
 
-        setattr(view, method.lower(), self._build_view_handler(endpoint))
+        setattr(view, method.lower(), self._build_view_handler(endpoint, meta))
         return view
 
-    def _build_view_handler(self, endpoint: Callable[..., Any]) -> Callable[..., Any]:
+    def _build_view_handler(
+        self, endpoint: Callable[..., Any], meta: dict[str, Any]
+    ) -> Callable[..., Any]:
         """Build the per-endpoint view method (async router overrides)"""
         outer = self
 
         def handle(self: Any, req: Any, **path_params: Any) -> Any:  # pragma: no cover
             env = RequestEnvelope(request=req, path_params=path_params)
-            return outer.handle_request(endpoint, env)
+            return outer.handle_request(endpoint, env, meta)
 
         return handle
 

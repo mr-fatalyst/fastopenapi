@@ -16,13 +16,13 @@ class FalconAsyncRouter(FalconRouter):
     extractor_async_cls = FalconAsyncRequestDataExtractor
 
     def _build_response_handler(
-        self, endpoint: Callable[..., Any]
+        self, endpoint: Callable[..., Any], meta: dict[str, Any]
     ) -> Callable[..., Any]:
         """Build async request handler function for endpoint"""
 
         async def handle(request: Any, response: Any, **path_params: Any) -> None:
             env = RequestEnvelope(request=request, path_params=path_params)
-            result = await self.handle_request_async(endpoint, env)
+            result = await self.handle_request_async(endpoint, env, meta)
 
             if isinstance(result, WireResponse):
                 self._apply_wire_response(result, response)

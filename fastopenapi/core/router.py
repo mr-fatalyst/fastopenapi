@@ -88,20 +88,32 @@ class BaseRouter:
         if self.app is not None and openapi_url:
             self._register_docs_endpoints()
 
-    def add_route(self, path: str, method: str, endpoint: Callable[..., Any]) -> None:
-        """Add a route to the router"""
-        try:
-            meta_holder = getattr(endpoint, "__route_meta__", None)
-            if meta_holder is None:
-                meta_holder = {}
-                setattr(endpoint, "__route_meta__", meta_holder)
-            meta_holder.setdefault("method", method)
-        except AttributeError:
-            pass
-        meta = getattr(endpoint, "__route_meta__", {"method": method})
+    def add_route(
+        self,
+        path: str,
+        method: str,
+        endpoint: Callable[..., Any],
+        meta: dict[str, Any] | None = None,
+    ) -> RouteInfo:
+        """Add a route to the router
+
+        ``meta`` is the metadata of this specific route. It must be passed
+        explicitly wherever it is known (decorators, ``include_router``):
+        the ``__route_meta__`` endpoint attribute holds only the meta of
+        the last registration, so an endpoint decorated with several HTTP
+        methods would bleed one route's meta into another. The attribute
+        is used only as a fallback for bare functions registered directly.
+        """
+        if meta is None:
+            meta = getattr(endpoint, "__route_meta__", None)
+        if meta is None:
+            meta = {"method": method}
+        else:
+            meta.setdefault("method", method)
         route = RouteInfo(path, method, endpoint, meta)
         self._routes.append(route)
         self._openapi_schema = None
+        return route
 
     def include_router(self, other: "BaseRouter", prefix: str = "") -> None:
         """Include routes from another router"""
@@ -111,7 +123,7 @@ class BaseRouter:
                 if prefix
                 else route.path
             )
-            self.add_route(path, route.method, route.endpoint)
+            self.add_route(path, route.method, route.endpoint, route.meta)
 
         # Merge security schemes
         if other._security_schemes:
@@ -157,8 +169,9 @@ class BaseRouter:
 
         def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
             meta["method"] = method
+            # Introspection convenience only; the route itself carries meta
             setattr(func, "__route_meta__", meta)
-            self.add_route(path, method, func)
+            self.add_route(path, method, func, meta)
             return func
 
         return decorator

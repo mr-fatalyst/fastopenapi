@@ -1656,8 +1656,8 @@ class TestDependencyResolver:
         await self.resolver.aclose(self.request_data)
         assert cleanup_called
 
-    def test_sync_generator_cleanup_exception_swallowed(self):
-        """Test that exception in generator's finally block is silently swallowed"""
+    def test_sync_generator_cleanup_exception_swallowed(self, caplog):
+        """A failing cleanup is logged but does not break other cleanups"""
         cleanup_log = []
 
         def failing_cleanup_gen():
@@ -1681,10 +1681,12 @@ class TestDependencyResolver:
         self.resolver.close(self.request_data)
         assert "cleanup_attempted" in cleanup_log
         assert "healthy_cleanup" in cleanup_log
+        # The failure must not vanish silently
+        assert "Cleanup of dependency 'failing_cleanup_gen' failed" in caplog.text
 
     @pytest.mark.asyncio
-    async def test_async_generator_cleanup_exception_swallowed(self):
-        """Test that async generator cleanup exception is silently swallowed"""
+    async def test_async_generator_cleanup_exception_swallowed(self, caplog):
+        """A failing async cleanup is logged but does not break other cleanups"""
         cleanup_log = []
 
         async def failing_cleanup_gen():
@@ -1710,6 +1712,7 @@ class TestDependencyResolver:
         await self.resolver.aclose(self.request_data)
         assert "cleanup_attempted" in cleanup_log
         assert "healthy_cleanup" in cleanup_log
+        assert "Cleanup of dependency 'failing_cleanup_gen' failed" in caplog.text
 
     @pytest.mark.asyncio
     async def test_mixed_async_and_sync_generators(self):

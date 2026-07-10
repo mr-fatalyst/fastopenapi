@@ -273,6 +273,12 @@ def register_routes(router) -> None:  # noqa: C901
     def secure(key: str = Security(check_api_key)):
         return {"authorized": True}
 
+    @router.post("/multi-method", status_code=201)
+    @router.get("/multi-method")
+    def multi_method():
+        # One function serving two methods: each route keeps its own meta
+        return {"ok": True}
+
     @router.head("/health")
     def health_head():
         # Explicit HEAD endpoint: headers only, no body by definition

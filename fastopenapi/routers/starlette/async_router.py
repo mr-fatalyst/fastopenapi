@@ -7,6 +7,7 @@ from starlette.responses import HTMLResponse, JSONResponse
 from starlette.responses import Response as StarletteResponse
 from starlette.routing import Route
 
+from fastopenapi.core.router import RouteInfo
 from fastopenapi.openapi.ui import render_redoc_ui, render_swagger_ui
 from fastopenapi.response.serializer import WireResponse
 from fastopenapi.routers.base import BaseAdapter
@@ -22,22 +23,31 @@ class StarletteRouter(BaseAdapter):
     def __init__(self, app: Starlette | None = None, **kwargs: Any):
         super().__init__(app, **kwargs)
 
-    def add_route(self, path: str, method: str, endpoint: Callable[..., Any]) -> None:
+    def add_route(
+        self,
+        path: str,
+        method: str,
+        endpoint: Callable[..., Any],
+        meta: dict[str, Any] | None = None,
+    ) -> RouteInfo:
         """Add route to Starlette application"""
-        super().add_route(path, method, endpoint)
+        route = super().add_route(path, method, endpoint, meta)
 
         if self.app is not None:
             view = functools.partial(
-                self._starlette_view, router=self, endpoint=endpoint
+                self._starlette_view, router=self, endpoint=endpoint, meta=route.meta
             )
             self.app.router.routes.append(Route(path, view, methods=[method.upper()]))
+        return route
 
     @staticmethod
-    async def _starlette_view(request: Any, router: Any, endpoint: Any) -> Any:
+    async def _starlette_view(
+        request: Any, router: Any, endpoint: Any, meta: dict[str, Any]
+    ) -> Any:
         """Handle Starlette request"""
         env = RequestEnvelope(request=request, path_params=None)
         try:
-            return await router.handle_request_async(endpoint, env)
+            return await router.handle_request_async(endpoint, env, meta)
         finally:
             # Releases multipart temp files if the form was parsed
             await request.close()

@@ -4,6 +4,7 @@ from typing import Any
 from quart import Response as QuartResponse
 from quart import jsonify, request
 
+from fastopenapi.core.router import RouteInfo
 from fastopenapi.openapi.ui import render_redoc_ui, render_swagger_ui
 from fastopenapi.response.serializer import WireResponse
 from fastopenapi.routers.base import BaseAdapter
@@ -18,21 +19,29 @@ class QuartRouter(BaseAdapter):
 
     extractor_async_cls = QuartRequestDataExtractor
 
-    def add_route(self, path: str, method: str, endpoint: Callable[..., Any]) -> None:
+    def add_route(
+        self,
+        path: str,
+        method: str,
+        endpoint: Callable[..., Any],
+        meta: dict[str, Any] | None = None,
+    ) -> RouteInfo:
         """Add route to Quart application"""
-        super().add_route(path, method, endpoint)
+        route = super().add_route(path, method, endpoint, meta)
 
         if self.app is not None:
             quart_path = self._convert_path_for_framework(path)
+            route_meta = route.meta
 
             async def view_func(**path_params: Any) -> Any:
                 env = RequestEnvelope(request=request, path_params=path_params)
-                return await self.handle_request_async(endpoint, env)
+                return await self.handle_request_async(endpoint, env, route_meta)
 
             rule_endpoint = f"{endpoint.__name__}:{method.upper()}:{quart_path}"
             self.app.add_url_rule(
                 quart_path, rule_endpoint, view_func, methods=[method.upper()]
             )
+        return route
 
     def build_framework_response(self, response: WireResponse) -> QuartResponse:
         """Wrap the finalized triple into a Quart response"""

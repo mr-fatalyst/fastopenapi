@@ -9,7 +9,7 @@ from typing import Any
 from pydantic import BaseModel, TypeAdapter, ValidationError
 
 from fastopenapi.core.dependency_resolver import dependency_resolver
-from fastopenapi.core.router import BaseRouter
+from fastopenapi.core.router import BaseRouter, RouteInfo
 from fastopenapi.core.types import RequestData, Response
 from fastopenapi.errors.exceptions import APIError, InternalServerError
 from fastopenapi.resolution.profile import ExtractionProfileBuilder
@@ -44,13 +44,19 @@ class BaseAdapter(BaseRouter, ABC):
     _type_adapter_cache: dict[type, TypeAdapter[Any]] = {}
     _cache_lock = threading.Lock()
 
-    def add_route(self, path: str, method: str, endpoint: Callable[..., Any]) -> None:
+    def add_route(
+        self,
+        path: str,
+        method: str,
+        endpoint: Callable[..., Any],
+        meta: dict[str, Any] | None = None,
+    ) -> RouteInfo:
         """Register a route, rejecting async endpoints on sync-only adapters"""
         if self.ASYNC_ENDPOINT_ERROR and inspect.iscoroutinefunction(endpoint):
             raise TypeError(
                 f"Async endpoint '{endpoint.__name__}' {self.ASYNC_ENDPOINT_ERROR}"
             )
-        super().add_route(path, method, endpoint)
+        return super().add_route(path, method, endpoint, meta)
 
     @abstractmethod
     def build_framework_response(self, response: WireResponse) -> Any:
@@ -95,15 +101,29 @@ class BaseAdapter(BaseRouter, ABC):
                 details=f"Response validation failed: {e}",
             )
 
-    def handle_request(self, endpoint: Callable[..., Any], env: RequestEnvelope) -> Any:
-        """Handle synchronous request"""
+    def handle_request(
+        self,
+        endpoint: Callable[..., Any],
+        env: RequestEnvelope,
+        meta: dict[str, Any] | None = None,
+    ) -> Any:
+        """Handle synchronous request
+
+        ``meta`` is the metadata of the route being served; adapters pass
+        it explicitly because ``__route_meta__`` on the endpoint holds only
+        the last registration (one function may serve several methods).
+        """
+        if meta is None:
+            meta = getattr(endpoint, "__route_meta__", {})
         request_data: RequestData | None = None
         try:
             profile = ExtractionProfileBuilder.get(endpoint)
             request_data = self.extractor_cls.extract_request_data(env, profile)
-            kwargs = self.req_param_resolver_cls.resolve(endpoint, request_data)
+            kwargs = self.req_param_resolver_cls.resolve(
+                endpoint, request_data, meta.get("method")
+            )
             result = endpoint(**kwargs)
-            return self._finalize_result(endpoint, result)
+            return self._finalize_result(result, meta)
         except Exception as e:
             return self.handle_exception(e)
         finally:
@@ -113,9 +133,14 @@ class BaseAdapter(BaseRouter, ABC):
                 dependency_resolver.close(request_data)
 
     async def handle_request_async(
-        self, endpoint: Callable[..., Any], env: RequestEnvelope
+        self,
+        endpoint: Callable[..., Any],
+        env: RequestEnvelope,
+        meta: dict[str, Any] | None = None,
     ) -> Any:
         """Handle asynchronous request"""
+        if meta is None:
+            meta = getattr(endpoint, "__route_meta__", {})
         request_data: RequestData | None = None
         try:
             profile = ExtractionProfileBuilder.get(endpoint)
@@ -123,30 +148,29 @@ class BaseAdapter(BaseRouter, ABC):
                 env, profile
             )
             kwargs = await self.req_param_resolver_cls.resolve_async(
-                endpoint, request_data
+                endpoint, request_data, meta.get("method")
             )
             if inspect.iscoroutinefunction(endpoint):
                 result = await endpoint(**kwargs)
             else:
                 result = endpoint(**kwargs)
-            return self._finalize_result(endpoint, result)
+            return self._finalize_result(result, meta)
         except Exception as e:
             return self.handle_exception(e)
         finally:
             if request_data is not None:
                 await dependency_resolver.aclose(request_data)
 
-    def _finalize_result(self, endpoint: Callable[..., Any], result: Any) -> Any:
+    def _finalize_result(self, result: Any, meta: dict[str, Any]) -> Any:
         """Validate and convert an endpoint result into a framework response"""
         if self.is_framework_response(result):
             return result
-        route_meta = getattr(endpoint, "__route_meta__")
-        response_model = route_meta.get("response_model")
+        response_model = meta.get("response_model")
         # Explicit Response objects and (body, status, ...) tuples opt out
         # of response-model validation
         if response_model and not isinstance(result, (Response, tuple)):
             result = self._validate_response(result, response_model)
-        response = self.response_builder_cls.build(result, route_meta)
+        response = self.response_builder_cls.build(result, meta)
         wire = self.serializer_cls.finalize(response)
         return self.build_framework_response(wire)
 

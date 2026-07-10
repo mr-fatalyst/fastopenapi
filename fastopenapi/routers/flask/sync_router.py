@@ -4,6 +4,7 @@ from typing import Any
 from flask import Response as FlaskResponse
 from flask import jsonify, request
 
+from fastopenapi.core.router import RouteInfo
 from fastopenapi.openapi.ui import render_redoc_ui, render_swagger_ui
 from fastopenapi.response.serializer import WireResponse
 from fastopenapi.routers.base import BaseAdapter
@@ -21,21 +22,29 @@ class FlaskRouter(BaseAdapter):
 
     extractor_cls = FlaskRequestDataExtractor
 
-    def add_route(self, path: str, method: str, endpoint: Callable[..., Any]) -> None:
+    def add_route(
+        self,
+        path: str,
+        method: str,
+        endpoint: Callable[..., Any],
+        meta: dict[str, Any] | None = None,
+    ) -> RouteInfo:
         """Add route to Flask application"""
-        super().add_route(path, method, endpoint)
+        route = super().add_route(path, method, endpoint, meta)
 
         if self.app is not None:
             flask_path = self._convert_path_for_framework(path)
+            route_meta = route.meta
 
             def view_func(**path_params: Any) -> Any:
                 env = RequestEnvelope(request=request, path_params=path_params)
-                return self.handle_request(endpoint, env)
+                return self.handle_request(endpoint, env, route_meta)
 
             rule_endpoint = f"{endpoint.__name__}:{method.upper()}:{flask_path}"
             self.app.add_url_rule(
                 flask_path, rule_endpoint, view_func, methods=[method.upper()]
             )
+        return route
 
     def build_framework_response(self, response: WireResponse) -> FlaskResponse:
         """Wrap the finalized triple into a Flask response"""

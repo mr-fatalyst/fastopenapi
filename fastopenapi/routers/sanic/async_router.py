@@ -3,6 +3,7 @@ from typing import Any
 
 from sanic import response
 
+from fastopenapi.core.router import RouteInfo
 from fastopenapi.openapi.ui import render_redoc_ui, render_swagger_ui
 from fastopenapi.response.serializer import WireResponse
 from fastopenapi.routers.base import BaseAdapter
@@ -21,19 +22,26 @@ class SanicRouter(BaseAdapter):
         self._auto_head_paths: set[str] = set()
         super().__init__(app, **kwargs)
 
-    def add_route(self, path: str, method: str, endpoint: Callable[..., Any]) -> None:
+    def add_route(
+        self,
+        path: str,
+        method: str,
+        endpoint: Callable[..., Any],
+        meta: dict[str, Any] | None = None,
+    ) -> RouteInfo:
         """Add route to Sanic application"""
-        super().add_route(path, method, endpoint)
+        route = super().add_route(path, method, endpoint, meta)
 
         if self.app is None:
-            return
+            return route
 
         method = method.upper()
         sanic_path = self._convert_path_for_framework(path)
+        route_meta = route.meta
 
         async def view_func(request: Any, **path_params: Any) -> Any:
             env = RequestEnvelope(request=request, path_params=path_params)
-            return await self.handle_request_async(endpoint, env)
+            return await self.handle_request_async(endpoint, env, route_meta)
 
         methods = [method]
         if method == "HEAD":
@@ -50,6 +58,7 @@ class SanicRouter(BaseAdapter):
 
         route_name = f"{endpoint.__name__}_{method.lower()}_{path.replace('/', '_')}"
         self.app.add_route(view_func, sanic_path, methods=methods, name=route_name)
+        return route
 
     def build_framework_response(self, response_obj: WireResponse) -> Any:
         """Wrap the finalized triple into a Sanic response"""

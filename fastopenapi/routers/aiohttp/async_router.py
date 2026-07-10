@@ -4,6 +4,7 @@ from typing import Any
 
 from aiohttp import web
 
+from fastopenapi.core.router import RouteInfo
 from fastopenapi.openapi.ui import render_redoc_ui, render_swagger_ui
 from fastopenapi.response.serializer import WireResponse
 from fastopenapi.routers.aiohttp.extractors import AioHttpRequestDataExtractor
@@ -21,9 +22,15 @@ class AioHttpRouter(BaseAdapter):
         self._auto_head_paths: set[str] = set()
         super().__init__(app, **kwargs)
 
-    def add_route(self, path: str, method: str, endpoint: Callable[..., Any]) -> None:
+    def add_route(
+        self,
+        path: str,
+        method: str,
+        endpoint: Callable[..., Any],
+        meta: dict[str, Any] | None = None,
+    ) -> RouteInfo:
         """Add route to AioHttp application"""
-        super().add_route(path, method, endpoint)
+        route = super().add_route(path, method, endpoint, meta)
 
         if self.app is not None:
             method = method.upper()
@@ -32,7 +39,9 @@ class AioHttpRouter(BaseAdapter):
                     f"Explicit HEAD route for '{path}' must be registered "
                     f"before its GET route (auto-HEAD is already in place)"
                 )
-            view = functools.partial(self._aiohttp_view, router=self, endpoint=endpoint)
+            view = functools.partial(
+                self._aiohttp_view, router=self, endpoint=endpoint, meta=route.meta
+            )
             self.app.router.add_route(method, path, view)
             if method == "HEAD":
                 self._explicit_head_paths.add(path)
@@ -40,14 +49,18 @@ class AioHttpRouter(BaseAdapter):
                 # aiohttp itself omits the body for HEAD responses
                 self.app.router.add_route("HEAD", path, view)
                 self._auto_head_paths.add(path)
+        return route
 
     @staticmethod
     async def _aiohttp_view(
-        request: web.Request, router: Any, endpoint: Callable[..., Any]
+        request: web.Request,
+        router: Any,
+        endpoint: Callable[..., Any],
+        meta: dict[str, Any],
     ) -> Any:
         """Handle AioHttp request"""
         env = RequestEnvelope(request=request, path_params=None)
-        return await router.handle_request_async(endpoint, env)
+        return await router.handle_request_async(endpoint, env, meta)
 
     def build_framework_response(self, response: WireResponse) -> web.Response:
         """Wrap the finalized triple into an aiohttp response"""

@@ -25,16 +25,17 @@ class TornadoDynamicHandler(RequestHandler):
     async def handle_request(self) -> None:
         """Common request handling"""
         method = (self.request.method or "").upper()
-        endpoint = getattr(self, "endpoint", None)
-        if endpoint is None and method == "HEAD":
+        entry = getattr(self, "endpoint", None)
+        if entry is None and method == "HEAD":
             # Auto-HEAD: serve HEAD from the GET pipeline
-            endpoint = self.endpoints.get("GET")
-        if endpoint is None:
+            entry = self.endpoints.get("GET")
+        if entry is None:
             self._send_method_not_allowed()
             return
+        endpoint, meta = entry
 
         env = RequestEnvelope(request=self.request, path_params=self.path_kwargs)
-        wire = await self.router.handle_request_async(endpoint, env)
+        wire = await self.router.handle_request_async(endpoint, env, meta)
 
         self.set_status(wire.status)
         for key, value in wire.headers.items():

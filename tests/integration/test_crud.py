@@ -11,6 +11,18 @@ def test_path_param_is_typed(client):
     assert resp.json() == {"id": 42, "type": "int"}
 
 
+def test_multi_method_endpoint_keeps_per_route_status(client):
+    # One function decorated with GET and POST: each method must answer
+    # with its own status code, not the last-registered one
+    resp = client.get("/multi-method")
+    assert_status(resp, 200)
+    assert resp.json() == {"ok": True}
+
+    resp = client.post("/multi-method")
+    assert_status(resp, 201)
+    assert resp.json() == {"ok": True}
+
+
 def test_path_param_type_mismatch_yields_client_error(client):
     resp = client.get("/items/not-a-number")
     # Frameworks with typed converters answer 404, ours validates -> 422;

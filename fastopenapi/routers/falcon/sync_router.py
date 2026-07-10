@@ -3,6 +3,7 @@ from typing import Any
 
 import falcon
 
+from fastopenapi.core.router import RouteInfo
 from fastopenapi.openapi.ui import render_redoc_ui, render_swagger_ui
 from fastopenapi.response.serializer import WireResponse
 from fastopenapi.routers.base import BaseAdapter
@@ -34,21 +35,34 @@ class FalconRouter(BaseAdapter):
         self._resources: dict[str, Any] = {}
         super().__init__(app, **kwargs)
 
-    def add_route(self, path: str, method: str, endpoint: Callable[..., Any]) -> None:
+    def add_route(
+        self,
+        path: str,
+        method: str,
+        endpoint: Callable[..., Any],
+        meta: dict[str, Any] | None = None,
+    ) -> RouteInfo:
         """Add route to Falcon application"""
-        super().add_route(path, method, endpoint)
+        route = super().add_route(path, method, endpoint, meta)
 
         if self.app is not None:
-            resource = self._create_or_update_resource(path, method.upper(), endpoint)
+            resource = self._create_or_update_resource(
+                path, method.upper(), endpoint, route.meta
+            )
             self.app.add_route(path, resource)
+        return route
 
     def _create_or_update_resource(
-        self, path: str, method: str, endpoint: Callable[..., Any]
+        self,
+        path: str,
+        method: str,
+        endpoint: Callable[..., Any],
+        meta: dict[str, Any],
     ) -> Any:
         """Create or update Falcon resource"""
         resource = self._get_or_create_resource(path)
         method_name = self.METHODS_MAPPER.get(method, f"on_{method.lower()}")
-        handler = self._build_response_handler(endpoint)
+        handler = self._build_response_handler(endpoint, meta)
         setattr(resource, method_name, handler)
         if method == "GET":
             self._register_auto_head(resource, handler)
@@ -91,13 +105,13 @@ class FalconRouter(BaseAdapter):
         return handle_head
 
     def _build_response_handler(
-        self, endpoint: Callable[..., Any]
+        self, endpoint: Callable[..., Any], meta: dict[str, Any]
     ) -> Callable[..., None]:
         """Build request handler function for endpoint"""
 
         def handle(request: Any, response: Any, **path_params: Any) -> None:
             env = RequestEnvelope(request=request, path_params=path_params)
-            result = self.handle_request(endpoint, env)
+            result = self.handle_request(endpoint, env, meta)
 
             if isinstance(result, WireResponse):
                 self._apply_wire_response(result, response)

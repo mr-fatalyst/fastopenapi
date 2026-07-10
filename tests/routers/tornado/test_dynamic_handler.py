@@ -23,7 +23,8 @@ class TestTornadoDynamicHandler:
     @pytest.fixture
     def mock_handler(self, mock_application, mock_request):
         handler = TornadoDynamicHandler(mock_application, mock_request)
-        handler.endpoint = MagicMock()
+        # The endpoint map stores (endpoint, route meta) pairs
+        handler.endpoint = (MagicMock(), {"method": "GET"})
         handler.router = MagicMock()
         handler.path_kwargs = {}
 
@@ -94,7 +95,7 @@ class TestTornadoDynamicHandler:
         )
         mock_handler.request.method = "HEAD"
         mock_handler.endpoint = None
-        mock_handler.endpoints = {"GET": MagicMock()}
+        mock_handler.endpoints = {"GET": (MagicMock(), {"method": "GET"})}
         mock_handler.router.handle_request_async = AsyncMock(return_value=wire)
 
         await mock_handler.handle_request()

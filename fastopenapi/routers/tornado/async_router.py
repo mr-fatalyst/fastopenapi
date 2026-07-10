@@ -3,6 +3,7 @@ from typing import Any
 
 from tornado.web import Application, RequestHandler, url
 
+from fastopenapi.core.router import RouteInfo
 from fastopenapi.openapi.ui import render_redoc_ui, render_swagger_ui
 from fastopenapi.response.serializer import WireResponse
 from fastopenapi.routers.base import BaseAdapter
@@ -20,19 +21,28 @@ class TornadoRouter(BaseAdapter):
 
     def __init__(self, app: Application | None = None, **kwargs: Any):
         self.routes: list[Any] = []
-        self._endpoint_map: dict[str, dict[str, Callable[..., Any]]] = {}
+        # path -> method -> (endpoint, route meta)
+        self._endpoint_map: dict[
+            str, dict[str, tuple[Callable[..., Any], dict[str, Any]]]
+        ] = {}
         self._registered_paths: set[str] = set()
         super().__init__(app, **kwargs)
 
-    def add_route(self, path: str, method: str, endpoint: Callable[..., Any]) -> None:
+    def add_route(
+        self,
+        path: str,
+        method: str,
+        endpoint: Callable[..., Any],
+        meta: dict[str, Any] | None = None,
+    ) -> RouteInfo:
         """Add route to Tornado application"""
-        super().add_route(path, method, endpoint)
+        route = super().add_route(path, method, endpoint, meta)
 
         tornado_path = self._convert_path_for_framework(path)
 
         if tornado_path not in self._endpoint_map:
             self._endpoint_map[tornado_path] = {}
-        self._endpoint_map[tornado_path][method.upper()] = endpoint
+        self._endpoint_map[tornado_path][method.upper()] = (endpoint, route.meta)
 
         if tornado_path not in self._registered_paths:
             self._registered_paths.add(tornado_path)
@@ -50,6 +60,7 @@ class TornadoRouter(BaseAdapter):
                 if rule.matcher.regex.pattern == f"{tornado_path}$":
                     rule.target_kwargs["endpoints"] = self._endpoint_map[tornado_path]
                     break
+        return route
 
     def build_framework_response(self, response: WireResponse) -> WireResponse:
         """Tornado applies the triple inside its RequestHandler"""

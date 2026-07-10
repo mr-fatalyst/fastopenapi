@@ -83,11 +83,20 @@ class ParameterResolver:
 
     @classmethod
     def resolve(
-        cls, endpoint: Callable[..., Any], request_data: RequestData
+        cls,
+        endpoint: Callable[..., Any],
+        request_data: RequestData,
+        method: str | None = None,
     ) -> dict[str, Any]:
-        """Resolve all parameters for an endpoint"""
+        """Resolve all parameters for an endpoint
+
+        ``method`` comes from the route being served; the endpoint
+        attribute is only a fallback (it holds the last registration,
+        which is wrong for endpoints decorated with several methods).
+        """
         params = cls._get_signature(endpoint)
-        method = getattr(endpoint, "__route_meta__", {}).get("method")
+        if method is None:
+            method = getattr(endpoint, "__route_meta__", {}).get("method")
         kwargs = {}
 
         # Resolve dependencies first
@@ -110,10 +119,14 @@ class ParameterResolver:
 
     @classmethod
     async def resolve_async(
-        cls, endpoint: Callable[..., Any], request_data: RequestData
+        cls,
+        endpoint: Callable[..., Any],
+        request_data: RequestData,
+        method: str | None = None,
     ) -> dict[str, Any]:
         params = cls._get_signature(endpoint)
-        method = getattr(endpoint, "__route_meta__", {}).get("method")
+        if method is None:
+            method = getattr(endpoint, "__route_meta__", {}).get("method")
         kwargs = {}
 
         # Async dependencies

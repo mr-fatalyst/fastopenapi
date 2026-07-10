@@ -16,13 +16,15 @@ class DjangoAsyncRouter(DjangoRouter):
     VIEW_IS_ASYNC = True
     extractor_async_cls = DjangoAsyncRequestDataExtractor
 
-    def _build_view_handler(self, endpoint: Callable[..., Any]) -> Callable[..., Any]:
+    def _build_view_handler(
+        self, endpoint: Callable[..., Any], meta: dict[str, Any]
+    ) -> Callable[..., Any]:
         """Build the per-endpoint async view method"""
         outer = self
 
         async def handle(self: Any, req: Any, **path_params: Any) -> Any:
             env = RequestEnvelope(request=req, path_params=path_params)
-            return await outer.handle_request_async(endpoint, env)
+            return await outer.handle_request_async(endpoint, env, meta)
 
         return handle
 

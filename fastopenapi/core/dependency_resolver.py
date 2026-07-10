@@ -1,4 +1,5 @@
 import inspect
+import logging
 import threading
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
@@ -18,6 +19,8 @@ from fastopenapi.errors.exceptions import (
     CircularDependencyError,
     DependencyError,
 )
+
+logger = logging.getLogger("fastopenapi")
 
 
 class DependencyResolver:
@@ -96,7 +99,12 @@ class DependencyResolver:
             try:
                 gen.close()
             except Exception:
-                pass
+                # The response is already built; surface the failure in
+                # logs instead of masking it silently
+                logger.exception(
+                    "Cleanup of dependency '%s' failed",
+                    getattr(gen, "__name__", repr(gen)),
+                )
 
     async def aclose(self, request_data: RequestData) -> None:
         """Async variant of ``close`` (also handles async generators)"""
@@ -111,7 +119,10 @@ class DependencyResolver:
                 else:
                     gen.close()
             except Exception:
-                pass
+                logger.exception(
+                    "Cleanup of dependency '%s' failed",
+                    getattr(gen, "__name__", repr(gen)),
+                )
 
     def _resolve_endpoint_dependencies(
         self, endpoint: Callable[..., Any], request_data: RequestData
