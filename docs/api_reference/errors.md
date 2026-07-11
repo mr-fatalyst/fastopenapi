@@ -86,14 +86,19 @@ Convert any exception to an APIError.
 def from_exception(
     exc: Exception,
     mapper: dict[type[Exception], type[APIError]] | None = None,
+    *,
+    debug: bool = False,
 ) -> APIError
 ```
 
 **Parameters**:
 - `exc`: Exception to convert
 - `mapper`: Optional mapping of exception types to APIError subclasses
+- `debug`: When `True`, unhandled 5xx errors include the exception details in the response body (default: `False`)
 
 **Returns**: APIError instance
+
+> **Note:** Exception text reaches the client only for explicit `APIError` instances and exceptions listed in the `mapper`. An unhandled 5xx fault gets a generic message (`"Internal server error"`); its details are always logged and are added to the body only when `debug=True`.
 
 **Example**:
 ```python
@@ -102,7 +107,8 @@ try:
     raise ValueError("Invalid value")
 except Exception as e:
     api_error = APIError.from_exception(e)
-    # Returns APIError with message "Invalid value" and status 500
+    # Returns APIError with status 500 and a generic "Internal server error" message
+    # (pass debug=True to include "ValueError: Invalid value" in details)
 ```
 
 ---

@@ -35,9 +35,10 @@ The router constructor supports the following parameters:
 | `redoc_url` | str \| None | "/redoc" | ReDoc URL |
 | `openapi_url` | str \| None | "/openapi.json" | OpenAPI schema URL |
 | `openapi_version` | str | "3.0.0" | OpenAPI specification version |
-| `security_scheme` | SecuritySchemeType \| None | BEARER_JWT | Default security scheme |
+| `security_scheme` | SecuritySchemeType \| dict \| None | None | Optional security scheme (opt-in; no default) |
+| `debug` | bool | False | Include 5xx exception details in the response body |
 
-> **Note:** Setting any URL to `None` disables all documentation endpoints at once.
+> **Note:** Setting `openapi_url=None` disables all documentation endpoints at once. Setting `docs_url=None` disables only Swagger UI; `redoc_url=None` disables only ReDoc.
 
 ## Tags
 
@@ -438,14 +439,16 @@ class User(BaseModel):
 
 ### Disable Documentation
 
-To disable all documentation endpoints, set any URL to `None`:
+To disable **all** documentation endpoints, set `openapi_url=None`:
 
 ```python
 router = FlaskRouter(
     app=app,
-    docs_url=None,      # Disables all: Swagger UI, ReDoc, and OpenAPI JSON
+    openapi_url=None,   # Disables all: Swagger UI, ReDoc, and OpenAPI JSON
 )
 ```
+
+To disable an individual page, set only its URL to `None` (`docs_url=None` → Swagger UI only, `redoc_url=None` → ReDoc only).
 
 ### Custom Documentation Paths
 

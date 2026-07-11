@@ -31,6 +31,7 @@ Query(
     allow_inf_nan: bool | None = None,
     max_digits: int | None = None,
     decimal_places: int | None = None,
+    example: Any | None = None,
     examples: list[Any] | None = None,
     deprecated: bool | None = None,
     include_in_schema: bool = True,
@@ -56,6 +57,7 @@ Query(
 - **allow_inf_nan**: Allow infinity and NaN values
 - **max_digits**: Maximum number of digits
 - **decimal_places**: Maximum decimal places
+- **example**: A single example value for documentation
 - **examples**: Example values for documentation
 - **deprecated**: Mark as deprecated in docs
 - **include_in_schema**: Include in OpenAPI schema
@@ -104,6 +106,7 @@ Path(
     allow_inf_nan: bool | None = None,
     max_digits: int | None = None,
     decimal_places: int | None = None,
+    example: Any | None = None,
     examples: list[Any] | None = None,
     deprecated: bool | None = None,
     include_in_schema: bool = True,
@@ -164,6 +167,7 @@ Header(
     allow_inf_nan: bool | None = None,
     max_digits: int | None = None,
     decimal_places: int | None = None,
+    example: Any | None = None,
     examples: list[Any] | None = None,
     deprecated: bool | None = None,
     include_in_schema: bool = True,
@@ -221,6 +225,7 @@ Cookie(
     allow_inf_nan: bool | None = None,
     max_digits: int | None = None,
     decimal_places: int | None = None,
+    example: Any | None = None,
     examples: list[Any] | None = None,
     deprecated: bool | None = None,
     include_in_schema: bool = True,
@@ -259,6 +264,7 @@ from fastopenapi import Body
 Body(
     default: Any = None,
     *,
+    embed: bool | None = None,
     media_type: str = "application/json",
     alias: str | None = None,
     title: str | None = None,
@@ -275,6 +281,7 @@ Body(
     allow_inf_nan: bool | None = None,
     max_digits: int | None = None,
     decimal_places: int | None = None,
+    example: Any | None = None,
     examples: list[Any] | None = None,
     deprecated: bool | None = None,
     include_in_schema: bool = True,
@@ -286,6 +293,7 @@ Body(
 
 Same as `Query`, plus:
 
+- **embed**: Force a single body parameter to be embedded under its name (`{"item": {...}}` instead of the bare object)
 - **media_type**: MIME type of the body (default: `"application/json"`)
 
 ### Example
@@ -334,6 +342,7 @@ Form(
     allow_inf_nan: bool | None = None,
     max_digits: int | None = None,
     decimal_places: int | None = None,
+    example: Any | None = None,
     examples: list[Any] | None = None,
     deprecated: bool | None = None,
     include_in_schema: bool = True,
@@ -471,6 +480,7 @@ def list_items(
 
 - **title**: Short title for the parameter
 - **description**: Longer description
+- **example**: A single example value (shown in OpenAPI docs)
 - **examples**: Example values (shown in OpenAPI docs)
 - **deprecated**: Mark parameter as deprecated
 - **alias**: Alternative parameter name

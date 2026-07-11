@@ -119,19 +119,23 @@ These responsibilities are delegated to `BaseAdapter` and specialized components
 class BaseAdapter(BaseRouter, ABC):
     """Base adapter for framework integration"""
 
+    # Sync-only adapters set this to reject async endpoints at registration
+    ASYNC_ENDPOINT_ERROR: str | None = None
+
     # Composition: Specialized components
     extractor_cls = BaseRequestDataExtractor
     extractor_async_cls = BaseAsyncRequestDataExtractor
     req_param_resolver_cls = ParameterResolver
     response_builder_cls = ResponseBuilder
+    serializer_cls = ResponseSerializer
 
     # Thread-safe caches
     _type_adapter_cache: dict[type, TypeAdapter] = {}
     _cache_lock = threading.Lock()
 
     @abstractmethod
-    def build_framework_response(self, response: Response):
-        """Convert Response to framework-specific response"""
+    def build_framework_response(self, response: WireResponse):
+        """Wrap the finalized wire triple into a framework response object"""
         pass
 
     @abstractmethod
@@ -141,49 +145,45 @@ class BaseAdapter(BaseRouter, ABC):
 
     def handle_request(self, endpoint: Callable, env: RequestEnvelope):
         """Orchestrate request processing (sync)"""
+        request_data = None
         try:
-            # 1. Extract request data
-            request_data = self.extractor_cls.extract_request_data(env)
+            # 1. Extract request data (guided by the endpoint's extraction profile)
+            profile = ExtractionProfileBuilder.get(endpoint)
+            request_data = self.extractor_cls.extract_request_data(env, profile)
 
-            # 2. Resolve parameters
+            # 2. Resolve parameters (and dependencies)
             kwargs = self.req_param_resolver_cls.resolve(endpoint, request_data)
 
-            # 3. Call endpoint
+            # 3. Call endpoint and turn its result into a framework response
             result = endpoint(**kwargs)
-
-            # 4. Validate response
-            route_meta = endpoint.__route_meta__
-            response_model = route_meta.get("response_model")
-            if response_model:
-                result = self._validate_response(result, response_model)
-
-            # 5. Handle framework-native responses
-            if self.is_framework_response(result):
-                return result
-
-            # 6. Build response
-            if route_meta.get("status_code") == 204:
-                return self.build_framework_response(
-                    Response(status_code=204, content=None)
-                )
-            else:
-                response = self.response_builder_cls.build(result, route_meta)
-                return self.build_framework_response(response)
-
+            return self._finalize_result(endpoint, result)
         except Exception as e:
-            api_error = APIError.from_exception(e, self.EXCEPTION_MAPPER)
-            return self.build_framework_response(
-                Response(
-                    content=api_error.to_response(),
-                    status_code=api_error.status_code,
-                )
-            )
+            return self.handle_exception(e)
+        finally:
+            # Run generator-dependency cleanup after the endpoint (and its
+            # response) are done, mirroring FastAPI's yield semantics
+            if request_data is not None:
+                dependency_resolver.close(request_data)
+
+    def _finalize_result(self, endpoint, result):
+        """Validate, serialize, and wrap an endpoint result"""
+        if self.is_framework_response(result):
+            return result
+        route_meta = endpoint.__route_meta__
+        response_model = route_meta.get("response_model")
+        # Explicit Response objects and (body, status, ...) tuples opt out
+        if response_model and not isinstance(result, (Response, tuple)):
+            result = self._validate_response(result, response_model)
+        response = self.response_builder_cls.build(result, route_meta)   # -> Response
+        wire = self.serializer_cls.finalize(response)                    # -> WireResponse
+        return self.build_framework_response(wire)
 ```
 
 **Key Features:**
 - **Composition over inheritance** - Uses specialized component classes
-- **Thread-safe caching** - TypeAdapter cache with lock
-- **Error handling** - Converts all exceptions to APIError
+- **Single serialization layer** - `ResponseSerializer.finalize()` produces a `WireResponse` (encoded body, status, complete headers); adapters only wrap it
+- **Error handling** - `handle_exception` converts every exception to an `APIError` (5xx text never leaks; details only with `debug=True`)
+- **Generator cleanup** - `dependency_resolver.close()`/`aclose()` runs after the response is built
 - **Async support** - Separate `handle_request_async` method
 
 ## Layer 3: FrameworkRouter
@@ -222,23 +222,25 @@ class StarletteRouter(BaseAdapter):
         env = RequestEnvelope(path_params=None, request=request)
         return await router.handle_request_async(endpoint, env)
 
-    def build_framework_response(self, response: Response):
-        """Convert Response to StarletteResponse"""
-        if isinstance(response.content, bytes):
-            return StarletteResponse(
-                content=response.content,
-                status_code=response.status_code,
-                headers=response.headers,
-                media_type=response.headers.get("Content-Type", "application/octet-stream"),
-            )
-        # ... handle JSON, text, etc.
+    def build_framework_response(self, response: WireResponse) -> StarletteResponse:
+        """Wrap the finalized triple into a Starlette response.
+
+        `WireResponse` already carries the encoded body, status, and complete
+        headers (Content-Type included) — no serialization happens here.
+        """
+        return StarletteResponse(
+            content=response.body,      # bytes | None, already encoded
+            status_code=response.status,
+            headers=response.headers,
+        )
 
     def is_framework_response(self, response):
         """Check if already a Starlette response"""
         return isinstance(response, StarletteResponse)
 ```
 
-**That's it!** Just three methods to integrate a new framework.
+**That's it!** Implement `build_framework_response` and `is_framework_response`, wire
+`add_route` to your framework, and provide an extractor.
 
 ## Specialized Components
 
@@ -369,43 +371,45 @@ class DependencyResolver:
         self._request_cache = WeakKeyDictionary()
         self._request_cache_lock = threading.RLock()
 
-        # Per-function locks to prevent race conditions
-        self._execution_locks: dict[int, threading.Lock] = {}
-        self._execution_locks_lock = threading.Lock()
-
         # Signature cache
         self._signature_cache: dict[Callable, dict] = {}
 
     def resolve_dependencies(
         self,
         endpoint: Callable,
-        request_data: RequestData
+        request_data: RequestData,
+        method: str | None = None,
     ) -> dict[str, Any]:
-        """Resolve all dependencies for endpoint"""
-        # Initialize request-scoped tracking
-        with self._request_cache_lock:
-            if request_data not in self._request_cache:
-                self._request_cache[request_data] = {
-                    "resolved": {},
-                    "resolving": set(),  # For circular detection
-                    "generators": [],  # For yield dependency cleanup
-                }
+        """Resolve all dependencies for endpoint.
 
-        try:
-            return self._resolve_endpoint_dependencies(endpoint, request_data)
-        finally:
-            # Cleanup
-            with self._request_cache_lock:
-                if request_data in self._request_cache:
-                    del self._request_cache[request_data]
+        Generator dependencies stay open so the endpoint can use the yielded
+        value; the adapter calls ``close(request_data)`` (or ``aclose``) after
+        the endpoint returns to run their cleanup code.
+        """
+        self._open_request_scope(request_data, method)
+        return self._resolve_endpoint_dependencies(endpoint, request_data)
+
+    def close(self, request_data: RequestData) -> None:
+        """Run post-``yield`` cleanup in reverse creation order, then drop the
+        request cache entry. The adapter calls this after the endpoint returns
+        (``aclose`` is the async variant)."""
+        with self._request_cache_lock:
+            cache = self._request_cache.pop(request_data, None)
+        if cache is None:
+            return
+        for gen in reversed(cache["generators"]):
+            try:
+                gen.close()
+            except Exception:
+                pass
 ```
 
 **Key Features:**
 - **Request-scoped caching** - Same dependency called twice = same instance
 - **Circular dependency detection** - Raises `CircularDependencyError`
-- **Security scopes validation** - Validates OAuth2 scopes
-- **Generator dependencies** - Supports `yield` setup/teardown for both sync and async generators with guaranteed cleanup
-- **Thread-safe** - Double-checked locking pattern
+- **Security scopes validation** - Validates OAuth2 scopes; scopes are part of the cache key
+- **Generator dependencies** - Supports `yield` setup/teardown for both sync and async generators; cleanup runs **after** the response is built (via `close`/`aclose`), in reverse creation order
+- **Thread-safe** - A request is handled by a single thread; the request-scoped cache is guarded by an `RLock` with no cross-request locking
 - **Async support** - Separate async methods that handle both sync and async deps
 
 ### 4. Response Builder (Serialization)
@@ -414,7 +418,7 @@ class DependencyResolver:
 
 **Responsibility:** Serialize Python objects to JSON and build response objects.
 
-**Note:** This is different from `ResponseBuilder` in `fastopenapi/openapi/generator.py`, which builds OpenAPI response schemas for documentation. They share the same class name but serve different purposes.
+**Note:** This is different from `ResponseSectionBuilder` in `fastopenapi/openapi/generator.py`, which builds the OpenAPI `responses` section for documentation. The two classes serve different purposes and are named distinctly to avoid confusion.
 
 ```python
 class ResponseBuilder:
@@ -473,11 +477,14 @@ class OpenAPIGenerator:
         self.router = router
         self.definitions = {}
         self._cache_lock = threading.Lock()
+        self._operation_ids = set()
 
         # Helper classes (composition!)
-        self.schema_builder = SchemaBuilder(self.definitions, self._cache_lock)
+        self.schema_builder = SchemaBuilder(
+            self.definitions, self._cache_lock, router.openapi_version
+        )
         self.parameter_processor = ParameterProcessor(self.schema_builder)
-        self.response_builder = ResponseBuilder(self.schema_builder)  # OpenAPI schema builder, not the serialization ResponseBuilder
+        self.response_builder = ResponseSectionBuilder(self.schema_builder)  # builds the OpenAPI responses section, not the serialization ResponseBuilder
 
     def generate(self) -> dict:
         """Generate complete OpenAPI schema"""
@@ -727,34 +734,39 @@ classDiagram
 
 ```python
 @classmethod
-def from_exception(cls, exc, mapper=None):
+def from_exception(cls, exc, mapper=None, *, debug=False):
     """Convert any exception to APIError"""
     if isinstance(exc, APIError):
         return exc
 
     # Try custom mapper
-    if mapper and type(exc) in mapper:
-        return mapper[type(exc)](str(exc))
+    entry = (mapper or {}).get(type(exc))
+    if entry:
+        return entry(str(exc))
 
-    # Extract status code
-    for attr in ("status_code", "code"):
-        if hasattr(exc, attr):
-            status = HTTPStatus(int(getattr(exc, attr)))
-            break
+    status = cls._extract_status(exc)          # from status_code/code, else 500
+    err_type = STATUS_TO_ERROR_TYPE.get(status, ErrorType.INTERNAL_SERVER_ERROR)
 
-    # Extract message
-    for attr in ("message", "title", "name", "reason", "detail"):
-        if hasattr(exc, attr):
-            message = str(getattr(exc, attr))
-            break
+    details = None
+    if status >= HTTPStatus.INTERNAL_SERVER_ERROR:
+        # 5xx: never leak the exception text to the client
+        message = "Internal server error" if status == 500 else status.phrase
+        if debug:
+            details = f"{type(exc).__name__}: {exc}"
+    else:
+        # 4xx: surface a human-readable message from the exception
+        message = cls._extract_message(exc)
 
-    # Create APIError
-    api_error = APIError(message=message)
+    api_error = APIError(message=message, details=details)
     api_error.status_code = status
+    api_error.error_type = err_type
     return api_error
 ```
 
-This allows framework-specific exceptions to be automatically converted to standardized API errors.
+Framework-specific exceptions are converted to standardized API errors. Exception text
+reaches the client only for explicit `APIError` instances and mapped exceptions; unhandled
+5xx faults get a generic message (details are logged, and added to the body only when
+`debug=True`).
 
 ## Performance Optimizations
 
@@ -834,8 +846,11 @@ Dependencies cached per request using `WeakKeyDictionary` for automatic cleanup:
 ```python
 self._request_cache = WeakKeyDictionary()
 
-# Cache keyed by (dependency_id, request_data_id)
-cache_key = (id(dependency_func), id(request_data))
+# Cache keyed by (dependency_id, request_data_id, scopes)
+# Scopes are part of the key so the same Security dependency requested
+# with different scopes is executed once per scope set.
+scopes = tuple(sorted(security_scopes.scopes)) if security_scopes else ()
+cache_key = (id(dependency_func), id(request_data), scopes)
 ```
 
 ## Design Principles
@@ -869,10 +884,10 @@ This makes each component:
 
 ### 4. Thread Safety
 
-- All caches use locks
-- Request-scoped caching with `WeakKeyDictionary`
-- Per-function locks in dependency resolver
-- Double-checked locking pattern
+- Shared caches (schemas, signatures) guarded by locks
+- Request-scoped dependency cache with `WeakKeyDictionary`, guarded by an `RLock`
+- Each request is handled by a single thread, so the dependency resolver needs no
+  cross-request/per-function locking
 
 ### 5. Performance
 
@@ -920,7 +935,7 @@ class MyFrameworkExtractor(BaseAsyncRequestDataExtractor):
 
 from fastopenapi.routers.base import BaseAdapter
 from fastopenapi.routers.common import RequestEnvelope
-from fastopenapi.core.types import Response
+from fastopenapi.response.serializer import WireResponse
 from .extractors import MyFrameworkExtractor
 
 class MyFrameworkRouter(BaseAdapter):
@@ -940,11 +955,15 @@ class MyFrameworkRouter(BaseAdapter):
         # Register with framework
         self.app.add_route(path, view, methods=[method])
 
-    def build_framework_response(self, response: Response):
-        """Convert Response to MyFrameworkResponse"""
+    def build_framework_response(self, response: WireResponse):
+        """Wrap the finalized triple into a MyFrameworkResponse.
+
+        The body is already encoded and the headers already include
+        Content-Type — do not re-serialize.
+        """
         return MyFrameworkResponse(
-            content=response.content,
-            status=response.status_code,
+            content=response.body,      # bytes | None
+            status=response.status,
             headers=response.headers,
         )
 

@@ -36,7 +36,8 @@ def __init__(
     title: str = "My App",
     version: str = "0.1.0",
     description: str = "API documentation",
-    security_scheme: SecuritySchemeType | None = SecuritySchemeType.BEARER_JWT,
+    security_scheme: SecuritySchemeType | dict | None = None,
+    debug: bool = False,
 )
 ```
 
@@ -47,12 +48,13 @@ def __init__(
 - **redoc_url**: URL for ReDoc UI docs (default: `"/redoc"`)
 - **openapi_url**: URL for OpenAPI JSON schema (default: `"/openapi.json"`)
 
-> **Note:** Setting any of these to `None` disables all documentation endpoints (Swagger UI, ReDoc, and OpenAPI JSON) at once.
+> **Note:** Setting `openapi_url=None` disables all documentation endpoints (Swagger UI, ReDoc, and OpenAPI JSON) at once. Setting `docs_url=None` disables only the Swagger UI page; `redoc_url=None` disables only ReDoc.
 - **openapi_version**: OpenAPI specification version (default: `"3.0.0"`)
 - **title**: API title
 - **version**: API version
 - **description**: API description
-- **security_scheme**: Security scheme for OpenAPI docs (default: Bearer JWT)
+- **security_scheme**: Security scheme for OpenAPI docs, opt-in (default: `None` — no scheme). Accepts a `SecuritySchemeType` or a raw dict
+- **debug**: When `True`, unhandled 5xx responses include exception details in the body (default: `False`)
 
 ### HTTP Method Decorators
 
@@ -471,7 +473,7 @@ Set the security scheme for OpenAPI documentation:
 ```python
 from fastopenapi import SecuritySchemeType
 
-# Bearer JWT (default)
+# Bearer JWT
 router = FlaskRouter(
     app=app,
     security_scheme=SecuritySchemeType.BEARER_JWT
@@ -495,13 +497,17 @@ router = FlaskRouter(
     security_scheme=SecuritySchemeType.BASIC_AUTH
 )
 
-# OAuth2
+# OAuth2 — requires an explicit dict (flows/tokenUrl are deployment-specific);
+# passing SecuritySchemeType.OAUTH2 raises ValueError
 router = FlaskRouter(
     app=app,
-    security_scheme=SecuritySchemeType.OAUTH2
+    security_scheme={
+        "type": "oauth2",
+        "flows": {"password": {"tokenUrl": "/token", "scopes": {}}},
+    },
 )
 
-# No security scheme
+# No security scheme (this is the default)
 router = FlaskRouter(
     app=app,
     security_scheme=None
@@ -525,12 +531,22 @@ router = FlaskRouter(
 
 ### Disabling Documentation
 
-To disable all documentation endpoints, set any URL to `None`:
+To disable **all** documentation endpoints, set `openapi_url=None`:
 
 ```python
 router = FlaskRouter(
     app=app,
-    docs_url=None,      # Disables all: Swagger UI, ReDoc, and OpenAPI JSON
+    openapi_url=None,   # Disables all: Swagger UI, ReDoc, and OpenAPI JSON
+)
+```
+
+To disable an individual page, set only its URL to `None`:
+
+```python
+router = FlaskRouter(
+    app=app,
+    docs_url=None,      # Disables Swagger UI only (ReDoc and OpenAPI JSON stay)
+    redoc_url=None,     # Disables ReDoc only
 )
 ```
 

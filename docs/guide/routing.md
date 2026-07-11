@@ -367,14 +367,16 @@ router = FlaskRouter(
 
 ### Disabling Documentation
 
-To disable all documentation endpoints, set any URL to `None`:
+To disable **all** documentation endpoints, set `openapi_url=None`:
 
 ```python
 router = FlaskRouter(
     app=app,
-    docs_url=None,         # Disables all: Swagger UI, ReDoc, and OpenAPI JSON
+    openapi_url=None,      # Disables all: Swagger UI, ReDoc, and OpenAPI JSON
 )
 ```
+
+To disable an individual page, set only its URL to `None` (`docs_url=None` turns off Swagger UI only; `redoc_url=None` turns off ReDoc only).
 
 ### Custom Documentation URLs
 

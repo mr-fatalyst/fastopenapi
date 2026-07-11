@@ -135,11 +135,15 @@ pip install --upgrade fastopenapi[flask]
 
 ### ImportError for a specific framework
 
-If you get an `ImportError` when trying to use a specific router:
+If the framework extra is missing, the imported router is a placeholder that raises an
+`ImportError` naming the framework and the extra to install — the error is raised when you
+**instantiate** the router, not at import time:
 
 ```python
 from fastopenapi.routers import FlaskRouter
-# ImportError: This framework is not installed.
+
+router = FlaskRouter(app=app)
+# ImportError: Flask is not installed. Try: pip install fastopenapi[flask]
 ```
 
 **Solution**: Install the framework extra:

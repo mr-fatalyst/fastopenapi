@@ -447,15 +447,9 @@ class User(BaseModel):
 {
   "error": {
     "type": "validation_error",
-    "message": "Validation error",
+    "message": "Validation error for parameter 'user'",
     "status": 422,
-    "details": [
-      {
-        "loc": ["body", "username"],
-        "msg": "Username must be alphanumeric",
-        "type": "value_error"
-      }
-    ]
+    "details": "1 validation error for User\nusername\n  Value error, Username must be alphanumeric [type=value_error, input_value='bad!', input_type=str]"
   }
 }
 ```
@@ -736,15 +730,9 @@ except:
 {
   "error": {
     "type": "validation_error",
-    "message": "Validation error",
+    "message": "Validation error for parameter 'item'",
     "status": 422,
-    "details": [
-      {
-        "loc": ["body", "price"],
-        "msg": "Input should be greater than 0",
-        "type": "greater_than"
-      }
-    ]
+    "details": "1 validation error for Item\nprice\n  Input should be greater than 0 [type=greater_than, input_value=-1, input_type=int]"
   }
 }
 ```

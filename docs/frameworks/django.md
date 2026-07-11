@@ -14,6 +14,15 @@ FastOpenAPI provides two routers for Django:
 - `DjangoRouter` - for synchronous views (WSGI)
 - `DjangoAsyncRouter` - for asynchronous views (ASGI)
 
+!!! note
+    Register `async def` endpoints on `DjangoAsyncRouter` and `def` endpoints on
+    `DjangoRouter`. Registering an `async def` endpoint on the synchronous `DjangoRouter`
+    raises `TypeError` at import time, so the `async` examples throughout this page assume
+    a `DjangoAsyncRouter`.
+
+    `DjangoRouter`/`DjangoAsyncRouter` take no application object. Pass `register_docs=True`
+    (or the legacy `app=True`) to serve the docs endpoints, then mount `router.urls`.
+
 ### Synchronous Django (WSGI)
 
 ```python
@@ -51,7 +60,7 @@ def create_item(item: Item):
 
 # URL Configuration
 urlpatterns = [
-    path("", include(router.urls)),
+    path("", router.urls),
 ]
 
 if __name__ == "__main__":
@@ -96,7 +105,7 @@ async def create_item(item: Item):
 
 # URL Configuration
 urlpatterns = [
-    path("", include(router.urls)),
+    path("", router.urls),
 ]
 
 if __name__ == "__main__":
@@ -152,6 +161,7 @@ urlpatterns = [
 
 ```python
 # your_app/api.py
+from django.urls import path
 from pydantic import BaseModel
 from fastopenapi.routers import DjangoRouter
 
@@ -173,8 +183,8 @@ def list_items():
 def create_item(item: Item):
     return item
 
-# Export URLs
-urls = router.urls
+# Export URL patterns for include() — router.urls is a ready-to-mount 3-tuple
+urlpatterns = [path("", router.urls)]
 ```
 
 ## Path Parameters
@@ -236,10 +246,16 @@ def login(
 
 ### File Upload
 
+!!! warning "Sync vs. async routers"
+    An `async def` endpoint can only be registered on `DjangoAsyncRouter`. Registering
+    one on the synchronous `DjangoRouter` raises `TypeError` at import time. The two
+    snippets below therefore belong to two different routers — pick the one that matches
+    your router.
+
 ```python
 from fastopenapi import File, FileUpload
 
-# Synchronous
+# Synchronous — register on DjangoRouter
 @router.post("/upload")
 def upload_file(file: FileUpload = File(...)):
     content = file.read()  # Sync read
@@ -248,8 +264,10 @@ def upload_file(file: FileUpload = File(...)):
         "size": len(content),
         "content_type": file.content_type
     }
+```
 
-# Asynchronous
+```python
+# Asynchronous — register on DjangoAsyncRouter
 @router.post("/upload")
 async def upload_file_async(file: FileUpload = File(...)):
     content = await file.aread()  # Async read
@@ -290,7 +308,9 @@ def list_users(limit: int = Query(10, le=100)):
 
 ### Asynchronous ORM
 
-Django 4.1+ supports async ORM queries:
+Django 4.1+ supports async ORM queries. The async endpoints below must be registered on
+a `DjangoAsyncRouter` (an `async def` on the sync `DjangoRouter` raises `TypeError` at
+import time):
 
 ```python
 from django.contrib.auth.models import User
@@ -682,12 +702,12 @@ urls = router.urls
 ```python
 # urls.py
 from django.contrib import admin
-from django.urls import path, include
+from django.urls import path
 import api
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('', include(api.urls)),
+    path('', api.urls),
 ]
 ```
 

@@ -140,8 +140,8 @@ def protected_route(user = Security(verify_token)):
 from fastopenapi import Security, SecurityScopes
 
 def verify_scopes(
-    authorization: str = Header(..., alias="Authorization"),
     security_scopes: SecurityScopes,
+    authorization: str = Header(..., alias="Authorization"),
 ):
     token = authorization[7:]
     payload = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
@@ -214,8 +214,8 @@ Add a `SecurityScopes`-annotated parameter to your security function. FastOpenAP
 from fastopenapi import Security, SecurityScopes
 
 def verify_token(
-    authorization: str = Header(..., alias="Authorization"),
     security_scopes: SecurityScopes,
+    authorization: str = Header(..., alias="Authorization"),
 ):
     token = authorization[7:]
     payload = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
@@ -492,7 +492,7 @@ Get cache statistics for monitoring:
 from fastopenapi.core.dependency_resolver import get_dependency_stats
 
 stats = get_dependency_stats()
-# {"active_requests": 5, "execution_locks": 10}
+# {"active_requests": 5}
 ```
 
 ---

@@ -22,11 +22,13 @@ router = FlaskRouter(
 
 ### Available Security Schemes
 
-- `BEARER_JWT` - Bearer token with JWT (default)
+- `BEARER_JWT` - Bearer token with JWT
 - `API_KEY_HEADER` - API key in header
 - `API_KEY_QUERY` - API key in query parameter
 - `BASIC_AUTH` - Basic authentication
-- `OAUTH2` - OAuth2 flows
+- `OAUTH2` - OAuth2 flows (must be configured with an explicit dict, see below)
+
+> Security is opt-in: no scheme is added unless you pass `security_scheme`. There is no default scheme.
 
 ## Understanding Security()
 
@@ -272,12 +274,27 @@ def protected_endpoint(user = Depends(verify_basic_auth)):
 
 ### OAuth2 Password Flow
 
+OAuth2 has no built-in default scheme — its flows and `tokenUrl` are deployment-specific,
+so you must configure it with an explicit dict. Passing `SecuritySchemeType.OAUTH2`
+raises `ValueError`.
+
 ```python
 from pydantic import BaseModel
 
+from fastopenapi import Form
+from fastopenapi.errors import AuthenticationError, BadRequestError
+
 router = FlaskRouter(
     app=app,
-    security_scheme=SecuritySchemeType.OAUTH2
+    security_scheme={
+        "type": "oauth2",
+        "flows": {
+            "password": {
+                "tokenUrl": "/token",
+                "scopes": {},
+            }
+        },
+    },
 )
 
 class OAuth2TokenRequest(BaseModel):

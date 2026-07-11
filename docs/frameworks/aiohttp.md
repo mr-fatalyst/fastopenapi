@@ -397,7 +397,7 @@ python main.py
 ### Production with Gunicorn
 
 ```bash
-pip install gunicorn aiohttp-gunicorn
+pip install gunicorn  # aiohttp already ships the GunicornWebWorker
 
 gunicorn main:app --bind 0.0.0.0:8000 --worker-class aiohttp.GunicornWebWorker --workers 4
 ```

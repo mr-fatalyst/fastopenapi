@@ -149,7 +149,7 @@ classDiagram
 | TypeAdapter | Class-level | Model type | Never | Response validation |
 | Signature | Class-level | Function | Never | Parameter inspection |
 | Param Model | Class-level | Fields hash | Never | Validation models |
-| Dependency | Request-scoped | (func, request) | Automatic (WeakKeyDictionary) | DI results |
+| Dependency | Request-scoped | (func, request, scopes) | Automatic (WeakKeyDictionary) | DI results |
 | OpenAPI Schema | Instance-level | N/A | Never | Schema generation |
 
 ## Performance Optimizations
@@ -180,7 +180,7 @@ mindmap
     Thread Safety
       Locked caches
       WeakKeyDictionary
-      Per-function locks
+      Single-threaded per request
     Performance
       Multiple cache layers
       Lazy generation

@@ -98,9 +98,8 @@ For async frameworks, inherit from `BaseAsyncRequestDataExtractor` instead.
 ## Step 2: Create the Router
 
 ```python
-import inspect
 from collections.abc import Callable
-from fastopenapi.core.types import Response
+from fastopenapi.response.serializer import WireResponse
 from fastopenapi.routers.base import BaseAdapter
 from fastopenapi.routers.common import RequestEnvelope
 from fastopenapi.openapi.ui import render_swagger_ui, render_redoc_ui
@@ -118,12 +117,18 @@ class MyFrameworkRouter(BaseAdapter):
     #   Starlette: (r"{(\w+)}", r"{\1}")  -> /users/{user_id}
     PATH_CONVERSIONS = (r"{(\w+)}", r"<\1>")
 
+    # Reject async endpoints at registration time (sync-only router).
+    # BaseAdapter.add_route raises TypeError when this is set and an
+    # async def endpoint is registered. Leave as None for async routers.
+    ASYNC_ENDPOINT_ERROR = "cannot be used with MyFramework (sync router)."
+
     # Set the extractor class
     extractor_cls = MyFrameworkExtractor
 
     def add_route(self, path: str, method: str, endpoint: Callable):
         """Register route with the framework"""
-        # First, call parent to store route info
+        # First, call parent to store route info (this also enforces
+        # ASYNC_ENDPOINT_ERROR for async endpoints)
         super().add_route(path, method, endpoint)
 
         if self.app is not None:
@@ -138,26 +143,23 @@ class MyFrameworkRouter(BaseAdapter):
                     path_params=path_params
                 )
 
-                # Check for async endpoint in sync router
-                if inspect.iscoroutinefunction(endpoint):
-                    raise Exception(
-                        f"Async endpoint '{endpoint.__name__}' "
-                        f"cannot be used with sync router."
-                    )
-
                 # Delegate to BaseAdapter's request handler
                 return self.handle_request(endpoint, env)
 
             # Register with framework
             self.app.add_route(framework_path, view_func, methods=[method])
 
-    def build_framework_response(self, response: Response) -> FrameworkResponse:
-        """Convert FastOpenAPI Response to framework response"""
+    def build_framework_response(self, response: WireResponse) -> FrameworkResponse:
+        """Wrap the finalized wire triple into a framework response.
+
+        `WireResponse` already carries the encoded body (`bytes | None`),
+        the status, and the complete headers (Content-Type included) — the
+        adapter must not re-serialize or guess a content type.
+        """
         return FrameworkResponse(
-            body=response.content,
-            status=response.status_code,
+            body=response.body if response.body is not None else b"",
+            status=response.status,
             headers=response.headers,
-            content_type="application/json"
         )
 
     def is_framework_response(self, response) -> bool:
@@ -250,11 +252,11 @@ class MyAsyncRouter(BaseAdapter):
 Here's a complete example based on Flask's pattern:
 
 ```python
-import inspect
 from collections.abc import Callable
 from typing import Any
 
-from fastopenapi.core.types import FileUpload, Response
+from fastopenapi.core.types import FileUpload
+from fastopenapi.response.serializer import WireResponse
 from fastopenapi.routers.base import BaseAdapter
 from fastopenapi.routers.common import RequestEnvelope
 from fastopenapi.routers.extractors import BaseRequestDataExtractor
@@ -308,6 +310,8 @@ class MyFrameworkRouter(BaseAdapter):
     """Custom router for MyFramework"""
 
     PATH_CONVERSIONS = (r"{(\w+)}", r"<\1>")
+    # Sync-only router: async endpoints are rejected at registration time
+    ASYNC_ENDPOINT_ERROR = "cannot be used with MyFrameworkRouter (sync)."
     extractor_cls = MyFrameworkExtractor
 
     def add_route(self, path: str, method: str, endpoint: Callable):
@@ -322,13 +326,6 @@ class MyFrameworkRouter(BaseAdapter):
                     request=current_request,
                     path_params=path_params
                 )
-
-                if inspect.iscoroutinefunction(endpoint):
-                    raise Exception(
-                        f"Async endpoint '{endpoint.__name__}' "
-                        f"cannot be used with MyFrameworkRouter."
-                    )
-
                 return self.handle_request(endpoint, env)
 
             endpoint_name = f"{endpoint.__name__}:{method}:{framework_path}"
@@ -339,9 +336,10 @@ class MyFrameworkRouter(BaseAdapter):
                 methods=[method]
             )
 
-    def build_framework_response(self, response: Response) -> MFResponse:
-        mf_response = MFResponse(response.content)
-        mf_response.status_code = response.status_code
+    def build_framework_response(self, response: WireResponse) -> MFResponse:
+        # response.body is already-encoded bytes; headers include Content-Type
+        mf_response = MFResponse(response.body if response.body is not None else b"")
+        mf_response.status_code = response.status
         for key, value in response.headers.items():
             mf_response.headers[key] = value
         return mf_response
@@ -435,13 +433,29 @@ class RequestEnvelope:
 
 ### Response
 
-FastOpenAPI's response container (from `fastopenapi.core.types`):
+FastOpenAPI's response container (from `fastopenapi.core.types`). This is what endpoints
+return and what `ResponseBuilder` produces before serialization:
 
 ```python
 class Response:
-    content: Any           # Response body
+    content: Any           # Response body (Python object, not yet encoded)
     status_code: int       # HTTP status code
     headers: dict[str, str] # Response headers
+```
+
+### WireResponse
+
+The finalized, wire-level response your adapter actually receives in
+`build_framework_response` (from `fastopenapi.response.serializer`). The body is already
+encoded and the headers already include `Content-Type` — the adapter only wraps it, it does
+not serialize:
+
+```python
+@dataclass
+class WireResponse:
+    body: bytes | None      # Already-encoded body (None for 204/304)
+    status: int             # HTTP status code
+    headers: dict[str, str] # Complete headers, Content-Type included
 ```
 
 ## Best Practices

@@ -13,13 +13,20 @@ Install dependencies with:
 # Fork the repo on GitHub first, then:
 git clone https://github.com/yourusername/fastopenapi.git
 cd fastopenapi
-poetry install
+poetry install --all-extras
 ```
 
-If you don't use `poetry`, you can install manually from `pyproject.toml`:
+`poetry install` already pulls in the dev tools (the `dev` group); adding `--all-extras`
+also installs every framework (aiohttp, Django, Falcon, Flask, Quart, Sanic, Starlette,
+Tornado) so the full test suite can run.
+
+If you don't use `poetry`, install the package in editable mode with the framework extras
+you need plus the dev tools manually (there is no `dev` extra — the dev tools live in
+Poetry's `dev` group):
 
 ```bash
-pip install -e .[dev]
+pip install -e ".[aiohttp,falcon,flask,quart,sanic,starlette,tornado,django]"
+pip install pytest pytest-asyncio anyio trio httpx coverage black flake8 isort pre-commit mypy
 ```
 
 ---
@@ -30,7 +37,7 @@ pip install -e .[dev]
 - `examples/` — examples for different frameworks
 - `tests/` — tests for each supported framework
 - `benchmarks/` — performance comparisons
-- `docs/` — documentation in multiple languages
+- `docs/` — documentation (English)
 
 ---
 

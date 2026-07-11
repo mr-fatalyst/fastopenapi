@@ -264,7 +264,7 @@ def get_current_user_jwt(
             raise AuthenticationError("Invalid token payload")
     except jwt.ExpiredSignatureError:
         raise AuthenticationError("Token expired")
-    except jwt.JWTError:
+    except jwt.InvalidTokenError:
         raise AuthenticationError("Invalid token")
 
     # Get user from database
@@ -377,8 +377,8 @@ def moderate_posts(moderator = Depends(require_role(UserRole.MODERATOR))):
 from fastopenapi import Security, SecurityScopes
 
 def verify_token_scopes(
-    authorization: str = Header(..., alias="Authorization"),
     security_scopes: SecurityScopes,
+    authorization: str = Header(..., alias="Authorization"),
 ):
     """Verify token and check scopes"""
     if not authorization or not authorization.startswith("Bearer "):
@@ -390,7 +390,7 @@ def verify_token_scopes(
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         user_id = payload.get("sub")
         token_scopes = payload.get("scopes", [])
-    except jwt.JWTError:
+    except jwt.InvalidTokenError:
         raise AuthenticationError("Invalid token")
 
     # Check if token has required scopes
