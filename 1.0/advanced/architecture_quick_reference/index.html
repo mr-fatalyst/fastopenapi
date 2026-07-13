@@ -23,7 +23,7 @@
       
       
       <link rel="icon" href="../../img/favicon.png">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.5">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
     
     
       
@@ -2677,7 +2677,7 @@
 <tr>
 <td>Dependency</td>
 <td>Request-scoped</td>
-<td>(func, request)</td>
+<td>(func, request, scopes)</td>
 <td>Automatic (WeakKeyDictionary)</td>
 <td>DI results</td>
 </tr>
@@ -2716,7 +2716,7 @@
     Thread Safety
       Locked caches
       WeakKeyDictionary
-      Per-function locks
+      Single-threaded per request
     Performance
       Multiple cache layers
       Lazy generation

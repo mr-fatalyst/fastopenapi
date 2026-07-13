@@ -23,7 +23,7 @@
       
       
       <link rel="icon" href="../../img/favicon.png">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.5">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
     
     
       
@@ -3191,14 +3191,20 @@
 </tr>
 <tr>
 <td><code>security_scheme</code></td>
-<td>SecuritySchemeType | None</td>
-<td>BEARER_JWT</td>
-<td>Default security scheme</td>
+<td>SecuritySchemeType | dict | None</td>
+<td>None</td>
+<td>Optional security scheme (opt-in; no default)</td>
+</tr>
+<tr>
+<td><code>debug</code></td>
+<td>bool</td>
+<td>False</td>
+<td>Include 5xx exception details in the response body</td>
 </tr>
 </tbody>
 </table>
 <blockquote>
-<p><strong>Note:</strong> Setting any URL to <code>None</code> disables all documentation endpoints at once.</p>
+<p><strong>Note:</strong> Setting <code>openapi_url=None</code> disables all documentation endpoints at once. Setting <code>docs_url=None</code> disables only Swagger UI; <code>redoc_url=None</code> disables only ReDoc.</p>
 </blockquote>
 <h2 id="tags">Tags<a class="headerlink" href="#tags" title="Permanent link">&para;</a></h2>
 <p>Organize endpoints with tags:</p>
@@ -3521,12 +3527,13 @@
 </span></code></pre></div>
 <h2 id="documentation-ui-customization">Documentation UI Customization<a class="headerlink" href="#documentation-ui-customization" title="Permanent link">&para;</a></h2>
 <h3 id="disable-documentation">Disable Documentation<a class="headerlink" href="#disable-documentation" title="Permanent link">&para;</a></h3>
-<p>To disable all documentation endpoints, set any URL to <code>None</code>:</p>
+<p>To disable <strong>all</strong> documentation endpoints, set <code>openapi_url=None</code>:</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-22-1"><a id="__codelineno-22-1" name="__codelineno-22-1" href="#__codelineno-22-1"></a><span class="n">router</span> <span class="o">=</span> <span class="n">FlaskRouter</span><span class="p">(</span>
 </span><span id="__span-22-2"><a id="__codelineno-22-2" name="__codelineno-22-2" href="#__codelineno-22-2"></a>    <span class="n">app</span><span class="o">=</span><span class="n">app</span><span class="p">,</span>
-</span><span id="__span-22-3"><a id="__codelineno-22-3" name="__codelineno-22-3" href="#__codelineno-22-3"></a>    <span class="n">docs_url</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>      <span class="c1"># Disables all: Swagger UI, ReDoc, and OpenAPI JSON</span>
+</span><span id="__span-22-3"><a id="__codelineno-22-3" name="__codelineno-22-3" href="#__codelineno-22-3"></a>    <span class="n">openapi_url</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>   <span class="c1"># Disables all: Swagger UI, ReDoc, and OpenAPI JSON</span>
 </span><span id="__span-22-4"><a id="__codelineno-22-4" name="__codelineno-22-4" href="#__codelineno-22-4"></a><span class="p">)</span>
 </span></code></pre></div>
+<p>To disable an individual page, set only its URL to <code>None</code> (<code>docs_url=None</code> → Swagger UI only, <code>redoc_url=None</code> → ReDoc only).</p>
 <h3 id="custom-documentation-paths">Custom Documentation Paths<a class="headerlink" href="#custom-documentation-paths" title="Permanent link">&para;</a></h3>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-23-1"><a id="__codelineno-23-1" name="__codelineno-23-1" href="#__codelineno-23-1"></a><span class="n">router</span> <span class="o">=</span> <span class="n">FlaskRouter</span><span class="p">(</span>
 </span><span id="__span-23-2"><a id="__codelineno-23-2" name="__codelineno-23-2" href="#__codelineno-23-2"></a>    <span class="n">app</span><span class="o">=</span><span class="n">app</span><span class="p">,</span>

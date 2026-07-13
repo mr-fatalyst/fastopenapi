@@ -23,7 +23,7 @@
       
       
       <link rel="icon" href="../../img/favicon.png">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.5">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
     
     
       
@@ -2397,10 +2397,16 @@ This guide explains how to get started, make contributions, write commits, open 
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="c1"># Fork the repo on GitHub first, then:</span>
 </span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>git<span class="w"> </span>clone<span class="w"> </span>https://github.com/yourusername/fastopenapi.git
 </span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="nb">cd</span><span class="w"> </span>fastopenapi
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>poetry<span class="w"> </span>install
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>poetry<span class="w"> </span>install<span class="w"> </span>--all-extras
 </span></code></pre></div>
-<p>If you don't use <code>poetry</code>, you can install manually from <code>pyproject.toml</code>:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </span>.<span class="o">[</span>dev<span class="o">]</span>
+<p><code>poetry install</code> already pulls in the dev tools (the <code>dev</code> group); adding <code>--all-extras</code>
+also installs every framework (aiohttp, Django, Falcon, Flask, Quart, Sanic, Starlette,
+Tornado) so the full test suite can run.</p>
+<p>If you don't use <code>poetry</code>, install the package in editable mode with the framework extras
+you need plus the dev tools manually (there is no <code>dev</code> extra — the dev tools live in
+Poetry's <code>dev</code> group):</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </span><span class="s2">&quot;.[aiohttp,falcon,flask,quart,sanic,starlette,tornado,django]&quot;</span>
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>pip<span class="w"> </span>install<span class="w"> </span>pytest<span class="w"> </span>pytest-asyncio<span class="w"> </span>anyio<span class="w"> </span>trio<span class="w"> </span>httpx<span class="w"> </span>coverage<span class="w"> </span>black<span class="w"> </span>flake8<span class="w"> </span>isort<span class="w"> </span>pre-commit<span class="w"> </span>mypy
 </span></code></pre></div>
 <hr />
 <h2 id="project-structure">Project Structure<a class="headerlink" href="#project-structure" title="Permanent link">&para;</a></h2>
@@ -2409,7 +2415,7 @@ This guide explains how to get started, make contributions, write commits, open 
 <li><code>examples/</code> — examples for different frameworks</li>
 <li><code>tests/</code> — tests for each supported framework</li>
 <li><code>benchmarks/</code> — performance comparisons</li>
-<li><code>docs/</code> — documentation in multiple languages</li>
+<li><code>docs/</code> — documentation (English)</li>
 </ul>
 <hr />
 <h2 id="running-tests">Running Tests<a class="headerlink" href="#running-tests" title="Permanent link">&para;</a></h2>

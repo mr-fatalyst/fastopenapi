@@ -23,7 +23,7 @@
       
       
       <link rel="icon" href="../../img/favicon.png">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.5">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
     
     
       
@@ -3250,7 +3250,7 @@
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-19-1"><a id="__codelineno-19-1" name="__codelineno-19-1" href="#__codelineno-19-1"></a>python<span class="w"> </span>main.py
 </span></code></pre></div>
 <h3 id="production-with-gunicorn">Production with Gunicorn<a class="headerlink" href="#production-with-gunicorn" title="Permanent link">&para;</a></h3>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-20-1"><a id="__codelineno-20-1" name="__codelineno-20-1" href="#__codelineno-20-1"></a>pip<span class="w"> </span>install<span class="w"> </span>gunicorn<span class="w"> </span>aiohttp-gunicorn
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-20-1"><a id="__codelineno-20-1" name="__codelineno-20-1" href="#__codelineno-20-1"></a>pip<span class="w"> </span>install<span class="w"> </span>gunicorn<span class="w">  </span><span class="c1"># aiohttp already ships the GunicornWebWorker</span>
 </span><span id="__span-20-2"><a id="__codelineno-20-2" name="__codelineno-20-2" href="#__codelineno-20-2"></a>
 </span><span id="__span-20-3"><a id="__codelineno-20-3" name="__codelineno-20-3" href="#__codelineno-20-3"></a>gunicorn<span class="w"> </span>main:app<span class="w"> </span>--bind<span class="w"> </span><span class="m">0</span>.0.0.0:8000<span class="w"> </span>--worker-class<span class="w"> </span>aiohttp.GunicornWebWorker<span class="w"> </span>--workers<span class="w"> </span><span class="m">4</span>
 </span></code></pre></div>
