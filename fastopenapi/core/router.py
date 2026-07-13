@@ -1,5 +1,5 @@
 from collections.abc import Callable
-from typing import Any
+from typing import Any, TypeVar
 
 from fastopenapi.core.constants import (
     SECURITY_SCHEME_NAMES,
@@ -7,6 +7,10 @@ from fastopenapi.core.constants import (
     SUPPORTED_METHODS,
     SecuritySchemeType,
 )
+
+# Route decorators return the endpoint unchanged; preserving its exact
+# type keeps py.typed useful for user code calling the endpoint directly
+CallableT = TypeVar("CallableT", bound=Callable[..., Any])
 
 
 class RouteInfo:
@@ -141,33 +145,33 @@ class BaseRouter:
         return self._routes
 
     # HTTP method decorators
-    def get(self, path: str, **meta: Any) -> Callable[..., Any]:
+    def get(self, path: str, **meta: Any) -> Callable[[CallableT], CallableT]:
         return self._create_route_decorator(path, "GET", meta)
 
-    def post(self, path: str, **meta: Any) -> Callable[..., Any]:
+    def post(self, path: str, **meta: Any) -> Callable[[CallableT], CallableT]:
         return self._create_route_decorator(path, "POST", meta)
 
-    def put(self, path: str, **meta: Any) -> Callable[..., Any]:
+    def put(self, path: str, **meta: Any) -> Callable[[CallableT], CallableT]:
         return self._create_route_decorator(path, "PUT", meta)
 
-    def patch(self, path: str, **meta: Any) -> Callable[..., Any]:
+    def patch(self, path: str, **meta: Any) -> Callable[[CallableT], CallableT]:
         return self._create_route_decorator(path, "PATCH", meta)
 
-    def delete(self, path: str, **meta: Any) -> Callable[..., Any]:
+    def delete(self, path: str, **meta: Any) -> Callable[[CallableT], CallableT]:
         return self._create_route_decorator(path, "DELETE", meta)
 
-    def head(self, path: str, **meta: Any) -> Callable[..., Any]:
+    def head(self, path: str, **meta: Any) -> Callable[[CallableT], CallableT]:
         return self._create_route_decorator(path, "HEAD", meta)
 
-    def options(self, path: str, **meta: Any) -> Callable[..., Any]:
+    def options(self, path: str, **meta: Any) -> Callable[[CallableT], CallableT]:
         return self._create_route_decorator(path, "OPTIONS", meta)
 
     def _create_route_decorator(
         self, path: str, method: str, meta: dict[str, Any]
-    ) -> Callable[..., Any]:
+    ) -> Callable[[CallableT], CallableT]:
         """Create a decorator for route registration"""
 
-        def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
+        def decorator(func: CallableT) -> CallableT:
             meta["method"] = method
             # Introspection convenience only; the route itself carries meta
             setattr(func, "__route_meta__", meta)

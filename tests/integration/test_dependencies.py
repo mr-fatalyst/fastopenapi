@@ -57,6 +57,28 @@ def test_yield_dependency_open_during_endpoint(client):
     assert resp.json() == {"open": True}
 
 
+def test_yield_dependency_commit_on_success(client):
+    client.get("/di-tx-log")  # reset state shared across framework apps
+    resp = client.get("/di-tx-ok")
+    assert_status(resp, 200)
+    resp = client.get("/di-tx-log")
+    assert resp.json() == {"log": ["commit"]}
+
+
+def test_yield_dependency_rollback_on_endpoint_error(client):
+    client.get("/di-tx-log")  # reset
+    resp = client.get("/di-tx-boom")
+    assert_status(resp, 500)
+    resp = client.get("/di-tx-log")
+    assert resp.json() == {"log": ["rollback"]}
+
+
+def test_yield_dependency_commit_failure_returns_500(client):
+    # A failed commit must not produce a silent 200
+    resp = client.get("/di-tx-commit-fail")
+    assert_status(resp, 500)
+
+
 def test_security_scopes_are_per_declaration(client):
     # Same dependency with different scopes must not share a cached result
     resp = client.get("/di-scopes")

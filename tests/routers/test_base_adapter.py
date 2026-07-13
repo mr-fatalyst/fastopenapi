@@ -1,10 +1,17 @@
+import asyncio
 import threading
 
 import pytest
+from flask import Flask
+from flask import request as flask_request
 from pydantic import BaseModel, TypeAdapter
+from starlette.requests import Request
 
+from fastopenapi import Depends
 from fastopenapi.errors.exceptions import InternalServerError
+from fastopenapi.routers import FlaskRouter, StarletteRouter
 from fastopenapi.routers.base import BaseAdapter
+from fastopenapi.routers.common import RequestEnvelope
 
 
 class User(BaseModel):
@@ -280,3 +287,107 @@ class TestCacheConcurrency:
         finally:
             # Restore original lock
             BaseAdapter._cache_lock = original_lock
+
+
+class TestPipelineCancellation:
+    """A cancelled request must not finish yield dependencies as success"""
+
+    @pytest.mark.asyncio
+    async def test_cancelled_request_does_not_commit(self):
+        log = []
+
+        def tx():
+            try:
+                yield "tx"
+                log.append("commit")
+            except asyncio.CancelledError:
+                log.append("cancelled")
+                raise
+
+        async def slow_endpoint(t=Depends(tx)):
+            await asyncio.sleep(5)
+
+        router = StarletteRouter()
+        scope = {
+            "type": "http",
+            "method": "GET",
+            "path": "/",
+            "headers": [],
+            "query_string": b"",
+        }
+        env = RequestEnvelope(request=Request(scope), path_params=None)
+
+        task = asyncio.create_task(
+            router.handle_request_async(slow_endpoint, env, {"method": "GET"})
+        )
+        await asyncio.sleep(0.05)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+        # CancelledError was thrown into the dependency, not swallowed
+        assert log == ["cancelled"]
+
+
+class TestHandleRequestMetaFallback:
+    """Direct handle_request calls without route meta fall back to the
+    endpoint attribute (adapters always pass meta explicitly)"""
+
+    def test_sync_meta_fallback(self):
+        app = Flask("meta-fallback")
+        router = FlaskRouter(app=app)
+
+        @router.get("/x")
+        def x():
+            return {"ok": True}
+
+        with app.test_request_context("/x"):
+            env = RequestEnvelope(request=flask_request, path_params={})
+            response = router.handle_request(x, env)  # no meta argument
+
+        assert response.status_code == 200
+
+    @pytest.mark.asyncio
+    async def test_async_meta_fallback(self):
+        router = StarletteRouter()
+
+        @router.get("/x")
+        async def x():
+            return {"ok": True}
+
+        scope = {
+            "type": "http",
+            "method": "GET",
+            "path": "/x",
+            "headers": [],
+            "query_string": b"",
+        }
+        env = RequestEnvelope(request=Request(scope), path_params=None)
+        response = await router.handle_request_async(x, env)  # no meta
+
+        assert response.status_code == 200
+
+    def test_sync_base_exception_reaches_dependencies(self):
+        """KeyboardInterrupt & co. trigger rollback and propagate"""
+        log = []
+
+        def tx():
+            try:
+                yield "t"
+                log.append("commit")
+            except BaseException:
+                log.append("rollback")
+                raise
+
+        app = Flask("base-exc")
+        router = FlaskRouter(app=app)
+
+        def bad(t=Depends(tx)):
+            raise KeyboardInterrupt()
+
+        with app.test_request_context("/"):
+            env = RequestEnvelope(request=flask_request, path_params={})
+            with pytest.raises(KeyboardInterrupt):
+                router.handle_request(bad, env, {"method": "GET"})
+
+        assert log == ["rollback"]

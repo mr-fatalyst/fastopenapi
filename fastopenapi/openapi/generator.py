@@ -1,4 +1,5 @@
 import inspect
+import logging
 import re
 import threading
 import types
@@ -6,6 +7,7 @@ import typing
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from functools import lru_cache
+from http import HTTPStatus
 from typing import Any
 
 from pydantic import BaseModel
@@ -32,9 +34,19 @@ from fastopenapi.core.params import (
 )
 from fastopenapi.core.router import BaseRouter, RouteInfo
 
+logger = logging.getLogger("fastopenapi")
+
 # Thread-safe compiled regex patterns
 PATH_PARAM_PATTERN = re.compile(r"<(?:[^:>]+:)?([^>]+)>")
 OPENAPI_PATH_PATTERN = re.compile(r"{(\w+)}")
+
+
+def _status_phrase(status_code: Any) -> str:
+    """Human phrase for a status code; non-standard codes get a generic one"""
+    try:
+        return HTTPStatus(int(status_code)).phrase
+    except ValueError:
+        return f"Status {status_code}"
 
 
 @lru_cache(maxsize=256)
@@ -668,7 +680,14 @@ class ParameterProcessor:
         self, param_name: str, param: inspect.Parameter
     ) -> dict[str, Any]:
         """Build schema for file field"""
-        schema = {"type": "string", "format": "binary"}
+        file_schema: dict[str, Any] = {"type": "string", "format": "binary"}
+
+        # list[FileUpload] accepts several files at runtime — document
+        # it as an array of binaries, not a single one
+        if typing.get_origin(param.annotation) is list:
+            schema: dict[str, Any] = {"type": "array", "items": file_schema}
+        else:
+            schema = file_schema
 
         if isinstance(param.default, File) and param.default.description:
             schema["description"] = param.default.description
@@ -810,14 +829,24 @@ class ResponseSectionBuilder:
     def __init__(self, schema_builder: SchemaBuilder):
         self.schema_builder = schema_builder
 
+    @staticmethod
+    def _unwrap_optional(annotation: Any) -> Any:
+        """Return T for ``T | None`` annotations, the annotation otherwise"""
+        origin = typing.get_origin(annotation)
+        if origin is typing.Union or (
+            hasattr(types, "UnionType") and origin is types.UnionType
+        ):
+            args = [a for a in typing.get_args(annotation) if a is not type(None)]
+            if len(args) == 1:
+                return args[0]
+        return annotation
+
     def build_responses(
         self, route: RouteInfo, has_security: bool = False
     ) -> dict[str, Any]:
         """Build responses section with enhanced error handling"""
-        from http import HTTPStatus
-
         status_code = str(route.meta.get("status_code", 200))
-        responses = {status_code: {"description": HTTPStatus(int(status_code)).phrase}}
+        responses = {status_code: {"description": _status_phrase(status_code)}}
 
         # Add response model if specified
         self._add_response_model(
@@ -835,6 +864,31 @@ class ResponseSectionBuilder:
     ) -> None:
         """Add response model to responses"""
         if not response_model:
+            return
+
+        # Mirror the runtime serializer: plain str is served as text/plain,
+        # bytes as application/octet-stream. For `str | None` the media
+        # type depends on the value — None is serialized as JSON null —
+        # so both media types are documented. Mixed unions (e.g. str | int)
+        # stay application/json
+        unwrapped = self._unwrap_optional(response_model)
+        if unwrapped is str or unwrapped is bytes:
+            if unwrapped is str:
+                content = {"text/plain": {"schema": {"type": "string"}}}
+            else:
+                content = {
+                    "application/octet-stream": {
+                        "schema": {"type": "string", "format": "binary"}
+                    }
+                }
+            if unwrapped is not response_model:
+                null_schema: dict[str, Any] = (
+                    {"type": "null"}
+                    if self.schema_builder._openapi_31
+                    else {"nullable": True}
+                )
+                content["application/json"] = {"schema": null_schema}
+            responses[status_code]["content"] = content
             return
 
         origin = typing.get_origin(response_model)
@@ -876,15 +930,13 @@ class ResponseSectionBuilder:
         self, responses: dict[str, Any], route: RouteInfo
     ) -> None:
         """Add custom error responses"""
-        from http import HTTPStatus
-
         custom_errors = route.meta.get("response_errors")
         custom_responses = route.meta.get("responses")
 
         if custom_errors:
             for error_code in custom_errors:
                 responses[str(error_code)] = {
-                    "description": HTTPStatus(error_code).phrase,
+                    "description": _status_phrase(error_code),
                     "content": {
                         "application/json": {
                             "schema": {"$ref": "#/components/schemas/ErrorSchema"}
@@ -898,7 +950,7 @@ class ResponseSectionBuilder:
                 model = None
                 if isinstance(response_info, dict):
                     description = response_info.get(
-                        "description", HTTPStatus(int(status_code)).phrase
+                        "description", _status_phrase(status_code)
                     )
                     model = response_info.get("model")
                     schema = (
@@ -907,7 +959,7 @@ class ResponseSectionBuilder:
                         else {"$ref": "#/components/schemas/ErrorSchema"}
                     )
                 else:
-                    description = HTTPStatus(int(status_code)).phrase
+                    description = _status_phrase(status_code)
                     schema = {"$ref": "#/components/schemas/ErrorSchema"}
 
                 if str_code in responses:
@@ -1001,6 +1053,16 @@ class OpenAPIGenerator:
         """
         explicit: str | None = route.meta.get("operation_id")
         if explicit:
+            if explicit in self._operation_ids:
+                # Explicit ids are kept verbatim, but the schema becomes
+                # invalid — tell the developer instead of hiding it
+                logger.warning(
+                    "Duplicate operationId '%s' (%s %s); "
+                    "operationIds must be unique within the schema",
+                    explicit,
+                    route.method,
+                    route.path,
+                )
             self._operation_ids.add(explicit)
             return explicit
 
@@ -1017,22 +1079,44 @@ class OpenAPIGenerator:
         """Convert path format to OpenAPI format with caching"""
         return _convert_path_to_openapi(path)
 
+    def _iter_security_dependencies(self, route: RouteInfo) -> Iterator[Security]:
+        """Yield the route's Security markers, including ones nested inside
+        dependency functions — the runtime resolves those recursively, so
+        the operation is protected even when Security is not in the
+        endpoint signature itself"""
+        seen: set[Any] = set()
+
+        def walk(func: Any) -> Iterator[Security]:
+            try:
+                sig = inspect.signature(func)
+            except (TypeError, ValueError):
+                return
+            for param in sig.parameters.values():
+                param = unwrap_annotated_parameter(param)
+                default = param.default
+                if not isinstance(default, (Depends, Security)):
+                    continue
+                if isinstance(default, Security):
+                    yield default
+                dep = default.dependency
+                if dep is None and param.annotation is not inspect.Parameter.empty:
+                    dep = param.annotation
+                if dep is None or dep in seen:
+                    continue
+                seen.add(dep)
+                yield from walk(dep)
+
+        yield from walk(route.endpoint)
+
     def _has_security_dependency(self, route: RouteInfo) -> bool:
-        """Check if route has Security dependencies"""
-        sig = inspect.signature(route.endpoint)
-        for param in sig.parameters.values():
-            if isinstance(unwrap_annotated_parameter(param).default, Security):
-                return True
-        return False
+        """Check if route has Security dependencies (direct or nested)"""
+        return next(self._iter_security_dependencies(route), None) is not None
 
     def _extract_security_scopes(self, route: RouteInfo) -> list[str]:
-        """Extract scopes from Security dependencies"""
-        sig = inspect.signature(route.endpoint)
+        """Extract scopes from Security dependencies (direct or nested)"""
         all_scopes = []
-        for param in sig.parameters.values():
-            default = unwrap_annotated_parameter(param).default
-            if isinstance(default, Security):
-                all_scopes.extend(default.scopes)
+        for security in self._iter_security_dependencies(route):
+            all_scopes.extend(security.scopes)
         return list(set(all_scopes))  # Remove duplicates
 
     def _build_operation(self, route: RouteInfo) -> dict[str, Any]:
@@ -1055,16 +1139,28 @@ class OpenAPIGenerator:
         # Add optional fields
         self._add_optional_operation_fields(operation, route, parameters, request_body)
 
-        # Auto-add security
+        # Auto-add security: Security() is not bound to a specific scheme,
+        # so with several registered schemes each is listed as an accepted
+        # alternative (OR semantics); explicit meta security always wins.
+        # Per the spec, scope lists are only valid for oauth2/openIdConnect
+        # schemes — other types get an empty array
         if (
             not operation.get("security")
             and self._has_security_dependency(route)
             and hasattr(self.router, "_security_schemes")
             and self.router._security_schemes
         ):
-            scheme_name = list(self.router._security_schemes.keys())[0]
             scopes = self._extract_security_scopes(route)
-            operation["security"] = [{scheme_name: scopes}]
+            operation["security"] = [
+                {
+                    name: (
+                        scopes
+                        if scheme.get("type") in ("oauth2", "openIdConnect")
+                        else []
+                    )
+                }
+                for name, scheme in self.router._security_schemes.items()
+            ]
 
         return operation
 

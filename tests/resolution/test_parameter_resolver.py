@@ -1438,3 +1438,18 @@ class TestModelWithQueryMarker:
 
         assert result["filters"].term == "abc"
         assert result["filters"].limit == 5
+
+
+@pytest.mark.asyncio
+async def test_resolve_async_method_fallback_from_route_meta():
+    """resolve_async without an explicit method falls back to __route_meta__"""
+
+    def endpoint(q: str = Query(None)):
+        return q
+
+    endpoint.__route_meta__ = {"method": "GET"}
+    request_data = RequestData(query_params={"q": "x"})
+
+    result = await ParameterResolver.resolve_async(endpoint, request_data)
+
+    assert result == {"q": "x"}

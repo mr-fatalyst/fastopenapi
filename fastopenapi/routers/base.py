@@ -116,6 +116,7 @@ class BaseAdapter(BaseRouter, ABC):
         if meta is None:
             meta = getattr(endpoint, "__route_meta__", {})
         request_data: RequestData | None = None
+        error: BaseException | None = None
         try:
             profile = ExtractionProfileBuilder.get(endpoint)
             request_data = self.extractor_cls.extract_request_data(env, profile)
@@ -123,14 +124,25 @@ class BaseAdapter(BaseRouter, ABC):
                 endpoint, request_data, meta.get("method")
             )
             result = endpoint(**kwargs)
-            return self._finalize_result(result, meta)
+            response = self._finalize_result(result, meta)
+            # Teardown runs before the response leaves the adapter, so a
+            # failed commit-after-yield becomes a 500, not a silent 200
+            dependency_resolver.close(request_data)
+            return response
         except Exception as e:
+            error = e
             return self.handle_exception(e)
+        except BaseException as e:
+            # KeyboardInterrupt & co. must still reach the dependencies
+            # (rollback, not commit), then propagate to the framework
+            error = e
+            raise
         finally:
-            # Run generator-dependency cleanup after the endpoint (and its
-            # response) are done, mirroring FastAPI's yield semantics
+            # Error-path teardown, mirroring FastAPI's yield semantics:
+            # the pipeline error is thrown into the generators for
+            # rollback handling (no-op after the success-path close above)
             if request_data is not None:
-                dependency_resolver.close(request_data)
+                dependency_resolver.close(request_data, error)
 
     async def handle_request_async(
         self,
@@ -142,6 +154,7 @@ class BaseAdapter(BaseRouter, ABC):
         if meta is None:
             meta = getattr(endpoint, "__route_meta__", {})
         request_data: RequestData | None = None
+        error: BaseException | None = None
         try:
             profile = ExtractionProfileBuilder.get(endpoint)
             request_data = await self.extractor_async_cls.extract_request_data(
@@ -154,12 +167,21 @@ class BaseAdapter(BaseRouter, ABC):
                 result = await endpoint(**kwargs)
             else:
                 result = endpoint(**kwargs)
-            return self._finalize_result(result, meta)
+            response = self._finalize_result(result, meta)
+            # Success-path teardown: a failed commit becomes a 500
+            await dependency_resolver.aclose(request_data)
+            return response
         except Exception as e:
+            error = e
             return self.handle_exception(e)
+        except BaseException as e:
+            # A cancelled request (client disconnect) must not commit:
+            # CancelledError is thrown into the dependencies, then re-raised
+            error = e
+            raise
         finally:
             if request_data is not None:
-                await dependency_resolver.aclose(request_data)
+                await dependency_resolver.aclose(request_data, error)
 
     def _finalize_result(self, result: Any, meta: dict[str, Any]) -> Any:
         """Validate and convert an endpoint result into a framework response"""

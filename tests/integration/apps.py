@@ -80,6 +80,24 @@ def db_session():
         session["open"] = False
 
 
+# Shared across apps; the /di-tx-log endpoint drains it, and tests reset
+# it before use, so framework ordering does not matter
+TX_LOG: list = []
+
+
+def tx_session():
+    try:
+        yield "tx"
+        TX_LOG.append("commit")
+    except Exception:
+        TX_LOG.append("rollback")
+
+
+def failing_commit():
+    yield "tx"
+    raise RuntimeError("commit failed")
+
+
 def scoped_access(security_scopes: SecurityScopes) -> list:
     return list(security_scopes.scopes)
 
@@ -256,6 +274,25 @@ def register_routes(router) -> None:  # noqa: C901
         # The yielded resource must still be open while the endpoint runs;
         # cleanup happens after the response is built
         return {"open": db["open"]}
+
+    @router.get("/di-tx-ok")
+    def di_tx_ok(tx: str = Depends(tx_session)):
+        return {"tx": tx}
+
+    @router.get("/di-tx-boom")
+    def di_tx_boom(tx: str = Depends(tx_session)):
+        raise ValueError("boom")
+
+    @router.get("/di-tx-log")
+    def di_tx_log():
+        log = list(TX_LOG)
+        TX_LOG.clear()
+        return {"log": log}
+
+    @router.get("/di-tx-commit-fail")
+    def di_tx_commit_fail(tx: str = Depends(failing_commit)):
+        # The failing commit-after-yield must turn this into a 500
+        return {"ok": True}
 
     @router.get("/di-scopes")
     def di_scopes(

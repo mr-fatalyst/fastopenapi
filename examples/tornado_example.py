@@ -3,7 +3,7 @@ import asyncio
 from pydantic import BaseModel
 from tornado.web import Application
 
-from fastopenapi.routers.tornado import TornadoRouter
+from fastopenapi.routers import TornadoRouter
 
 app = Application()
 

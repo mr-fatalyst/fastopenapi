@@ -83,46 +83,122 @@ class DependencyResolver:
                     "method": method,
                 }
 
-    def close(self, request_data: RequestData) -> None:
+    def close(
+        self, request_data: RequestData, exc: BaseException | None = None
+    ) -> None:
         """
-        Close generator dependencies opened for a request
+        Finish generator dependencies opened for a request
 
-        Runs code after ``yield`` (via ``gen.close()``) in reverse creation
-        order and drops the request cache entry. No-op when the request has
-        no cache entry.
+        Context-manager semantics, in reverse creation order: on success the
+        code after ``yield`` executes; on the error path ``exc`` (the
+        endpoint/pipeline exception) is thrown into the generator so
+        ``except``/rollback blocks around ``yield`` work as in FastAPI.
+        As with ``contextlib.ExitStack``, a dependency that handles the
+        exception suppresses it for the dependencies finishing after it,
+        and a failing teardown becomes the exception for the remaining ones.
+
+        When the pipeline succeeded (``exc is None``) an unsuppressed
+        teardown failure is re-raised so the adapter turns it into a 500;
+        on the error path failures are logged without masking ``exc``.
+        Drops the request cache entry; no-op when the request has none.
         """
         with self._request_cache_lock:
             cache = self._request_cache.pop(request_data, None)
         if cache is None:
             return
+        current = exc
         for gen in reversed(cache["generators"]):
             try:
-                gen.close()
-            except Exception:
-                # The response is already built; surface the failure in
-                # logs instead of masking it silently
+                if self._finish_sync_generator(gen, current):
+                    current = None
+            except BaseException as cleanup_exc:
                 logger.exception(
                     "Cleanup of dependency '%s' failed",
                     getattr(gen, "__name__", repr(gen)),
                 )
+                current = cleanup_exc
+        if exc is None and current is not None:
+            raise current
 
-    async def aclose(self, request_data: RequestData) -> None:
+    async def aclose(
+        self, request_data: RequestData, exc: BaseException | None = None
+    ) -> None:
         """Async variant of ``close`` (also handles async generators)"""
         with self._request_cache_lock:
             cache = self._request_cache.pop(request_data, None)
         if cache is None:
             return
+        current = exc
         for gen in reversed(cache["generators"]):
             try:
                 if inspect.isasyncgen(gen):
-                    await gen.aclose()
+                    suppressed = await self._finish_async_generator(gen, current)
                 else:
-                    gen.close()
-            except Exception:
+                    suppressed = self._finish_sync_generator(gen, current)
+                if suppressed:
+                    current = None
+            except BaseException as cleanup_exc:
                 logger.exception(
                     "Cleanup of dependency '%s' failed",
                     getattr(gen, "__name__", repr(gen)),
                 )
+                current = cleanup_exc
+        if exc is None and current is not None:
+            raise current
+
+    def _finish_sync_generator(
+        self, gen: Any, exc: BaseException | None = None
+    ) -> bool:
+        """Resume a generator past its ``yield`` (or throw ``exc`` into it)
+
+        Returns True when the generator handled (suppressed) ``exc``.
+        A teardown failure (an exception other than ``exc``) propagates
+        to the caller, which decides whether it may be raised.
+        """
+        try:
+            if exc is not None:
+                gen.throw(exc)
+            else:
+                next(gen)
+        except StopIteration:
+            # Finished cleanly; with exc set that means it was handled
+            return exc is not None
+        except BaseException as cleanup_exc:
+            if cleanup_exc is exc:
+                # The dependency chose not to handle the endpoint error;
+                # its finally blocks have already run
+                return False
+            raise
+        logger.warning(
+            "Dependency '%s' has more than one 'yield'; "
+            "code after the second one is not executed",
+            getattr(gen, "__name__", repr(gen)),
+        )
+        gen.close()
+        return exc is not None
+
+    async def _finish_async_generator(
+        self, gen: Any, exc: BaseException | None = None
+    ) -> bool:
+        """Async variant of ``_finish_sync_generator``"""
+        try:
+            if exc is not None:
+                await gen.athrow(exc)
+            else:
+                await gen.__anext__()
+        except StopAsyncIteration:
+            return exc is not None
+        except BaseException as cleanup_exc:
+            if cleanup_exc is exc:
+                return False
+            raise
+        logger.warning(
+            "Dependency '%s' has more than one 'yield'; "
+            "code after the second one is not executed",
+            getattr(gen, "__name__", repr(gen)),
+        )
+        await gen.aclose()
+        return exc is not None
 
     def _resolve_endpoint_dependencies(
         self, endpoint: Callable[..., Any], request_data: RequestData

@@ -1656,8 +1656,9 @@ class TestDependencyResolver:
         await self.resolver.aclose(self.request_data)
         assert cleanup_called
 
-    def test_sync_generator_cleanup_exception_swallowed(self, caplog):
-        """A failing cleanup is logged but does not break other cleanups"""
+    def test_sync_generator_cleanup_failure_raises_on_success_path(self, caplog):
+        """A failing teardown is logged and re-raised so the adapter can
+        turn the response into a 500; other cleanups still run first"""
         cleanup_log = []
 
         def failing_cleanup_gen():
@@ -1678,15 +1679,15 @@ class TestDependencyResolver:
 
         result = self.resolver.resolve_dependencies(endpoint, self.request_data)
         assert result == {"a": "value", "b": "healthy"}
-        self.resolver.close(self.request_data)
+        with pytest.raises(RuntimeError, match="cleanup exploded"):
+            self.resolver.close(self.request_data)
         assert "cleanup_attempted" in cleanup_log
         assert "healthy_cleanup" in cleanup_log
-        # The failure must not vanish silently
         assert "Cleanup of dependency 'failing_cleanup_gen' failed" in caplog.text
 
     @pytest.mark.asyncio
-    async def test_async_generator_cleanup_exception_swallowed(self, caplog):
-        """A failing async cleanup is logged but does not break other cleanups"""
+    async def test_async_generator_cleanup_failure_raises_on_success_path(self, caplog):
+        """Async variant: a failing teardown is logged and re-raised"""
         cleanup_log = []
 
         async def failing_cleanup_gen():
@@ -1709,7 +1710,8 @@ class TestDependencyResolver:
             endpoint, self.request_data
         )
         assert result == {"a": "value", "b": "healthy"}
-        await self.resolver.aclose(self.request_data)
+        with pytest.raises(RuntimeError, match="async cleanup exploded"):
+            await self.resolver.aclose(self.request_data)
         assert "cleanup_attempted" in cleanup_log
         assert "healthy_cleanup" in cleanup_log
         assert "Cleanup of dependency 'failing_cleanup_gen' failed" in caplog.text
@@ -1902,3 +1904,220 @@ class TestDependencyMethodContext:
     def test_close_unknown_request_is_noop(self):
         resolver = DependencyResolver()
         resolver.close(RequestData())  # must not raise
+
+
+class TestGeneratorContextSemantics:
+    """Finishing yield dependencies follows context-manager semantics:
+    code after yield runs, endpoint errors are thrown into the generator"""
+
+    def setup_method(self):
+        self.resolver = DependencyResolver()
+        self.request_data = RequestData()
+
+    def test_code_after_yield_runs_on_success(self):
+        log = []
+
+        def dep():
+            yield "v"
+            log.append("after-yield")
+
+        def endpoint(d=Depends(dep)):
+            return d
+
+        self.resolver.resolve_dependencies(endpoint, self.request_data)
+        assert log == []
+        self.resolver.close(self.request_data)
+        assert log == ["after-yield"]
+
+    def test_endpoint_error_is_thrown_into_dependency(self):
+        log = []
+
+        def tx():
+            try:
+                yield "session"
+                log.append("commit")
+            except ValueError:
+                log.append("rollback")
+
+        def endpoint(t=Depends(tx)):
+            return t
+
+        self.resolver.resolve_dependencies(endpoint, self.request_data)
+        self.resolver.close(self.request_data, ValueError("endpoint failed"))
+        assert log == ["rollback"]
+
+    def test_unhandled_endpoint_error_runs_finally_quietly(self, caplog):
+        log = []
+
+        def dep():
+            try:
+                yield "v"
+            finally:
+                log.append("cleanup")
+
+        def endpoint(d=Depends(dep)):
+            return d
+
+        self.resolver.resolve_dependencies(endpoint, self.request_data)
+        self.resolver.close(self.request_data, RuntimeError("boom"))
+        assert log == ["cleanup"]
+        # Not handling the endpoint error is normal, not a cleanup failure
+        assert "failed" not in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_async_unhandled_endpoint_error_runs_finally_quietly(self, caplog):
+        log = []
+
+        async def dep():
+            try:
+                yield "v"
+            finally:
+                log.append("cleanup")
+
+        def endpoint(d=Depends(dep)):
+            return d
+
+        await self.resolver.resolve_dependencies_async(endpoint, self.request_data)
+        await self.resolver.aclose(self.request_data, RuntimeError("boom"))
+        assert log == ["cleanup"]
+        # Not handling the endpoint error is normal, not a cleanup failure
+        assert "failed" not in caplog.text
+
+    def test_double_yield_is_logged_and_closed(self, caplog):
+        def dep():
+            yield 1
+            yield 2
+
+        def endpoint(d=Depends(dep)):
+            return d
+
+        self.resolver.resolve_dependencies(endpoint, self.request_data)
+        self.resolver.close(self.request_data)
+        assert "more than one 'yield'" in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_async_commit_and_rollback(self):
+        log = []
+
+        async def tx():
+            try:
+                yield "session"
+                log.append("commit")
+            except ValueError:
+                log.append("rollback")
+
+        def endpoint(t=Depends(tx)):
+            return t
+
+        await self.resolver.resolve_dependencies_async(endpoint, self.request_data)
+        await self.resolver.aclose(self.request_data)
+        assert log == ["commit"]
+
+        log.clear()
+        await self.resolver.resolve_dependencies_async(endpoint, self.request_data)
+        await self.resolver.aclose(self.request_data, ValueError("boom"))
+        assert log == ["rollback"]
+
+    @pytest.mark.asyncio
+    async def test_async_double_yield_is_logged_and_closed(self, caplog):
+        async def dep():
+            yield 1
+            yield 2
+
+        def endpoint(d=Depends(dep)):
+            return d
+
+        await self.resolver.resolve_dependencies_async(endpoint, self.request_data)
+        await self.resolver.aclose(self.request_data)
+        assert "more than one 'yield'" in caplog.text
+
+    def test_cleanup_failure_on_error_path_is_not_raised(self, caplog):
+        """When the pipeline already failed, a teardown failure is logged
+        but must not mask the original error handling"""
+
+        def failing_cleanup_gen():
+            try:
+                yield "v"
+            finally:
+                raise RuntimeError("cleanup exploded")
+
+        def endpoint(a=Depends(failing_cleanup_gen)):
+            return a
+
+        self.resolver.resolve_dependencies(endpoint, self.request_data)
+        self.resolver.close(self.request_data, ValueError("boom"))  # no raise
+        assert "Cleanup of dependency 'failing_cleanup_gen' failed" in caplog.text
+
+    def test_teardown_failure_reaches_outer_dependency(self):
+        """A failing commit becomes the exception for the dependencies
+        finishing after it (their rollback runs), like ExitStack"""
+        log = []
+
+        def outer():
+            try:
+                yield "a"
+                log.append("outer-commit")
+            except RuntimeError:
+                log.append("outer-rollback")
+
+        def failing():
+            yield "b"
+            raise RuntimeError("commit failed")
+
+        def endpoint(a=Depends(outer), b=Depends(failing)):
+            return a, b
+
+        self.resolver.resolve_dependencies(endpoint, self.request_data)
+        # outer handled the teardown failure, so nothing is re-raised
+        self.resolver.close(self.request_data)
+        assert log == ["outer-rollback"]
+
+    def test_suppressed_error_not_passed_to_outer_dependencies(self):
+        log = []
+
+        def outer():
+            try:
+                yield "a"
+                log.append("outer-success")
+            except ValueError:
+                log.append("outer-saw-error")
+
+        def suppressor():
+            try:
+                yield "b"
+            except ValueError:
+                log.append("suppressed")
+
+        def endpoint(a=Depends(outer), b=Depends(suppressor)):
+            return a, b
+
+        self.resolver.resolve_dependencies(endpoint, self.request_data)
+        self.resolver.close(self.request_data, ValueError("boom"))
+        # LIFO: the suppressor finishes first and handles the error, so
+        # the remaining dependency completes on the success path
+        # (contextlib.ExitStack semantics)
+        assert log == ["suppressed", "outer-success"]
+
+    @pytest.mark.asyncio
+    async def test_suppressed_error_not_passed_to_outer_dependencies_async(self):
+        log = []
+
+        async def outer():
+            try:
+                yield "a"
+                log.append("outer-success")
+            except ValueError:
+                log.append("outer-saw-error")
+
+        async def suppressor():
+            try:
+                yield "b"
+            except ValueError:
+                log.append("suppressed")
+
+        def endpoint(a=Depends(outer), b=Depends(suppressor)):
+            return a, b
+
+        await self.resolver.resolve_dependencies_async(endpoint, self.request_data)
+        await self.resolver.aclose(self.request_data, ValueError("boom"))
+        assert log == ["suppressed", "outer-success"]

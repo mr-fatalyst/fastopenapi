@@ -303,6 +303,185 @@ class TestOpenAPIGenerator:
         ]
         assert params == [("page", "query")]
 
+    def test_multi_file_upload_schema_is_array(self):
+        """list[FileUpload] accepts several files — schema shows an array"""
+        from fastopenapi import FileUpload
+
+        @self.router.post("/upload")
+        def upload(files: list[FileUpload] = File(...)):
+            pass
+
+        schema = self.generator.generate()
+        content = schema["paths"]["/upload"]["post"]["requestBody"]["content"]
+        files_schema = content["multipart/form-data"]["schema"]["properties"]["files"]
+        assert files_schema == {
+            "type": "array",
+            "items": {"type": "string", "format": "binary"},
+        }
+
+    def test_nested_security_marks_operation(self):
+        """Security inside a Depends chain protects the operation"""
+
+        def token_check():
+            return "u"
+
+        def current_user(u=Security(token_check, scopes=["read"])):
+            return u
+
+        @self.router.get("/nested")
+        def nested(user=Depends(current_user)):
+            pass
+
+        schema = self.generator.generate()
+        operation = schema["paths"]["/nested"]["get"]
+        # Scope lists are only valid for oauth2/openIdConnect schemes,
+        # so the http-type BearerAuth gets an empty array
+        assert operation["security"] == [{"BearerAuth": []}]
+        assert "401" in operation["responses"]
+
+    def test_oauth2_scheme_keeps_scopes(self):
+        """Scopes stay in the requirement for oauth2 schemes"""
+        oauth2 = {
+            "type": "oauth2",
+            "flows": {"password": {"tokenUrl": "/token", "scopes": {"read": "Read"}}},
+        }
+        router = BaseRouter(security_scheme=oauth2)
+
+        @router.get("/s")
+        def s_ep(user=Security(lambda: "u", scopes=["read"])):
+            pass
+
+        schema = router.openapi
+        assert schema["paths"]["/s"]["get"]["security"] == [{"OAuth2": ["read"]}]
+
+    def test_multiple_schemes_are_listed_as_alternatives(self):
+        """Auto-security lists every registered scheme, not the first one"""
+        parent = BaseRouter(security_scheme=SecuritySchemeType.BEARER_JWT)
+        child = BaseRouter(security_scheme=SecuritySchemeType.API_KEY_HEADER)
+
+        def token_check():
+            return "u"
+
+        @child.get("/k")
+        def k_ep(user=Security(token_check)):
+            pass
+
+        parent.include_router(child)
+        schema = parent.openapi
+        assert schema["paths"]["/k"]["get"]["security"] == [
+            {"BearerAuth": []},
+            {"ApiKeyAuth": []},
+        ]
+
+    def test_str_and_bytes_response_models_content_types(self):
+        """Schema mirrors the runtime serializer for str/bytes results"""
+
+        @self.router.get("/text", response_model=str)
+        def text_ep():
+            pass
+
+        @self.router.get("/blob", response_model=bytes)
+        def blob_ep():
+            pass
+
+        schema = self.generator.generate()
+        text = schema["paths"]["/text"]["get"]["responses"]["200"]["content"]
+        blob = schema["paths"]["/blob"]["get"]["responses"]["200"]["content"]
+        assert text == {"text/plain": {"schema": {"type": "string"}}}
+        assert blob == {
+            "application/octet-stream": {
+                "schema": {"type": "string", "format": "binary"}
+            }
+        }
+
+    def test_optional_str_and_bytes_response_models_content_types(self):
+        """`str | None` yields two media types at runtime: text/plain for
+        strings and application/json `null` for None — both documented"""
+
+        @self.router.get("/maybe-text", response_model=Optional[str])
+        def maybe_text():
+            pass
+
+        @self.router.get("/maybe-blob", response_model=bytes | None)
+        def maybe_blob():
+            pass
+
+        schema = self.generator.generate()
+        text = schema["paths"]["/maybe-text"]["get"]["responses"]["200"]["content"]
+        blob = schema["paths"]["/maybe-blob"]["get"]["responses"]["200"]["content"]
+        assert text == {
+            "text/plain": {"schema": {"type": "string"}},
+            "application/json": {"schema": {"nullable": True}},
+        }
+        assert blob == {
+            "application/octet-stream": {
+                "schema": {"type": "string", "format": "binary"}
+            },
+            "application/json": {"schema": {"nullable": True}},
+        }
+
+    def test_optional_str_response_model_null_schema_openapi_31(self):
+        """With OpenAPI 3.1 the null variant uses JSON Schema's null type"""
+        router = BaseRouter(openapi_version="3.1.0")
+
+        @router.get("/maybe-text", response_model=Optional[str])
+        def maybe_text():
+            pass
+
+        schema = router.openapi
+        content = schema["paths"]["/maybe-text"]["get"]["responses"]["200"]["content"]
+        assert content["application/json"] == {"schema": {"type": "null"}}
+
+    def test_unwrap_optional_keeps_mixed_unions(self):
+        """Only `T | None` unions unwrap; mixed unions stay as-is"""
+        builder = ResponseSectionBuilder(self.generator.schema_builder)
+        annotation = str | int | None
+        assert builder._unwrap_optional(annotation) == annotation
+
+    def test_security_via_annotation_scopes_walked(self):
+        """Security() with a class annotation walks the class __init__"""
+
+        class TokenDep:
+            def __init__(self, nested=Security(lambda: "n", scopes=["inner"])):
+                self.nested = nested
+
+        def endpoint(user: TokenDep = Security(scopes=["outer"])):
+            pass
+
+        route = Mock()
+        route.endpoint = endpoint
+
+        scopes = self.generator._extract_security_scopes(route)
+        assert sorted(scopes) == ["inner", "outer"]
+
+    def test_duplicate_explicit_operation_id_warns(self, caplog):
+        """Explicit ids are kept verbatim but the duplicate is reported"""
+
+        @self.router.get("/a", operation_id="dup")
+        def a_ep():
+            pass
+
+        @self.router.get("/b", operation_id="dup")
+        def b_ep():
+            pass
+
+        schema = self.generator.generate()
+        assert schema["paths"]["/a"]["get"]["operationId"] == "dup"
+        assert schema["paths"]["/b"]["get"]["operationId"] == "dup"
+        assert "Duplicate operationId 'dup'" in caplog.text
+
+    def test_non_standard_status_codes_do_not_crash(self):
+        """299/499-style codes get a generic description, not a ValueError"""
+
+        @self.router.get("/odd", status_code=299, response_errors=[499])
+        def odd():
+            pass
+
+        schema = self.generator.generate()
+        responses = schema["paths"]["/odd"]["get"]["responses"]
+        assert responses["299"]["description"] == "Status 299"
+        assert responses["499"]["description"] == "Status 499"
+
     def test_class_dependency_via_annotation_documented(self):
         """Depends() with a class annotation documents the __init__ params"""
 
@@ -1433,15 +1612,16 @@ class TestOpenAPIGenerator:
         assert schema == {"type": "array", "items": {"type": "string"}}
 
     def test_response_builder_add_response_model_non_pydantic(self):
-        """Test adding non-Pydantic response model generates schema"""
+        """Test adding non-Pydantic response model generates schema
+        (str/bytes have their own content types and are tested separately)"""
         builder = ResponseSectionBuilder(self.generator.schema_builder)
 
         responses = {"200": {"description": "OK"}}
 
-        builder._add_response_model(responses, "200", str)
+        builder._add_response_model(responses, "200", int)
 
         schema = responses["200"]["content"]["application/json"]["schema"]
-        assert schema == {"type": "string"}
+        assert schema == {"type": "integer"}
 
     def test_response_builder_add_custom_error_responses(self):
         """Test adding custom error responses"""
@@ -1617,7 +1797,8 @@ class TestOpenAPIGenerator:
         operation = self.generator._build_operation(route)
 
         assert "security" in operation
-        assert operation["security"][0]["BearerAuth"] == ["read"]
+        # Non-oauth2 schemes must carry an empty scope array per the spec
+        assert operation["security"][0]["BearerAuth"] == []
 
     def test_openapi_generator_build_operation_no_auto_security(self):
         """Test not auto-adding security when no schemes"""
